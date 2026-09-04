@@ -19,9 +19,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install dependencies
-        run: pip install --require-hashes -r requirements-ci.txt
+        run: pip install --only-binary ":all:" --require-hashes -r requirements-ci.txt
       - name: Install package
-        run: pip install --no-deps -e .
+        run: pip install --no-deps -e . # NOSONAR
       - name: Run tests
         run: |
           pytest tests/ --cov=mailradar --cov-report=xml --cov-report=term-missing -v
@@ -44,9 +44,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install dependencies
-        run: pip install --require-hashes -r requirements-ci.txt
+        run: pip install --only-binary ":all:" --require-hashes -r requirements-ci.txt
       - name: Install package
-        run: pip install --no-deps -e .
+        run: pip install --no-deps -e . # NOSONAR
       - name: Run benchmarks
         uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5
         with:
