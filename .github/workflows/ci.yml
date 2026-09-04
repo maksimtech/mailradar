@@ -17,12 +17,11 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
-      - name: Install uv
-        run: pip install --only-binary ":all:" uv
-      - name: Install dependencies
-        run: |
-          uv pip install --no-build --system pytest pytest-cov rich typer httpx cryptography dnspython jinja2
-          pip install --no-build-isolation -e .
+          cache: pip
+      - name: Install external dependencies
+        run: pip install --only-binary ":all:" pytest pytest-cov rich typer httpx cryptography dnspython jinja2
+      - name: Install package
+        run: pip install --no-deps -e .
       - name: Run tests
         run: |
           pytest tests/ --cov=mailradar --cov-report=xml --cov-report=term-missing -v
@@ -43,12 +42,11 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
-      - name: Install uv
-        run: pip install --only-binary ":all:" uv
-      - name: Install dependencies
-        run: |
-          uv pip install --no-build --system pytest rich typer httpx cryptography dnspython jinja2 pytest-codspeed
-          pip install --no-build-isolation -e .
+          cache: pip
+      - name: Install external dependencies
+        run: pip install --only-binary ":all:" pytest rich typer httpx cryptography dnspython jinja2 pytest-codspeed
+      - name: Install package
+        run: pip install --no-deps -e .
       - name: Run benchmarks
         uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5
         with:
