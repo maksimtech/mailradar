@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        run: pip install --only-binary :all: uv
+        run: pip install --only-binary ":all:" uv
       - name: Install dependencies
         run: |
           uv pip install --no-build --system pytest pytest-cov rich typer httpx cryptography dnspython jinja2
@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        run: pip install --only-binary :all: uv
+        run: pip install --only-binary ":all:" uv
       - name: Install dependencies
         run: |
           uv pip install --no-build --system pytest rich typer httpx cryptography dnspython jinja2 pytest-codspeed
