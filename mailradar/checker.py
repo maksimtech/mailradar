@@ -97,6 +97,68 @@ class DomainReport:
     grade: str = "F"
 
 
+def domain_exists(domain: str) -> bool:
+    """
+    Check if a domain exists in DNS.
+    A valid domain must have at least one dot (e.g. apple.com not just apple).
+    """
+    # Deve avere almeno un punto — senza TLD non è un dominio valido
+    if "." not in domain:
+        return False
+
+    # Deve avere almeno 2 parti (nome + TLD)
+    parts = domain.split(".")
+    if len(parts) < 2 or any(len(p) == 0 for p in parts):
+        return False
+
+    try:
+        dns.resolver.resolve(domain, "A")
+        return True
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+            dns.exception.DNSException):
+        pass
+    try:
+        dns.resolver.resolve(domain, "MX")
+        return True
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+            dns.exception.DNSException):
+        pass
+    try:
+        dns.resolver.resolve(domain, "NS")
+        return True
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+            dns.exception.DNSException):
+        return False
+
+
+def find_domain_variants(domain: str) -> list[str]:
+    """
+    Given a domain input, find all existing TLD variants.
+    e.g. 'apple' -> ['apple.com', 'apple.it', 'apple.eu', ...]
+    """
+    # Estrai il nome base senza TLD
+    parts = domain.split(".")
+    if len(parts) == 1:
+        base = domain
+    else:
+        base = parts[0]
+
+    # TLD comuni da provare
+    tlds = [
+        "com", "it", "eu", "org", "net", "io",
+        "co.uk", "de", "fr", "es", "nl", "ch",
+        "gov.it", "edu", "info", "biz",
+    ]
+
+    found = []
+    for tld in tlds:
+        candidate = f"{base}.{tld}"
+        if domain_exists(candidate):
+            found.append(candidate)
+
+    return found
+
+
 def _query_txt(name: str) -> list[str]:
     """Query TXT records for a given name."""
     try:

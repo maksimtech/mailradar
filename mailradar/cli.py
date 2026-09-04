@@ -156,10 +156,46 @@ def check(
 ):
     """
     Analyze the email security posture of a domain.
+    If the domain does not exist, scan TLD variants and let you choose.
     """
+    from mailradar.checker import domain_exists, find_domain_variants
+
+    # Verifica se il dominio esiste
+    with console.status(f"[cyan]Checking if {domain} exists...[/cyan]"):
+        exists = domain_exists(domain)
+
+    if not exists:
+        console.print(f"\n[yellow]⚠️  Domain [bold]{domain}[/bold] not found in DNS.[/yellow]")
+        console.print(f"[dim]Scanning TLD variants...[/dim]\n")
+
+        with console.status("[cyan]Scanning variants...[/cyan]"):
+            variants = find_domain_variants(domain)
+
+        if not variants:
+            console.print(f"[red]❌ No variants found for {domain}. Check the domain name.[/red]")
+            raise typer.Exit(1)
+
+        console.print(f"[green]Found {len(variants)} variant(s):[/green]\n")
+        for i, v in enumerate(variants, 1):
+            console.print(f"  [bold cyan]{i}[/bold cyan]. {v}")
+
+        console.print()
+        choice = typer.prompt(
+            "Select domain to analyze (number)",
+            type=int,
+            default=1,
+        )
+
+        if choice < 1 or choice > len(variants):
+            console.print("[red]Invalid choice.[/red]")
+            raise typer.Exit(1)
+
+        domain = variants[choice - 1]
+        console.print(f"\n[dim]Selected: [bold]{domain}[/bold][/dim]")
+
     console.print(f"\n[dim]Analyzing [bold]{domain}[/bold]...[/dim]")
 
-    with console.status(f"[cyan]Running DNS checks...[/cyan]"):
+    with console.status("[cyan]Running DNS checks...[/cyan]"):
         report = analyze_domain(domain)
 
     _print_report(report)
