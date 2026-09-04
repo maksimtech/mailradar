@@ -4,7 +4,7 @@ MailRadar — Report generator from domain analysis results.
 
 from datetime import date
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from mailradar.checker import DomainReport
 
 
@@ -20,7 +20,13 @@ def generate_report(
 ) -> str:
     """Generate email report text from domain analysis."""
 
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)  # NOSONAR: plain text email templates, not HTML
+    env = Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        autoescape=select_autoescape(
+            enabled_extensions=("html", "htm"),
+            disabled_extensions=("j2", "txt"),
+        ),
+    )
     template_file = f"report_{lang}.j2"
 
     try:
