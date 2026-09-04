@@ -43,7 +43,6 @@ def _encrypt_with_gpg(text: str, recipient_email: str) -> Optional[str]:
                 "--armor",
                 "--encrypt",
                 "--recipient", recipient_email,
-                "--trust-model", "always",
             ],
             input=text.encode(),
             capture_output=True,
