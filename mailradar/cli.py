@@ -383,3 +383,49 @@ def send(
         console.print(f"\n[yellow]ℹ️  No SMTP configured or send failed.[/yellow]")
         console.print(f"[dim]Send manually to: {result.recipient}[/dim]\n")
         console.print(Panel(report_text, title=f"📧 Report — {domain} (copy-paste)", border_style="cyan"))
+
+
+@app.command()
+def discover(
+    domain: str = typer.Argument(..., help="Domain to discover email addresses for"),
+    no_gpg: bool = typer.Option(False, "--no-gpg", help="Skip GPG key check"),
+):
+    """
+    Discover all email addresses associated with a domain.
+    Sources: Certificate Transparency (crt.sh), website scraping, RDAP/WHOIS.
+    """
+    from mailradar.discover import discover as run_discover
+    from mailradar.checker import domain_exists
+
+    if "." not in domain:
+        console.print(f"[red]Invalid domain: {domain} — missing TLD[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"\n[dim]Discovering email addresses for [bold]{domain}[/bold]...[/dim]")
+
+    with console.status("[cyan]Querying crt.sh, website and RDAP...[/cyan]"):
+        result = run_discover(domain, check_gpg=not no_gpg)
+
+    if not result.emails:
+        console.print(f"\n[yellow]No email addresses found for {domain}[/yellow]")
+        raise typer.Exit(0)
+
+    console.print(f"\n[bold green]Found {len(result.emails)} email address(es) for {domain}:[/bold green]\n")
+
+    for source, emails in result.sources.items():
+        console.print(f"[bold cyan]Source: {source}[/bold cyan]")
+        for email in sorted(emails):
+            gpg_icon = "🔐" if email in result.gpg_capable else "  "
+            console.print(f"  {gpg_icon} {email}")
+        console.print()
+
+    if result.gpg_capable:
+        console.print(f"[bold green]🔐 GPG-capable addresses ({len(result.gpg_capable)}):[/bold green]")
+        for email in result.gpg_capable:
+            console.print(f"  • {email}")
+        console.print()
+        console.print("[dim]These addresses can receive GPG-encrypted reports.[/dim]")
+    else:
+        console.print("[dim]No GPG public keys found for any address.[/dim]")
+
+    console.print()
