@@ -267,3 +267,83 @@ def report(
         from mailradar.reporter import save_report
         path = save_report(text, domain, lang)
         console.print(f"\n[green]✅ Report saved to: {path}[/green]")
+
+
+@app.command()
+def send(
+    domain: str = typer.Argument(..., help="Domain to analyze and send report to"),
+    lang: str = typer.Option("it", "--lang", "-l", help="Report language (it/en)"),
+    sender_name: str = typer.Option("[NOME]", "--name", help="Sender name"),
+    sender_role: str = typer.Option("[RUOLO]", "--role", help="Sender role"),
+    sender_org: str = typer.Option("[ORGANIZZAZIONE]", "--org", help="Sender organization"),
+    smtp_host: str = typer.Option(None, "--smtp-host", help="SMTP host (e.g. mail.infomaniak.com)"),
+    smtp_port: int = typer.Option(465, "--smtp-port", help="SMTP port"),
+    smtp_user: str = typer.Option(None, "--smtp-user", help="SMTP username"),
+    smtp_pass: str = typer.Option(None, "--smtp-pass", help="SMTP password", envvar="MAILRADAR_SMTP_PASS"),
+    from_email: str = typer.Option(None, "--from", help="Sender email (e.g. security@yourdomain.com)"),
+):
+    """
+    Analyze a domain and send the report to its security/DPO contact.
+
+    Logic:
+    1. If GPG key found on keyservers → encrypt report and send to key owner
+    2. If no GPG but SMTP configured → send plaintext to security@/dpo@/postmaster@
+    3. If no SMTP → print report for manual copy-paste
+    """
+    from mailradar.checker import analyze_domain
+    from mailradar.reporter import generate_report
+    from mailradar.sender import send_report, SMTPConfig
+
+    console.print(f"\n[dim]Analyzing [bold]{domain}[/bold]...[/dim]")
+
+    with console.status("[cyan]Running DNS checks...[/cyan]"):
+        analysis = analyze_domain(domain)
+
+    _print_report(analysis)
+
+    # Generate report text
+    report_text = generate_report(
+        analysis,
+        lang=lang,
+        sender_name=sender_name,
+        sender_role=sender_role,
+        sender_org=sender_org,
+    )
+
+    # Build SMTP config if provided
+    smtp_config = None
+    if all([smtp_host, smtp_user, smtp_pass, from_email]):
+        smtp_config = SMTPConfig(
+            host=smtp_host,
+            port=smtp_port,
+            username=smtp_user,
+            password=smtp_pass,
+            from_email=from_email,
+            from_name=sender_name,
+        )
+
+    # Smart send
+    console.print("\n[bold cyan]📧 Sending report...[/bold cyan]")
+
+    with console.status("[cyan]Checking GPG keys and sending...[/cyan]"):
+        result = send_report(
+            domain=domain,
+            report_text=report_text,
+            gpg_result=analysis.gpg,
+            config=smtp_config,
+            lang=lang,
+        )
+
+    if result.method == "gpg-encrypted" or result.method == "plaintext":
+        console.print(f"\n[green]{result.message}[/green]")
+        console.print(f"[dim]Method: {result.method} | Recipient: {result.recipient}[/dim]")
+
+    elif result.method == "manual-gpg":
+        console.print(f"\n[yellow]⚠️  GPG key found for {result.recipient} but no SMTP configured.[/yellow]")
+        console.print("[yellow]   Send this GPG-encrypted text manually:[/yellow]\n")
+        console.print(Panel(result.message, title="🔐 GPG Encrypted Report", border_style="yellow"))
+
+    else:
+        console.print(f"\n[yellow]ℹ️  No SMTP configured or send failed.[/yellow]")
+        console.print(f"[dim]Send manually to: {result.recipient}[/dim]\n")
+        console.print(Panel(report_text, title=f"📧 Report — {domain} (copy-paste)", border_style="cyan"))
