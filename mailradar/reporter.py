@@ -20,7 +20,7 @@ def generate_report(
 ) -> str:
     """Generate email report text from domain analysis."""
 
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)  # NOSONAR: plain text email templates, not HTML
     template_file = f"report_{lang}.j2"
 
     try:
