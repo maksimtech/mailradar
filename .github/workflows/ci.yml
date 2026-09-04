@@ -60,7 +60,7 @@ jobs:
           pip install pytest-codspeed
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@v5
         with:
           run: pytest tests/benchmarks/ --codspeed -v
         continue-on-error: true
