@@ -106,3 +106,4 @@ gpg_config.yaml
 tmp/
 temp/
 .tmp/
+mailradar_*.txt
