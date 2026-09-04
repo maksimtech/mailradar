@@ -3,6 +3,7 @@ MailRadar — GPG public key lookup on keyservers.
 """
 
 import httpx
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 
 
@@ -57,7 +58,9 @@ def _search_keyserver(keyserver: str, email: str) -> GPGResult:
             return result
 
         # Try vks API (keys.openpgp.org specific)
-        if "openpgp.org" in keyserver:
+        parsed = urlparse(keyserver)
+        hostname = parsed.hostname or ""
+        if hostname == "keys.openpgp.org" or hostname.endswith(".openpgp.org"):
             vks_url = f"{keyserver}/vks/v1/by-email/{email}"
             resp2 = httpx.get(vks_url, timeout=5)
             if resp2.status_code == 200:
