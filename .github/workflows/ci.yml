@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install external dependencies
-        run: pip install --only-binary ":all:" pytest pytest-cov rich typer httpx cryptography dnspython jinja2
+      - name: Install dependencies
+        run: pip install --require-hashes -r requirements-ci.txt
       - name: Install package
         run: pip install --no-deps -e .
       - name: Run tests
@@ -43,8 +43,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install external dependencies
-        run: pip install --only-binary ":all:" pytest rich typer httpx cryptography dnspython jinja2 pytest-codspeed
+      - name: Install dependencies
+        run: pip install --require-hashes -r requirements-ci.txt
       - name: Install package
         run: pip install --no-deps -e .
       - name: Run benchmarks
