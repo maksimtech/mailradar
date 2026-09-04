@@ -1,0 +1,97 @@
+Oggetto: Analisi postura email — {{ domain }} — MailRadar Report
+
+Gentile responsabile di {{ domain }},
+
+in seguito all'analisi automatica del dominio {{ domain }} condotta tramite
+MailRadar (https://github.com/maksimtech/mailradar), strumento open source per
+l'audit della postura email, sono state rilevate le seguenti configurazioni
+che potrebbero richiedere attenzione.
+
+Score complessivo: {{ total_score }}/100 — {{ grade }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STATO ATTUALE → CONFIGURAZIONE RACCOMANDATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{% if dmarc_issues %}
+DMARC — ⚠️  Attenzione richiesta
+  Attuale:     {{ dmarc_current }}
+  Raccomandato: v=DMARC1; p=reject; pct=100; adkim=s; aspf=s;
+                rua=mailto:rua@{{ domain }}; ruf=mailto:ruf@{{ domain }}; fo=1
+  Motivo: {{ dmarc_issues | join(', ') }}
+{% else %}
+DMARC — ✅ Configurato correttamente
+  {{ dmarc_current }}
+{% endif %}
+
+{% if spf_issues %}
+SPF — ⚠️  Attenzione richiesta
+  Attuale:     {{ spf_current }}
+  Raccomandato: v=spf1 include:[provider] -all
+  Motivo: {{ spf_issues | join(', ') }}
+{% else %}
+SPF — ✅ Configurato correttamente
+  {{ spf_current }}
+{% endif %}
+
+{% if dkim_issues %}
+DKIM — ⚠️  Attenzione richiesta
+{% if not dkim_present %}
+  Attuale:     Non configurato
+  Raccomandato: Configurare un selettore DKIM con chiave RSA 2048-bit
+{% else %}
+  Attuale:     Selettore {{ dkim_selector }} | {{ dkim_bits }}-bit RSA
+  Raccomandato: Aggiornare a chiave RSA 2048-bit
+{% endif %}
+  Motivo: {{ dkim_issues | join(', ') }}
+{% else %}
+DKIM — ✅ Configurato correttamente
+  Selettore: {{ dkim_selector }} | {{ dkim_bits }}-bit RSA
+{% endif %}
+
+{% if bimi_issues %}
+BIMI/VMC — ℹ️  Miglioramento consigliato
+  Attuale:     {% if bimi_present %}Presente ma con errori{% else %}Non configurato{% endif %}
+  Raccomandato: v=BIMI1; l=https://{{ domain }}/logo.svg; a=https://{{ domain }}/vmc.pem
+  Nota: BIMI richiede un Verified Mark Certificate (VMC) emesso da DigiCert o Entrust
+{% endif %}
+
+{% if mta_sts_issues %}
+MTA-STS — ℹ️  Miglioramento consigliato
+  Attuale:     Non configurato
+  Raccomandato: Configurare policy MTA-STS in modalità enforce
+{% endif %}
+
+{% if tls_rpt_issues %}
+TLS-RPT — ℹ️  Miglioramento consigliato
+  Attuale:     Non configurato
+  Raccomandato: v=TLSRPTv1; rua=mailto:tls-rpt@{{ domain }}
+{% endif %}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RILEVANZA GDPR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Una configurazione DMARC assente o in modalità p=none non offre protezione
+contro lo spoofing del dominio. Chiunque può inviare email spacciandosi per
+@{{ domain }} senza che i sistemi di posta dei destinatari le rifiutino.
+
+Ai sensi dell'art. 32 del Regolamento (UE) 2016/679 (GDPR), i titolari del
+trattamento sono tenuti ad adottare misure tecniche adeguate per garantire
+la sicurezza dei dati personali. Una postura email non configurata correttamente
+costituisce una lacuna documentabile e misurabile.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Questo report è stato generato automaticamente da MailRadar
+https://github.com/maksimtech/mailradar
+
+Strumento open source — MIT License
+Analisi effettuata il: {{ date }}
+
+Per ulteriori informazioni o chiarimenti, non esitate a contattarci.
+
+Cordiali saluti,
+{{ sender_name }}
+{{ sender_role }}
+{{ sender_org }}

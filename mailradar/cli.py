@@ -221,3 +221,42 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+@app.command()
+def report(
+    domain: str = typer.Argument(..., help="Domain to analyze and generate report for"),
+    lang: str = typer.Option("it", "--lang", "-l", help="Report language (it/en)"),
+    sender_name: str = typer.Option("[NOME]", "--name", help="Sender name"),
+    sender_role: str = typer.Option("[RUOLO]", "--role", help="Sender role"),
+    sender_org: str = typer.Option("[ORGANIZZAZIONE]", "--org", help="Sender organization"),
+    save: bool = typer.Option(False, "--save", "-s", help="Save report to file"),
+):
+    """
+    Generate a ready-to-send email report for a domain.
+    """
+    from mailradar.reporter import generate_report, save_report
+
+    console.print(f"\n[dim]Analyzing [bold]{domain}[/bold]...[/dim]")
+
+    with console.status("[cyan]Running DNS checks...[/cyan]"):
+        from mailradar.checker import analyze_domain
+        analysis = analyze_domain(domain)
+
+    _print_report(analysis)
+
+    console.print("[bold cyan]📧 Generating email report...[/bold cyan]\n")
+    text = generate_report(
+        analysis,
+        lang=lang,
+        sender_name=sender_name,
+        sender_role=sender_role,
+        sender_org=sender_org,
+    )
+
+    console.print(Panel(text, title=f"📧 Report — {domain}", border_style="cyan"))
+
+    if save:
+        from mailradar.reporter import save_report
+        path = save_report(text, domain, lang)
+        console.print(f"\n[green]✅ Report saved to: {path}[/green]")
