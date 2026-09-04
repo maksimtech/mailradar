@@ -121,6 +121,12 @@ def _print_report(report: DomainReport) -> None:
     tls_icon = "✅" if t.present else "❌"
     table.add_row("TLS-RPT", tls_icon, tls_detail, f"[{_score_color(t.score)}]{t.score}[/{_score_color(t.score)}]")
 
+    # GPG row
+    g = report.gpg
+    gpg_detail = f"uid: {g.uid} | {g.keyserver}" if g.found else "[dim]No public key on keyservers[/dim]"
+    gpg_icon = "✅" if g.found else "❌"
+    table.add_row("GPG", gpg_icon, gpg_detail, f"[{_score_color(g.score)}]{g.score}[/{_score_color(g.score)}]")
+
     console.print(table)
 
     # Issues
@@ -130,7 +136,8 @@ def _print_report(report: DomainReport) -> None:
         report.dkim.issues +
         report.bimi.issues +
         report.mta_sts.issues +
-        report.tls_rpt.issues
+        report.tls_rpt.issues +
+        report.gpg.issues
     )
 
     if all_issues:

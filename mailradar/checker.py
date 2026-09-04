@@ -6,6 +6,7 @@ import dns.resolver
 import dns.exception
 from dataclasses import dataclass, field
 from typing import Optional
+from typing import Optional
 import httpx
 
 
@@ -72,6 +73,17 @@ class TLSRPTResult:
 
 
 @dataclass
+class GPGResult:
+    found: bool = False
+    keyserver: str = ""
+    uid: str = ""
+    key_id: str = ""
+    emails: list = field(default_factory=list)
+    score: int = 0
+    issues: list = field(default_factory=list)
+
+
+@dataclass
 class DomainReport:
     domain: str = ""
     dmarc: DMARCResult = field(default_factory=DMARCResult)
@@ -80,6 +92,7 @@ class DomainReport:
     bimi: BIMIResult = field(default_factory=BIMIResult)
     mta_sts: MTASTSResult = field(default_factory=MTASTSResult)
     tls_rpt: TLSRPTResult = field(default_factory=TLSRPTResult)
+    gpg: GPGResult = field(default_factory=GPGResult)
     total_score: int = 0
     grade: str = "F"
 
@@ -363,13 +376,18 @@ def analyze_domain(domain: str) -> DomainReport:
     report.mta_sts = check_mta_sts(domain)
     report.tls_rpt = check_tls_rpt(domain)
 
+    # GPG lookup
+    from mailradar.gpg import lookup_gpg
+    report.gpg = lookup_gpg(domain)
+
     report.total_score = (
         report.dmarc.score +
         report.spf.score +
         report.dkim.score +
         report.bimi.score +
         report.mta_sts.score +
-        report.tls_rpt.score
+        report.tls_rpt.score +
+        report.gpg.score
     )
 
     if report.total_score >= 90:
