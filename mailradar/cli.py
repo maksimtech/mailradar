@@ -410,11 +410,31 @@ def discover(
         console.print(f"\n[yellow]No email addresses found for {domain}[/yellow]")
         raise typer.Exit(0)
 
-    console.print(f"\n[bold green]Found {len(result.emails)} email address(es) for {domain}:[/bold green]\n")
+    # Separa sottodomini da email
+    subdomains = result.sources.get("crt.sh subdomains", [])
+    email_sources = {k: v for k, v in result.sources.items() if k != "crt.sh subdomains"}
 
-    for source, emails in result.sources.items():
-        console.print(f"[bold cyan]Source: {source}[/bold cyan]")
-        for email in sorted(emails):
+    if subdomains:
+        console.print(f"\n[bold cyan]Subdomains found via crt.sh ({len(subdomains)}):[/bold cyan]")
+        for sub in sorted(set(subdomains)):
+            console.print(f"  • {sub}", highlight=False, markup=False)
+        console.print()
+
+    # Email addresses
+    real_emails = [e for e in result.emails if "@" in e]
+    if not real_emails:
+        console.print(f"[yellow]No email addresses found for {domain}[/yellow]")
+        raise typer.Exit(0)
+
+    console.print(f"[bold green]Found {len(real_emails)} candidate email address(es) for {domain}:[/bold green]\n")
+
+    for source, items in email_sources.items():
+        emails_only = [e for e in items if "@" in e]
+        if not emails_only:
+            continue
+        label = "[dim](candidate — not verified)[/dim]" if source == "common contacts" else ""
+        console.print(f"[bold cyan]Source: {source}[/bold cyan] {label}")
+        for email in sorted(emails_only):
             gpg_icon = "🔐" if email in result.gpg_capable else "  "
             console.print(f"  {gpg_icon} {email}")
         console.print()

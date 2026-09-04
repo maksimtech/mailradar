@@ -23,46 +23,51 @@ def _extract_emails_from_text(text: str, domain: str) -> list[str]:
     return list(set(e.lower() for e in found))
 
 
-def _discover_via_crtsh(domain: str) -> list[str]:
+def _discover_subdomains_via_crtsh(domain: str) -> list[str]:
     """
-    Discover email addresses via Certificate Transparency logs (crt.sh).
-    crt.sh stores SSL certificate data including email SANs and CNs.
+    Discover subdomains via Certificate Transparency logs (crt.sh).
+    Returns subdomains, not emails.
     """
-    emails = []
-    try:
-        # Query crt.sh for certificates related to the domain
-        url = f"https://crt.sh/?q={domain}&output=json"
-        resp = httpx.get(url, timeout=15, follow_redirects=True)
+    import time
+    subdomains = set()
 
-        if resp.status_code != 200:
-            return []
+    for attempt in range(3):
+        try:
+            url = f"https://crt.sh/?q=%.{domain}&output=json"
+            resp = httpx.get(url, timeout=20, follow_redirects=True)
 
-        data = resp.json()
+            if resp.status_code != 200 or not resp.content:
+                time.sleep(2)
+                continue
 
-        for entry in data:
-            # Check name_value field — contains SANs
-            name_value = entry.get("name_value", "")
-            issuer = entry.get("issuer_ca_id", "")
+            data = resp.json()
 
-            # Extract emails from name_value
-            found = _extract_emails_from_text(name_value, domain)
-            emails.extend(found)
+            for entry in data:
+                for raw_name in [
+                    entry.get("name_value", ""),
+                    entry.get("common_name", ""),
+                ]:
+                    for name in raw_name.splitlines():
+                        name = name.replace("*.", "").strip().lower()
+                        # Rimuovi link markdown [text](url) con regex
+                        name = re.sub(r'\[+([^\]]+)\]\([^\)]+\)', lambda m: m.group(1), name).strip()
+                        if (name.endswith(f".{domain}") and
+                                name != domain and
+                                " " not in name):
+                            subdomains.add(name)
+            break
 
-            # Check common_name
-            common_name = entry.get("common_name", "")
-            found_cn = _extract_emails_from_text(common_name, domain)
-            emails.extend(found_cn)
+        except Exception:
+            time.sleep(2)
+            continue
 
-    except Exception as e:
-        pass
-
-    return list(set(emails))
+    return list(subdomains)
 
 
-def _discover_via_website(domain: str) -> list[str]:
+def _discover_via_website(domain: str, extra_subdomains: list[str] = None) -> list[str]:
     """
     Scrape the domain's website for email addresses.
-    Checks common pages: homepage, contact, privacy, about.
+    Checks common pages plus subdomains discovered via crt.sh.
     """
     emails = []
     pages = [
@@ -74,7 +79,16 @@ def _discover_via_website(domain: str) -> list[str]:
         f"https://{domain}/chi-siamo",
         f"https://{domain}/privacy-policy",
         f"https://www.{domain}",
+        f"https://www.{domain}/privacy",
+        f"https://www.{domain}/contatti",
     ]
+
+    # Aggiungi sottodomini da crt.sh
+    if extra_subdomains:
+        for sub in extra_subdomains[:10]:  # Max 10 sottodomini
+            pages.append(f"https://{sub}")
+            pages.append(f"https://{sub}/privacy")
+            pages.append(f"https://{sub}/contatti")
 
     for url in pages:
         try:
@@ -89,6 +103,39 @@ def _discover_via_website(domain: str) -> list[str]:
                 emails.extend(found)
         except Exception:
             continue
+
+    return list(set(emails))
+
+
+def _discover_via_dns(domain: str) -> list[str]:
+    """Extract email hints from DNS records — SOA, TXT."""
+    import dns.resolver
+    import dns.exception
+    emails = []
+
+    # SOA rname — admin email in dot notation
+    try:
+        answers = dns.resolver.resolve(domain, "SOA")
+        for r in answers:
+            rname = str(r.rname).rstrip(".")
+            # SOA rname usa il primo punto come @ 
+            # es: hostmaster.tplfvg.it → hostmaster@tplfvg.it
+            parts = rname.split(".", 1)
+            if len(parts) == 2 and parts[1] == domain:
+                email = f"{parts[0]}@{parts[1]}"
+                emails.append(email.lower())
+    except Exception:
+        pass
+
+    # TXT records — cerca pattern email
+    try:
+        answers = dns.resolver.resolve(domain, "TXT")
+        for r in answers:
+            txt = b"".join(r.strings).decode()
+            found = _extract_emails_from_text(txt, domain)
+            emails.extend(found)
+    except Exception:
+        pass
 
     return list(set(emails))
 
@@ -132,6 +179,30 @@ def _discover_via_whois(domain: str) -> list[str]:
     return list(set(emails))
 
 
+def _discover_common_contacts(domain: str) -> list[str]:
+    """
+    Generate and verify common contact addresses for a domain.
+    Checks MX records to verify the domain accepts email.
+    """
+    import dns.resolver
+    import dns.exception
+
+    # Verifica che il dominio abbia MX records
+    try:
+        dns.resolver.resolve(domain, "MX")
+    except Exception:
+        return []
+
+    # Lista standard di contatti comuni
+    common = [
+        "abuse", "admin", "administrator", "contact", "contatti",
+        "dpo", "gdpr", "hostmaster", "info", "legal", "noc",
+        "postmaster", "privacy", "security", "support", "webmaster",
+    ]
+
+    return [f"{prefix}@{domain}" for prefix in common]
+
+
 def _check_gpg_for_emails(emails: list[str]) -> list[str]:
     """Check which emails have GPG public keys on keyservers."""
     from mailradar.gpg import lookup_gpg_by_email
@@ -153,17 +224,27 @@ def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
     result = DiscoveryResult(domain=domain)
     all_emails = set()
 
-    # crt.sh
-    crtsh_emails = _discover_via_crtsh(domain)
-    if crtsh_emails:
-        result.sources["crt.sh"] = crtsh_emails
-        all_emails.update(crtsh_emails)
+    # crt.sh — scopre sottodomini per ampliare il website scraping
+    subdomains = _discover_subdomains_via_crtsh(domain)
+    result.sources["crt.sh subdomains"] = subdomains
 
-    # Website scraping
-    website_emails = _discover_via_website(domain)
+    # Common contacts — genera e verifica indirizzi standard
+    common = _discover_common_contacts(domain)
+    if common:
+        result.sources["common contacts"] = common
+        all_emails.update(common)
+
+    # Website scraping — usa i sottodomini trovati da crt.sh
+    website_emails = _discover_via_website(domain, extra_subdomains=subdomains)
     if website_emails:
         result.sources["website"] = website_emails
         all_emails.update(website_emails)
+
+    # DNS records — SOA e TXT
+    dns_emails = _discover_via_dns(domain)
+    if dns_emails:
+        result.sources["DNS"] = dns_emails
+        all_emails.update(dns_emails)
 
     # RDAP/WHOIS
     whois_emails = _discover_via_whois(domain)
