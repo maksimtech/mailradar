@@ -31,42 +31,40 @@ def _search_keyserver(keyserver: str, email: str) -> GPGResult:
     """Search for a GPG key on a specific keyserver."""
     result = GPGResult()
 
+    # Forza HTTP/1.1 per evitare problemi con HTTP/2 su alcuni ambienti
     try:
-        # HKP protocol search
-        url = f"{keyserver}/pks/lookup"
-        params = {
-            "op": "get",
-            "search": email,
-            "options": "mr",
-        }
-        resp = httpx.get(url, params=params, timeout=5)
+        with httpx.Client(http2=False, timeout=15) as client:
+            # Try vks API first (keys.openpgp.org specific) — più affidabile
+            parsed = urlparse(keyserver)
+            hostname = parsed.hostname or ""
+            if hostname == "keys.openpgp.org" or hostname.endswith(".openpgp.org"):
+                vks_url = f"{keyserver}/vks/v1/by-email/{email}"
+                resp = client.get(vks_url)
+                if resp.status_code == 200 and "BEGIN PGP PUBLIC KEY BLOCK" in resp.text:
+                    result.found = True
+                    result.keyserver = keyserver
+                    result.raw_key = resp.text
+                    return result
 
-        if resp.status_code == 200 and "BEGIN PGP PUBLIC KEY BLOCK" in resp.text:
-            result.found = True
-            result.keyserver = keyserver
-            result.raw_key = resp.text
-
-            # Try to extract key ID from the response
-            lines = resp.text.splitlines()
-            for line in lines:
-                if "pub:" in line:
-                    parts = line.split(":")
-                    if len(parts) > 1:
-                        result.key_id = parts[1][:16] if parts[1] else ""
-                    break
-
-            return result
-
-        # Try vks API (keys.openpgp.org specific)
-        parsed = urlparse(keyserver)
-        hostname = parsed.hostname or ""
-        if hostname == "keys.openpgp.org" or hostname.endswith(".openpgp.org"):
-            vks_url = f"{keyserver}/vks/v1/by-email/{email}"
-            resp2 = httpx.get(vks_url, timeout=5)
-            if resp2.status_code == 200:
+            # HKP protocol fallback
+            url = f"{keyserver}/pks/lookup"
+            params = {
+                "op": "get",
+                "search": email,
+                "options": "mr",
+            }
+            resp = client.get(url, params=params)
+            if resp.status_code == 200 and "BEGIN PGP PUBLIC KEY BLOCK" in resp.text:
                 result.found = True
                 result.keyserver = keyserver
-                result.raw_key = resp2.text
+                result.raw_key = resp.text
+                lines = resp.text.splitlines()
+                for line in lines:
+                    if "pub:" in line:
+                        parts = line.split(":")
+                        if len(parts) > 1:
+                            result.key_id = parts[1][:16] if parts[1] else ""
+                        break
                 return result
 
     except Exception:
