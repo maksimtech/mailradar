@@ -23,6 +23,17 @@ jobs:
         run: pip install --upgrade build hatchling  # NOSONAR - trusted packages
       - name: Build package
         run: python -m build
+      - name: Import GPG key
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --passphrase-fd 0 --pinentry-mode loopback --list-secret-keys
+      - name: Sign packages
+        run: |
+          for f in dist/*; do
+            echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --passphrase-fd 0 \
+              --pinentry-mode loopback \
+              --armor --detach-sign "$f"
+          done
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
