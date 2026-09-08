@@ -317,6 +317,7 @@ def send(
     smtp_user: str = typer.Option(None, "--smtp-user", help="SMTP username"),
     smtp_pass: str = typer.Option(None, "--smtp-pass", help="SMTP password", envvar="MAILRADAR_SMTP_PASS"),
     from_email: str = typer.Option(None, "--from", help="Sender email (e.g. security@yourdomain.com)"),
+    sign: bool = typer.Option(False, "--sign", help="Sign the report with your GPG private key"),
 ):
     """
     Analyze a domain and send the report to its security/DPO contact.
@@ -360,7 +361,6 @@ def send(
 
     # Smart send
     console.print("\n[bold cyan]📧 Sending report...[/bold cyan]")
-
     with console.status("[cyan]Checking GPG keys and sending...[/cyan]"):
         result = send_report(
             domain=domain,
@@ -368,6 +368,8 @@ def send(
             gpg_result=analysis.gpg,
             config=smtp_config,
             lang=lang,
+            sign=sign,
+            sign_email=from_email,
         )
 
     if result.method == "gpg-encrypted" or result.method == "plaintext":

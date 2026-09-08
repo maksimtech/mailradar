@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-
+import getpass
 
 @dataclass
 class SMTPConfig:
@@ -54,6 +54,31 @@ def _encrypt_with_gpg(text: str, recipient_email: str) -> Optional[str]:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None
 
+def _sign_with_gpg(text: str, sender_email: str) -> Optional[str]:
+    """Sign text with sender's GPG private key — asks passphrase interactively."""
+    try:
+        passphrase = getpass.getpass(f"GPG passphrase for {sender_email}: ")
+        cmd = [
+            "gpg",
+            "--batch",
+            "--yes",
+            "--armor",
+            "--clearsign",
+            "--local-user", sender_email,
+            "--passphrase-fd", "0",
+            "--pinentry-mode", "loopback",
+        ]
+        result = subprocess.run(
+            cmd,
+            input=f"{passphrase}\n{text}".encode(),
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return result.stdout.decode()
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError, KeyboardInterrupt):
+        return None
 
 def _send_smtp(
     config: SMTPConfig,
@@ -97,6 +122,8 @@ def send_report(
     gpg_result,
     config: Optional[SMTPConfig] = None,
     lang: str = "it",
+    sign: bool = False,
+    sign_email: Optional[str] = None,
 ) -> SendResult:
     """
     Smart send logic:
@@ -108,6 +135,11 @@ def send_report(
 
     subject_it = f"Analisi postura email — {domain} — MailRadar Report"
     subject_en = f"Email security posture analysis — {domain} — MailRadar Report"
+    # Sign report if requested
+    if sign and sign_email:
+        signed = _sign_with_gpg(report_text, sign_email)
+        if signed:
+            report_text = signed
     subject = subject_it if lang == "it" else subject_en
 
     # Case 1: GPG key found
