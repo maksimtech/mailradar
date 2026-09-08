@@ -25,7 +25,9 @@ jobs:
         run: python -m build
       - name: Import GPG key
         run: |
-          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" > /tmp/gpg_key.asc
+          gpg --batch --import /tmp/gpg_key.asc
+          rm /tmp/gpg_key.asc
           echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --passphrase-fd 0 --pinentry-mode loopback --list-secret-keys
       - name: Sign packages
         run: |
