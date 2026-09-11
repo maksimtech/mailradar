@@ -38,7 +38,9 @@ jobs:
             RAW="${GITHUB_REF#refs/tags/}"
           fi
           echo "VERSION=${RAW}" >> $GITHUB_OUTPUT
-          echo "PIP_VERSION=${RAW#v}" >> $GITHUB_OUTPUT
+          STRIPPED="${RAW#v}"
+          NORMALIZED=$(python3 -c "parts='${STRIPPED}'.split('.'); print('.'.join(str(int(p)) for p in parts))")
+          echo "PIP_VERSION=${NORMALIZED}" >> $GITHUB_OUTPUT
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
