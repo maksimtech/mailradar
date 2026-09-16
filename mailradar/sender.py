@@ -28,29 +28,51 @@ class SendResult:
     sent: bool = False
     encrypted: bool = False
     recipient: str = ""
-    method: str = ""  # "gpg-encrypted", "plaintext", "manual"
+    method: str = ""  # "gpg-encrypted", "manual-gpg", "gpg-failed", "plaintext", "manual"
     message: str = ""
 
 
-def _encrypt_with_gpg(text: str, recipient_email: str) -> Optional[str]:
-    """Encrypt text with recipient's GPG public key."""
+def _encrypt_with_gpg(
+    text: str,
+    recipient_email: str,
+    public_key: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Encrypt text with recipient's GPG public key.
+
+    If `public_key` (armored, as fetched from a keyserver) is given, it is
+    imported into a throwaway keyring so the user's keyring is untouched and
+    the key does not need to be trusted locally. Otherwise the user's keyring
+    is used.
+    """
     try:
-        result = subprocess.run(
-            [
-                "gpg",
-                "--batch",
-                "--yes",
-                "--armor",
-                "--encrypt",
-                "--recipient", recipient_email,
-            ],
-            input=text.encode(),
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            return result.stdout.decode()
-        return None
+        with tempfile.TemporaryDirectory(prefix="mailradar-gpg-") as homedir:
+            base = ["gpg", "--batch", "--yes"]
+            if public_key:
+                base += ["--homedir", homedir]
+                imported = subprocess.run(
+                    base + ["--import"],
+                    input=public_key.encode(),
+                    capture_output=True,
+                    timeout=30,
+                )
+                if imported.returncode != 0:
+                    return None
+            result = subprocess.run(
+                base + [
+                    # Chiave appena scaricata: senza questo gpg --batch la rifiuta
+                    "--trust-model", "always",
+                    "--armor",
+                    "--encrypt",
+                    "--recipient", recipient_email,
+                ],
+                input=text.encode(),
+                capture_output=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                return result.stdout.decode()
+            return None
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None
 
@@ -144,7 +166,9 @@ def send_report(
 
     # Case 1: GPG key found
     if gpg_result.found and gpg_result.uid:
-        encrypted_text = _encrypt_with_gpg(report_text, gpg_result.uid)
+        encrypted_text = _encrypt_with_gpg(
+            report_text, gpg_result.uid, getattr(gpg_result, "raw_key", "") or None
+        )
 
         if encrypted_text and config:
             sent = _send_smtp(config, gpg_result.uid, subject, encrypted_text, encrypted=True)
@@ -164,6 +188,17 @@ def send_report(
             result.method = "manual-gpg"
             result.message = encrypted_text
             return result
+
+        # A key exists but encryption failed — never silently downgrade to plaintext
+        result.sent = False
+        result.encrypted = False
+        result.recipient = gpg_result.uid
+        result.method = "gpg-failed"
+        result.message = (
+            f"GPG key found for {gpg_result.uid} but encryption failed — "
+            "report NOT sent"
+        )
+        return result
 
     # Case 2: No GPG — try plaintext SMTP
     if config:

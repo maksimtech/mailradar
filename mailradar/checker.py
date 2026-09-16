@@ -6,7 +6,6 @@ import dns.resolver
 import dns.exception
 from dataclasses import dataclass, field
 from typing import Optional
-from typing import Optional
 import httpx
 
 
@@ -79,6 +78,7 @@ class GPGResult:
     uid: str = ""
     key_id: str = ""
     emails: list = field(default_factory=list)
+    raw_key: str = ""
     score: int = 0
     issues: list = field(default_factory=list)
 
@@ -164,10 +164,31 @@ def _query_txt(name: str) -> list[str]:
     try:
         answers = dns.resolver.resolve(name, "TXT")
         # Concatena le stringhe multiple di ogni record (importante per DKIM)
-        return [b"".join(rdata.strings).decode() for rdata in answers]
+        # errors="replace": un TXT non UTF-8 non deve far crashare l'analisi
+        return [b"".join(rdata.strings).decode("utf-8", errors="replace")
+                for rdata in answers]
     except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
             dns.exception.DNSException):
         return []
+
+
+def _parse_tags(record: str) -> dict[str, str]:
+    """Parse a `k=v; k=v` tag list (DMARC, BIMI). Values may contain '='."""
+    tags = {}
+    for t in record.split(";"):
+        if "=" in t:
+            key, value = t.split("=", 1)
+            tags[key.strip()] = value.strip()
+    return tags
+
+
+def _parse_pct(value: str) -> Optional[int]:
+    """Parse DMARC pct — returns None if not an integer in 0-100."""
+    try:
+        pct = int(value)
+    except ValueError:
+        return None
+    return pct if 0 <= pct <= 100 else None
 
 
 def check_dmarc(domain: str) -> DMARCResult:
@@ -179,11 +200,15 @@ def check_dmarc(domain: str) -> DMARCResult:
             result.present = True
             result.raw = record
 
-            tags = {t.split("=")[0].strip(): t.split("=")[1].strip()
-                    for t in record.split(";") if "=" in t}
+            tags = _parse_tags(record)
 
             result.policy = tags.get("p", "none")
-            result.pct = int(tags.get("pct", 100))
+            pct = _parse_pct(tags.get("pct", "100"))
+            if pct is None:
+                # RFC 7489 §6.3: valore non valido → si usa il default (100)
+                result.issues.append(f"Invalid DMARC pct value: {tags['pct']!r}")
+                pct = 100
+            result.pct = pct
             result.adkim = tags.get("adkim", "r")
             result.aspf = tags.get("aspf", "r")
             result.rua = "rua" in tags
@@ -341,8 +366,7 @@ def check_bimi(domain: str) -> BIMIResult:
             result.present = True
             result.raw = record
 
-            tags = {t.split("=")[0].strip(): t.split("=")[1].strip()
-                    for t in record.split(";") if "=" in t}
+            tags = _parse_tags(record)
 
             result.svg_url = tags.get("l", "")
             result.vmc_url = tags.get("a", "")
@@ -427,6 +451,20 @@ def check_tls_rpt(domain: str) -> TLSRPTResult:
     return result
 
 
+# Punteggio grezzo massimo di ogni check — la somma supera 100, quindi il
+# totale viene normalizzato su scala 0-100 in analyze_domain.
+MAX_SCORES = {
+    "dmarc": 50,    # reject 30 + pct 5 + adkim 5 + aspf 5 + rua 3 + ruf 2
+    "spf": 20,      # -all
+    "dkim": 15,     # >= 2048 bit
+    "bimi": 10,     # VMC 8 + SVG 2
+    "mta_sts": 5,   # enforce
+    "tls_rpt": 3,
+    "gpg": 5,
+}
+MAX_RAW_SCORE = sum(MAX_SCORES.values())
+
+
 def analyze_domain(domain: str) -> DomainReport:
     """Run full email security analysis on a domain."""
     report = DomainReport(domain=domain)
@@ -442,15 +480,8 @@ def analyze_domain(domain: str) -> DomainReport:
     from mailradar.gpg import lookup_gpg
     report.gpg = lookup_gpg(domain)
 
-    report.total_score = (
-        report.dmarc.score +
-        report.spf.score +
-        report.dkim.score +
-        report.bimi.score +
-        report.mta_sts.score +
-        report.tls_rpt.score +
-        report.gpg.score
-    )
+    raw_score = sum(getattr(report, check).score for check in MAX_SCORES)
+    report.total_score = min(100, round(raw_score * 100 / MAX_RAW_SCORE))
 
     if report.total_score >= 90:
         report.grade = "EXCELLENT"

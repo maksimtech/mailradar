@@ -327,3 +327,118 @@ class TestAnalyzeDomain:
 
         result.score = 50
         assert result.score == 50
+
+
+# ─── Malformed / hostile DNS records ────────────────────────────────────────
+
+class TestMalformedRecords:
+
+    def test_non_utf8_txt_does_not_crash(self):
+        rdata = MagicMock()
+        rdata.strings = [b"v=spf1 \xff\xfe -all"]
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=[rdata]):
+            result = check_spf("example.com")
+        assert result.present is True
+        assert result.all_mechanism == "-all"
+
+    @pytest.mark.parametrize("pct", ["50%", "abc", "", "150", "-1"])
+    def test_dmarc_invalid_pct_does_not_crash(self, pct):
+        txt = f"v=DMARC1; p=reject; pct={pct}"
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
+            result = check_dmarc("example.com")
+        assert result.present is True
+        assert result.pct == 100
+        assert any("Invalid DMARC pct" in i for i in result.issues)
+
+    def test_dmarc_valid_pct_parsed(self):
+        txt = "v=DMARC1; p=reject; pct=25"
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
+            result = check_dmarc("example.com")
+        assert result.pct == 25
+        assert not any("Invalid DMARC pct" in i for i in result.issues)
+
+    def test_bimi_url_with_equals_not_truncated(self):
+        txt = "v=BIMI1; l=https://example.com/logo.svg?v=2; a=https://example.com/vmc.pem"
+        resp = MagicMock(status_code=200)
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])), \
+             patch('mailradar.checker.httpx.get', return_value=resp):
+            result = check_bimi("example.com")
+        assert result.svg_url == "https://example.com/logo.svg?v=2"
+
+
+# ─── Score normalization ────────────────────────────────────────────────────
+
+from mailradar.checker import MAX_SCORES, MAX_RAW_SCORE
+
+
+def _mock_checks(**scores):
+    """Patch every check_* to return a result with the given score."""
+    from contextlib import ExitStack
+    stack = ExitStack()
+    for check in MAX_SCORES:
+        if check == "gpg":
+            target = "mailradar.gpg.lookup_gpg"
+        else:
+            target = f"mailradar.checker.check_{check}"
+        stack.enter_context(patch(
+            target, return_value=MagicMock(score=scores.get(check, 0), issues=[])
+        ))
+    return stack
+
+
+class TestScoreNormalization:
+
+    def test_max_scores_match_real_checks(self):
+        """MAX_SCORES must reflect what a perfect configuration actually earns."""
+        import base64
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        der = rsa.generate_private_key(public_exponent=65537, key_size=2048).public_key() \
+            .public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+        dkim_2048 = f"v=DKIM1; k=rsa; p={base64.b64encode(der).decode()}"
+        records = {
+            "_dmarc.example.com": "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:a@example.com; ruf=mailto:f@example.com",
+            "example.com": "v=spf1 -all",
+            "default._domainkey.example.com": dkim_2048,
+            "default._bimi.example.com": "v=BIMI1; l=https://example.com/l.svg; a=https://example.com/vmc.pem",
+            "_mta-sts.example.com": "v=STSv1; id=1",
+            "_smtp._tls.example.com": "v=TLSRPTv1; rua=mailto:tls@example.com",
+        }
+
+        def resolve(name, rtype):
+            if name in records:
+                return make_txt_answer([records[name]])
+            raise dns.resolver.NXDOMAIN
+
+        http = MagicMock(status_code=200, text="version: STSv1\nmode: enforce\n")
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=resolve), \
+             patch('mailradar.checker.httpx.get', return_value=http):
+            assert check_dmarc("example.com").score == MAX_SCORES["dmarc"]
+            assert check_spf("example.com").score == MAX_SCORES["spf"]
+            assert check_dkim("example.com").score == MAX_SCORES["dkim"]
+            assert check_bimi("example.com").score == MAX_SCORES["bimi"]
+            assert check_mta_sts("example.com").score == MAX_SCORES["mta_sts"]
+            assert check_tls_rpt("example.com").score == MAX_SCORES["tls_rpt"]
+
+    def test_perfect_configuration_scores_exactly_100(self):
+        with _mock_checks(**MAX_SCORES):
+            report = analyze_domain("example.com")
+        assert report.total_score == 100
+        assert report.grade == "EXCELLENT"
+
+    def test_nothing_configured_scores_0(self):
+        with _mock_checks():
+            report = analyze_domain("example.com")
+        assert report.total_score == 0
+        assert report.grade == "CRITICAL"
+
+    def test_score_is_normalized(self):
+        # Only DMARC perfect: 50 raw points out of MAX_RAW_SCORE
+        with _mock_checks(dmarc=50):
+            report = analyze_domain("example.com")
+        assert report.total_score == round(50 * 100 / MAX_RAW_SCORE)
+
+    def test_score_never_exceeds_100(self):
+        with _mock_checks(**{k: v * 2 for k, v in MAX_SCORES.items()}):
+            report = analyze_domain("example.com")
+        assert report.total_score == 100

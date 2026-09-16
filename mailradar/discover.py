@@ -4,13 +4,15 @@ MailRadar — Email address discovery via Certificate Transparency (crt.sh).
 
 import httpx
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 
 @dataclass
 class DiscoveryResult:
     domain: str = ""
-    emails: list[str] = field(default_factory=list)
+    emails: list[str] = field(default_factory=list)  # found in real sources
+    candidates: list[str] = field(default_factory=list)  # guessed, unverified
     sources: dict = field(default_factory=dict)
     gpg_capable: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -18,7 +20,12 @@ class DiscoveryResult:
 
 def _extract_emails_from_text(text: str, domain: str) -> list[str]:
     """Extract email addresses for a specific domain from text."""
-    pattern = rf'[a-zA-Z0-9._%+\-]+@{re.escape(domain)}'
+    # Il dominio non deve proseguire: esclude example.community e
+    # example.com.evil.org, ma accetta un punto finale di frase ("info@example.com.")
+    pattern = (
+        rf'[a-zA-Z0-9._%+\-]+@{re.escape(domain)}'
+        r'(?![a-zA-Z0-9\-]|\.[a-zA-Z0-9])'
+    )
     found = re.findall(pattern, text, re.IGNORECASE)
     return list(set(e.lower() for e in found))
 
@@ -181,16 +188,20 @@ def _discover_via_whois(domain: str) -> list[str]:
 
 def _discover_common_contacts(domain: str) -> list[str]:
     """
-    Generate and verify common contact addresses for a domain.
-    Checks MX records to verify the domain accepts email.
+    Generate common role addresses (RFC 2142) for a domain.
+
+    These are guesses, NOT verified mailboxes: the only check is that the
+    domain accepts email at all (has MX records and no null MX, RFC 7505).
     """
     import dns.resolver
-    import dns.exception
 
-    # Verifica che il dominio abbia MX records
     try:
-        dns.resolver.resolve(domain, "MX")
+        answers = dns.resolver.resolve(domain, "MX")
     except Exception:
+        return []
+
+    # Null MX ("0 .") — il dominio dichiara esplicitamente di non ricevere email
+    if all(str(r.exchange) == "." for r in answers):
         return []
 
     # Lista standard di contatti comuni
@@ -206,14 +217,12 @@ def _discover_common_contacts(domain: str) -> list[str]:
 def _check_gpg_for_emails(emails: list[str]) -> list[str]:
     """Check which emails have GPG public keys on keyservers."""
     from mailradar.gpg import lookup_gpg_by_email
-    gpg_capable = []
+    # Lookup in parallelo: ogni indirizzo interroga fino a 3 keyserver con
+    # timeout di 15s, in sequenza sarebbero minuti
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(lookup_gpg_by_email, emails))
 
-    for email in emails:
-        result = lookup_gpg_by_email(email)
-        if result.found:
-            gpg_capable.append(email)
-
-    return gpg_capable
+    return [email for email, r in zip(emails, results) if r.found]
 
 
 def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
@@ -228,11 +237,11 @@ def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
     subdomains = _discover_subdomains_via_crtsh(domain)
     result.sources["crt.sh subdomains"] = subdomains
 
-    # Common contacts — genera e verifica indirizzi standard
+    # Common contacts — indirizzi standard ipotizzati, tenuti separati dalle
+    # email realmente trovate
     common = _discover_common_contacts(domain)
     if common:
         result.sources["common contacts"] = common
-        all_emails.update(common)
 
     # Website scraping — usa i sottodomini trovati da crt.sh
     website_emails = _discover_via_website(domain, extra_subdomains=subdomains)
@@ -253,10 +262,12 @@ def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
         all_emails.update(whois_emails)
 
     # Deduplicate and sort
-    result.emails = sorted(list(all_emails))
+    result.emails = sorted(all_emails)
+    result.candidates = sorted(set(common) - all_emails)
 
-    # GPG check
-    if check_gpg and result.emails:
-        result.gpg_capable = _check_gpg_for_emails(result.emails)
+    # GPG check — anche sui candidati: una chiave pubblica per security@ è utile
+    to_check = result.emails + result.candidates
+    if check_gpg and to_check:
+        result.gpg_capable = _check_gpg_for_emails(to_check)
 
     return result

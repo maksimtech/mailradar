@@ -2,6 +2,8 @@
 Tests for MailRadar sender module.
 Uses mocks to avoid real SMTP connections and GPG interactions.
 """
+import shutil
+import tempfile
 import pytest
 from unittest.mock import patch, MagicMock
 from mailradar.sender import (
@@ -174,3 +176,92 @@ def test_send_report_with_sign():
             sign_email="security@maksimtech.com",
         )
         assert result.sent is True
+
+
+# ─── GPG: fetched key import & no silent plaintext downgrade ───────────────
+
+FAKE_KEY = "-----BEGIN PGP PUBLIC KEY BLOCK-----\nabc\n-----END PGP PUBLIC KEY BLOCK-----\n"
+
+
+def test_encrypt_with_public_key_imports_into_temp_keyring():
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=b"-----BEGIN PGP MESSAGE-----\n")
+        result = _encrypt_with_gpg("report", "security@example.com", FAKE_KEY)
+
+    assert result is not None
+    assert mock_run.call_count == 2
+    import_cmd = mock_run.call_args_list[0].args[0]
+    encrypt_cmd = mock_run.call_args_list[1].args[0]
+    assert "--import" in import_cmd
+    assert mock_run.call_args_list[0].kwargs["input"] == FAKE_KEY.encode()
+    homedir = import_cmd[import_cmd.index("--homedir") + 1]
+    assert encrypt_cmd[encrypt_cmd.index("--homedir") + 1] == homedir
+    assert encrypt_cmd[encrypt_cmd.index("--trust-model") + 1] == "always"
+
+
+def test_encrypt_with_public_key_import_failure():
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=2, stdout=b"")
+        result = _encrypt_with_gpg("report", "security@example.com", FAKE_KEY)
+    assert result is None
+    assert mock_run.call_count == 1
+
+
+def test_send_report_passes_fetched_key_to_encryption():
+    gpg = make_gpg_result(found=True, uid="security@example.com")
+    gpg.raw_key = FAKE_KEY
+    with patch("mailradar.sender._encrypt_with_gpg", return_value="ENCRYPTED") as mock_enc, \
+         patch("mailradar.sender._send_smtp", return_value=True):
+        send_report("example.com", "Test report", gpg, config=make_smtp_config())
+    mock_enc.assert_called_once_with("Test report", "security@example.com", FAKE_KEY)
+
+
+def test_send_report_encryption_failure_does_not_send_plaintext():
+    gpg = make_gpg_result(found=True, uid="security@example.com")
+    with patch("mailradar.sender._encrypt_with_gpg", return_value=None), \
+         patch("mailradar.sender._send_smtp", return_value=True) as mock_smtp:
+        result = send_report("example.com", "Test report", gpg, config=make_smtp_config())
+    mock_smtp.assert_not_called()
+    assert result.sent is False
+    assert result.encrypted is False
+    assert result.method == "gpg-failed"
+    assert result.recipient == "security@example.com"
+
+
+def test_send_report_encryption_failure_without_smtp():
+    gpg = make_gpg_result(found=True, uid="security@example.com")
+    with patch("mailradar.sender._encrypt_with_gpg", return_value=None):
+        result = send_report("example.com", "Test report", gpg, config=None)
+    assert result.method == "gpg-failed"
+
+
+@pytest.mark.skipif(shutil.which("gpg") is None, reason="gpg not installed")
+def test_encrypt_with_fetched_key_real_gpg():
+    """End-to-end: a key that is NOT in the user's keyring can be used."""
+    import subprocess
+    home = tempfile.mkdtemp(prefix="mr-")  # short path: gpg-agent socket limits
+    gpg = ["gpg", "--batch", "--homedir", home]
+    try:
+        subprocess.run(
+            gpg + ["--passphrase", "", "--pinentry-mode", "loopback",
+                   "--quick-gen-key", "Test <security@example.com>",
+                   "default", "default", "never"],
+            check=True, capture_output=True, timeout=120,
+        )
+        public_key = subprocess.run(
+            gpg + ["--armor", "--export", "security@example.com"],
+            check=True, capture_output=True, timeout=30,
+        ).stdout.decode()
+
+        encrypted = _encrypt_with_gpg("secret report", "security@example.com", public_key)
+        assert encrypted is not None
+        assert "BEGIN PGP MESSAGE" in encrypted
+
+        decrypted = subprocess.run(
+            gpg + ["--decrypt"], input=encrypted.encode(),
+            check=True, capture_output=True, timeout=30,
+        ).stdout.decode()
+        assert decrypted == "secret report"
+    finally:
+        subprocess.run(["gpgconf", "--homedir", home, "--kill", "all"], capture_output=True)
+        shutil.rmtree(home, ignore_errors=True)

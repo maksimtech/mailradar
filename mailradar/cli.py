@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
+from rich.markup import escape
 from rich import box
 from typing import Optional
 
@@ -54,7 +55,7 @@ def _print_report(report: DomainReport) -> None:
 
     console.print()
     console.print(Panel(
-        f"[bold]Domain:[/bold] {report.domain}\n"
+        f"[bold]Domain:[/bold] {escape(report.domain)}\n"
         f"[bold]Score:[/bold] [{color}]{report.total_score}/100 — {emoji} {report.grade}[/{color}]",
         title="📡 MailRadar Report",
         border_style=color,
@@ -72,7 +73,7 @@ def _print_report(report: DomainReport) -> None:
     dmarc_detail = ""
     if d.present:
         dmarc_detail = (
-            f"p={d.policy} | pct={d.pct} | "
+            f"p={escape(d.policy)} | pct={d.pct} | "
             f"adkim={'s' if d.adkim == 's' else 'r'} | "
             f"aspf={'s' if d.aspf == 's' else 'r'} | "
             f"rua={'✓' if d.rua else '✗'} | ruf={'✓' if d.ruf else '✗'}"
@@ -85,7 +86,7 @@ def _print_report(report: DomainReport) -> None:
 
     # SPF row
     s = report.spf
-    spf_detail = s.raw[:55] if s.present else "[red]Not configured[/red]"
+    spf_detail = escape(s.raw[:55]) if s.present else "[red]Not configured[/red]"
     spf_icon = "✅" if (s.present and not s.permissive) else ("⚠️ " if s.present else "❌")
     table.add_row("SPF", spf_icon, spf_detail, f"[{_score_color(s.score)}]{s.score}[/{_score_color(s.score)}]")
 
@@ -93,7 +94,7 @@ def _print_report(report: DomainReport) -> None:
     k = report.dkim
     dkim_detail = ""
     if k.present:
-        dkim_detail = f"selector: {k.selector} | {k.key_bits}-bit RSA"
+        dkim_detail = f"selector: {escape(k.selector)} | {k.key_bits}-bit RSA"
     else:
         dkim_detail = "[red]Not found (tried common selectors)[/red]"
     dkim_icon = "✅" if k.present else "❌"
@@ -111,19 +112,19 @@ def _print_report(report: DomainReport) -> None:
 
     # MTA-STS row
     m = report.mta_sts
-    mts_detail = f"mode: {m.mode}" if m.present else "[dim]Not configured[/dim]"
+    mts_detail = f"mode: {escape(m.mode)}" if m.present else "[dim]Not configured[/dim]"
     mts_icon = "✅" if (m.present and m.mode == "enforce") else ("⚠️ " if m.present else "❌")
     table.add_row("MTA-STS", mts_icon, mts_detail, f"[{_score_color(m.score)}]{m.score}[/{_score_color(m.score)}]")
 
     # TLS-RPT row
     t = report.tls_rpt
-    tls_detail = f"rua: {t.rua[:40]}" if t.present else "[dim]Not configured[/dim]"
+    tls_detail = f"rua: {escape(t.rua[:40])}" if t.present else "[dim]Not configured[/dim]"
     tls_icon = "✅" if t.present else "❌"
     table.add_row("TLS-RPT", tls_icon, tls_detail, f"[{_score_color(t.score)}]{t.score}[/{_score_color(t.score)}]")
 
     # GPG row
     g = report.gpg
-    gpg_detail = f"uid: {g.uid} | {g.keyserver}" if g.found else "[dim]No public key on keyservers[/dim]"
+    gpg_detail = f"uid: {escape(g.uid)} | {escape(g.keyserver)}" if g.found else "[dim]No public key on keyservers[/dim]"
     gpg_icon = "✅" if g.found else "❌"
     table.add_row("GPG", gpg_icon, gpg_detail, f"[{_score_color(g.score)}]{g.score}[/{_score_color(g.score)}]")
 
@@ -144,7 +145,7 @@ def _print_report(report: DomainReport) -> None:
         console.print()
         console.print("[bold yellow]⚠️  Issues found:[/bold yellow]")
         for issue in all_issues:
-            console.print(f"  [dim]•[/dim] {issue}")
+            console.print(f"  [dim]•[/dim] {escape(issue)}")
 
     console.print()
 
@@ -161,23 +162,23 @@ def check(
     from mailradar.checker import domain_exists, find_domain_variants
 
     # Verifica se il dominio esiste
-    with console.status(f"[cyan]Checking if {domain} exists...[/cyan]"):
+    with console.status(f"[cyan]Checking if {escape(domain)} exists...[/cyan]"):
         exists = domain_exists(domain)
 
     if not exists:
-        console.print(f"\n[yellow]⚠️  Domain [bold]{domain}[/bold] not found in DNS.[/yellow]")
+        console.print(f"\n[yellow]⚠️  Domain [bold]{escape(domain)}[/bold] not found in DNS.[/yellow]")
         console.print(f"[dim]Scanning TLD variants...[/dim]\n")
 
         with console.status("[cyan]Scanning variants...[/cyan]"):
             variants = find_domain_variants(domain)
 
         if not variants:
-            console.print(f"[red]❌ No variants found for {domain}. Check the domain name.[/red]")
+            console.print(f"[red]❌ No variants found for {escape(domain)}. Check the domain name.[/red]")
             raise typer.Exit(1)
 
         console.print(f"[green]Found {len(variants)} variant(s):[/green]\n")
         for i, v in enumerate(variants, 1):
-            console.print(f"  [bold cyan]{i}[/bold cyan]. {v}")
+            console.print(f"  [bold cyan]{i}[/bold cyan]. {escape(v)}")
 
         console.print()
         choice = typer.prompt(
@@ -191,9 +192,9 @@ def check(
             raise typer.Exit(1)
 
         domain = variants[choice - 1]
-        console.print(f"\n[dim]Selected: [bold]{domain}[/bold][/dim]")
+        console.print(f"\n[dim]Selected: [bold]{escape(domain)}[/bold][/dim]")
 
-    console.print(f"\n[dim]Analyzing [bold]{domain}[/bold]...[/dim]")
+    console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
     with console.status("[cyan]Running DNS checks...[/cyan]"):
         report = analyze_domain(domain)
@@ -203,13 +204,13 @@ def check(
     if verbose:
         console.print("[bold]Raw records:[/bold]")
         if report.dmarc.raw:
-            console.print(f"  DMARC: {report.dmarc.raw}")
+            console.print(f"  DMARC: {report.dmarc.raw}", markup=False)
         if report.spf.raw:
-            console.print(f"  SPF:   {report.spf.raw}")
+            console.print(f"  SPF:   {report.spf.raw}", markup=False)
         if report.dkim.raw:
-            console.print(f"  DKIM:  {report.dkim.raw}")
+            console.print(f"  DKIM:  {report.dkim.raw}", markup=False)
         if report.bimi.raw:
-            console.print(f"  BIMI:  {report.bimi.raw}")
+            console.print(f"  BIMI:  {report.bimi.raw}", markup=False)
         console.print()
 
     # Exit code based on grade
@@ -234,9 +235,16 @@ def batch(
         raise typer.Exit(1)
 
     results = []
+    failed = []
     for domain in domains:
-        console.print(f"[dim]Checking {domain}...[/dim]")
-        report = analyze_domain(domain)
+        console.print(f"[dim]Checking {escape(domain)}...[/dim]")
+        try:
+            report = analyze_domain(domain)
+        except Exception as e:
+            # Un dominio problematico non deve interrompere l'intero batch
+            console.print(f"[red]❌ {escape(domain)}: analysis failed — {escape(str(e))}[/red]")
+            failed.append(domain)
+            continue
         results.append(report)
         _print_report(report)
 
@@ -250,12 +258,15 @@ def batch(
     for r in sorted(results, key=lambda x: x.total_score):
         color = _score_color(r.total_score)
         summary.add_row(
-            r.domain,
+            escape(r.domain),
             f"[{color}]{r.total_score}[/{color}]",
             f"{_grade_emoji(r.grade)} {r.grade}"
         )
 
     console.print(summary)
+
+    if failed:
+        console.print(f"[red]Failed ({len(failed)}): {escape(', '.join(failed))}[/red]")
 
 
 def main():
@@ -280,7 +291,7 @@ def report(
     """
     from mailradar.reporter import generate_report, save_report
 
-    console.print(f"\n[dim]Analyzing [bold]{domain}[/bold]...[/dim]")
+    console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
     with console.status("[cyan]Running DNS checks...[/cyan]"):
         from mailradar.checker import analyze_domain
@@ -297,7 +308,7 @@ def report(
         sender_org=sender_org,
     )
 
-    console.print(Panel(text, title=f"📧 Report — {domain}", border_style="cyan"))
+    console.print(Panel(Text(text), title=f"📧 Report — {escape(domain)}", border_style="cyan"))
 
     if save:
         from mailradar.reporter import save_report
@@ -331,7 +342,7 @@ def send(
     from mailradar.reporter import generate_report
     from mailradar.sender import send_report, SMTPConfig
 
-    console.print(f"\n[dim]Analyzing [bold]{domain}[/bold]...[/dim]")
+    console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
     with console.status("[cyan]Running DNS checks...[/cyan]"):
         analysis = analyze_domain(domain)
@@ -373,18 +384,25 @@ def send(
         )
 
     if result.method == "gpg-encrypted" or result.method == "plaintext":
-        console.print(f"\n[green]{result.message}[/green]")
-        console.print(f"[dim]Method: {result.method} | Recipient: {result.recipient}[/dim]")
+        console.print(f"\n[green]{escape(result.message)}[/green]")
+        console.print(f"[dim]Method: {result.method} | Recipient: {escape(result.recipient)}[/dim]")
 
     elif result.method == "manual-gpg":
-        console.print(f"\n[yellow]⚠️  GPG key found for {result.recipient} but no SMTP configured.[/yellow]")
+        console.print(f"\n[yellow]⚠️  GPG key found for {escape(result.recipient)} but no SMTP configured.[/yellow]")
         console.print("[yellow]   Send this GPG-encrypted text manually:[/yellow]\n")
-        console.print(Panel(result.message, title="🔐 GPG Encrypted Report", border_style="yellow"))
+        console.print(Panel(Text(result.message), title="🔐 GPG Encrypted Report", border_style="yellow"))
+
+    elif result.method == "gpg-failed":
+        console.print(f"\n[red]❌ {escape(result.message)}[/red]")
+        console.print("[red]   Plaintext was not sent. Check your gpg installation, "
+                      "or send the report below manually.[/red]\n")
+        console.print(Panel(Text(report_text), title=f"📧 Report — {escape(domain)} (unencrypted)", border_style="red"))
+        raise typer.Exit(1)
 
     else:
         console.print(f"\n[yellow]ℹ️  No SMTP configured or send failed.[/yellow]")
-        console.print(f"[dim]Send manually to: {result.recipient}[/dim]\n")
-        console.print(Panel(report_text, title=f"📧 Report — {domain} (copy-paste)", border_style="cyan"))
+        console.print(f"[dim]Send manually to: {escape(result.recipient)}[/dim]\n")
+        console.print(Panel(Text(report_text), title=f"📧 Report — {escape(domain)} (copy-paste)", border_style="cyan"))
 
 
 @app.command()
@@ -400,16 +418,16 @@ def discover(
     from mailradar.checker import domain_exists
 
     if "." not in domain:
-        console.print(f"[red]Invalid domain: {domain} — missing TLD[/red]")
+        console.print(f"[red]Invalid domain: {escape(domain)} — missing TLD[/red]")
         raise typer.Exit(1)
 
-    console.print(f"\n[dim]Discovering email addresses for [bold]{domain}[/bold]...[/dim]")
+    console.print(f"\n[dim]Discovering email addresses for [bold]{escape(domain)}[/bold]...[/dim]")
 
     with console.status("[cyan]Querying crt.sh, website and RDAP...[/cyan]"):
         result = run_discover(domain, check_gpg=not no_gpg)
 
-    if not result.emails:
-        console.print(f"\n[yellow]No email addresses found for {domain}[/yellow]")
+    if not result.emails and not result.candidates:
+        console.print(f"\n[yellow]No email addresses found for {escape(domain)}[/yellow]")
         raise typer.Exit(0)
 
     # Separa sottodomini da email
@@ -423,12 +441,12 @@ def discover(
         console.print()
 
     # Email addresses
-    real_emails = [e for e in result.emails if "@" in e]
-    if not real_emails:
-        console.print(f"[yellow]No email addresses found for {domain}[/yellow]")
-        raise typer.Exit(0)
-
-    console.print(f"[bold green]Found {len(real_emails)} candidate email address(es) for {domain}:[/bold green]\n")
+    if result.emails:
+        console.print(f"[bold green]Found {len(result.emails)} email address(es) for {escape(domain)}:[/bold green]\n")
+    else:
+        console.print(f"[yellow]No email addresses found in public sources for {escape(domain)}.[/yellow]\n")
+    if result.candidates:
+        console.print(f"[dim]{len(result.candidates)} common role address(es) guessed — not verified.[/dim]\n")
 
     for source, items in email_sources.items():
         emails_only = [e for e in items if "@" in e]
@@ -438,13 +456,13 @@ def discover(
         console.print(f"[bold cyan]Source: {source}[/bold cyan] {label}")
         for email in sorted(emails_only):
             gpg_icon = "🔐" if email in result.gpg_capable else "  "
-            console.print(f"  {gpg_icon} {email}")
+            console.print(f"  {gpg_icon} {escape(email)}")
         console.print()
 
     if result.gpg_capable:
         console.print(f"[bold green]🔐 GPG-capable addresses ({len(result.gpg_capable)}):[/bold green]")
         for email in result.gpg_capable:
-            console.print(f"  • {email}")
+            console.print(f"  • {escape(email)}")
         console.print()
         console.print("[dim]These addresses can receive GPG-encrypted reports.[/dim]")
     else:

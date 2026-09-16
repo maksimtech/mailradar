@@ -391,3 +391,134 @@ class TestCheckCommandWithIssues(unittest.TestCase):
         mock_analyze.return_value = report
         result = self.runner.invoke(app, ["check", "example.com"])
         self.assertEqual(result.exit_code, 2)
+
+
+class TestRichMarkupSafety(unittest.TestCase):
+    """Untrusted DNS data and report text must never be parsed as Rich markup."""
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    def _hostile_report(self):
+        report = _make_domain_report("example.com", 75, "GOOD")
+        report.spf.raw = "v=spf1 [/bold] -all"
+        report.dmarc.raw = "v=DMARC1; p=reject; [/red]"
+        report.dmarc.issues = ["pct=[/x] — not applied to 100% of emails"]
+        return report
+
+    @patch("mailradar.cli.analyze_domain")
+    def test_check_does_not_crash_on_markup_in_dns_records(self, mock_analyze):
+        mock_analyze.return_value = self._hostile_report()
+        result = self.runner.invoke(app, ["check", "example.com", "--verbose"])
+        self.assertIsNone(result.exception, result.output)
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("v=spf1 [/bold] -all", result.output)
+        self.assertIn("v=DMARC1; p=reject; [/red]", result.output)
+        self.assertIn("pct=[/x]", result.output)
+
+    @patch("mailradar.cli.analyze_domain")
+    def test_batch_does_not_crash_on_markup_in_dns_records(self, mock_analyze):
+        mock_analyze.return_value = self._hostile_report()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("example.com\n")
+            tmp = f.name
+        try:
+            result = self.runner.invoke(app, ["batch", tmp])
+            self.assertIsNone(result.exception, result.output)
+        finally:
+            os.unlink(tmp)
+
+    @patch("mailradar.checker.analyze_domain")
+    @patch("mailradar.cli.analyze_domain")
+    def test_report_text_is_printed_verbatim(self, mock_cli, mock_checker):
+        report = _make_domain_report("example.com", 30, "POOR")
+        report.spf.issues = ["SPF uses ~all (softfail) — consider -all (hardfail)"]
+        mock_cli.return_value = mock_checker.return_value = report
+        result = self.runner.invoke(app, ["report", "example.com", "--lang", "en"])
+        self.assertIsNone(result.exception, result.output)
+        # Previously Rich swallowed "[provider]" as a style tag
+        self.assertIn("include:[provider] -all", result.output)
+        self.assertIn("[NOME]", result.output)
+
+    @patch("mailradar.sender.send_report")
+    @patch("mailradar.checker.analyze_domain")
+    @patch("mailradar.cli.analyze_domain")
+    def test_send_manual_report_is_printed_verbatim(self, mock_cli, mock_checker, mock_send):
+        report = _make_domain_report("example.com", 30, "POOR")
+        report.spf.issues = ["SPF uses ~all (softfail) — consider -all (hardfail)"]
+        mock_cli.return_value = mock_checker.return_value = report
+        mock_send.return_value = MagicMock(
+            method="manual", recipient="security@example.com", message=""
+        )
+        result = self.runner.invoke(app, ["send", "example.com", "--lang", "en"])
+        self.assertIsNone(result.exception, result.output)
+        self.assertIn("include:[provider] -all", result.output)
+
+
+class TestBatchResilience(unittest.TestCase):
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    @patch("mailradar.cli.analyze_domain")
+    def test_batch_continues_after_failing_domain(self, mock_analyze):
+        mock_analyze.side_effect = [
+            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"),
+            _make_domain_report("good.com", 90, "EXCELLENT"),
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("broken.com\ngood.com\n")
+            tmp = f.name
+        try:
+            result = self.runner.invoke(app, ["batch", tmp])
+            self.assertIsNone(result.exception, result.output)
+            self.assertEqual(mock_analyze.call_count, 2)
+            self.assertIn("good.com", result.output)
+            self.assertIn("Failed (1): broken.com", result.output)
+        finally:
+            os.unlink(tmp)
+
+
+class TestSendGpgFailed(unittest.TestCase):
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    @patch("mailradar.sender.send_report")
+    @patch("mailradar.checker.analyze_domain")
+    @patch("mailradar.cli.analyze_domain")
+    def test_send_gpg_failed_exits_nonzero(self, mock_cli, mock_checker, mock_send):
+        report = _make_domain_report("example.com", 75, "GOOD")
+        mock_cli.return_value = mock_checker.return_value = report
+        mock_send.return_value = MagicMock(
+            method="gpg-failed",
+            recipient="security@example.com",
+            message="GPG key found for security@example.com but encryption failed — report NOT sent",
+        )
+        result = self.runner.invoke(app, ["send", "example.com"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("encryption failed", result.output)
+        self.assertIn("Plaintext was not sent", result.output)
+
+
+class TestDiscoverCandidatesOutput(unittest.TestCase):
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    @patch("mailradar.discover.discover")
+    def test_only_candidates_are_not_presented_as_found(self, mock_discover):
+        from mailradar.discover import DiscoveryResult
+        mock_discover.return_value = DiscoveryResult(
+            domain="example.com",
+            emails=[],
+            candidates=["security@example.com"],
+            sources={"common contacts": ["security@example.com"]},
+            gpg_capable=["security@example.com"],
+        )
+        result = self.runner.invoke(app, ["discover", "example.com"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("No email addresses found in public sources", result.output)
+        self.assertIn("not verified", result.output)
+        self.assertIn("security@example.com", result.output)
+        self.assertNotIn("Found 1 email", result.output)
