@@ -32,6 +32,9 @@ RUN pip install --no-cache-dir --root-user-action=ignore --only-binary :all: \
     pip install --no-cache-dir --root-user-action=ignore \
     "mailradar==${MAILRADAR_VERSION}"
 
+# Rimuovi pip: a runtime non serve e le sue dipendenze vendored hanno CVE note
+RUN pip uninstall pip -y --root-user-action=ignore
+
 # Crea utente non-root per sicurezza
 RUN useradd -m -u 1000 mailradar && \
     mkdir -p /home/mailradar/.mailradar && \

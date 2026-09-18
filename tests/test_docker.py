@@ -1,6 +1,7 @@
 """Tests for Docker image build configuration and security policy."""
 import re
 import unittest
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,6 +26,25 @@ class TestDockerfile(unittest.TestCase):
         self.assertTrue(upgrade, "no RUN step upgrades pip")
         self.assertTrue(install, "no RUN step installs mailradar")
         self.assertLess(upgrade[0], install[0])
+
+    def test_pip_removed_after_installing_mailradar(self):
+        runs = _run_instructions(DOCKERFILE)
+        install = [i for i, r in enumerate(runs) if "mailradar==" in r]
+        uninstall = [i for i, r in enumerate(runs)
+                     if re.search(r"pip uninstall .*\bpip\b", r) and "-y" in r]
+        self.assertTrue(uninstall, "no RUN step uninstalls pip")
+        self.assertGreater(uninstall[0], install[-1])
+        # Dopo la rimozione nessun altro passo può usare pip
+        for r in runs[uninstall[0] + 1:]:
+            self.assertNotRegex(r, r"\bpip3? install\b")
+
+    def test_pip_removed_as_root(self):
+        # La disinstallazione scrive in site-packages: deve precedere USER
+        uninstall_pos = DOCKERFILE.find("pip uninstall")
+        user_pos = DOCKERFILE.find("\nUSER ")
+        self.assertNotEqual(uninstall_pos, -1)
+        self.assertNotEqual(user_pos, -1)
+        self.assertLess(uninstall_pos, user_pos)
 
 
 class TestDockerWorkflow(unittest.TestCase):
@@ -64,6 +84,15 @@ class TestSecurityPolicy(unittest.TestCase):
     def test_security_md_references_current_base_image(self):
         self.assertIn("Debian Trixie", SECURITY)
         self.assertNotIn("Bookworm", SECURITY)
+
+    def test_openssl_not_listed_as_open_cve(self):
+        # OpenSSL non compare nella scansione Trivy dell'immagine su Trixie
+        self.assertNotIn("OpenSSL", SECURITY)
+
+    def test_last_reviewed_after_trixie_scan(self):
+        match = re.search(r"Last reviewed: (\d{4}-\d{2}-\d{2})", SECURITY)
+        self.assertIsNotNone(match)
+        self.assertGreaterEqual(date.fromisoformat(match.group(1)), date(2026, 9, 18))
 
 
 if __name__ == "__main__":
