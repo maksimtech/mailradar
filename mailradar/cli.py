@@ -11,6 +11,7 @@ from rich.markup import escape
 from rich import box
 from typing import Optional
 
+import mailradar
 from mailradar.checker import analyze_domain, DomainReport
 
 app = typer.Typer(
@@ -20,6 +21,25 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"MailRadar {mailradar.__version__}")
+        raise typer.Exit(0)
+
+
+@app.callback()
+def _root(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the version and exit",
+    ),
+) -> None:
+    """📡 Email security posture analyzer — DMARC, SPF, DKIM, BIMI, VMC & GPG audit tool"""
 
 
 def _score_color(score: int) -> str:
