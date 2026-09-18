@@ -23,6 +23,9 @@ WORKDIR /app
 # Versione MailRadar da installare
 ARG MAILRADAR_VERSION=2026.9.2
 
+# Aggiorna pip: la versione inclusa nell'immagine base ha CVE note
+RUN pip install --no-cache-dir --root-user-action=ignore -U pip
+
 # Installa mailradar da PyPI
 RUN pip install --no-cache-dir --root-user-action=ignore --only-binary :all: \
     "mailradar==${MAILRADAR_VERSION}" || \
