@@ -1,13 +1,12 @@
 """
-MailRadar — EU law provisions for audit findings.
+MailRadar — EU and Italian law provisions for audit findings.
 
 Maps what an audit found to the provisions it concerns, and cites each one
 with the SHA-256 of the exact text applied and the date of that wording. The
-text is downloaded from EUR-Lex on every audit and compared with the local
-cache; without network the cached copy is cited.
+text is downloaded on every audit (EUR-Lex, or Normattiva for Italian law)
+and compared with the local cache; without network the cached copy is cited.
 
-Adapted from APKRadar's law_checker: only the mapping section is specific to
-MailRadar.
+Shared by the Radar tools: only the mapping section is specific to MailRadar.
 """
 from __future__ import annotations
 
@@ -17,15 +16,16 @@ from typing import Optional
 
 from mailradar import law_fetcher
 from mailradar.law_cache import LawCache
-from mailradar.law_fetcher import GDPR, Act, LawFetchError
+from mailradar.law_fetcher import GDPR, NIS2, Act, LawFetchError
 
 # ─── Mapping: MailRadar findings → provisions ─────────────────────────────────
 
 # Finding → cited provisions, in report order
 FINDING_ARTICLES = {
-    "dmarc_missing": ((GDPR, "32"),),
+    "dmarc_missing": ((GDPR, "32"), (NIS2, "21")),
     "spf_dkim_weak": ((GDPR, "32"),),
-    "cleartext": ((GDPR, "32(1)(a)"),),
+    "cleartext": ((GDPR, "32(1)(a)"), (NIS2, "21")),     # MTA-STS absent
+    "cleartext_testing": ((GDPR, "32(1)(a)"),),            # MTA-STS not enforced
     "gpg_missing": ((GDPR, "32"),),
 }
 
@@ -33,8 +33,17 @@ FINDING_TITLES = {
     "dmarc_missing": "DMARC assente",
     "spf_dkim_weak": "SPF/DKIM deboli",
     "cleartext": "Invio in chiaro possibile",
+    "cleartext_testing": "Invio in chiaro possibile",
     "gpg_missing": "GPG non disponibile",
 }
+
+# Articles downloaded and cached even when not cited, by act
+ALSO_FETCH: dict = {}
+
+NIS2_SCOPE_NOTE = (
+    "NIS2 art. 21 obbliga i soggetti essenziali e importanti (art. 3 della direttiva): "
+    "verificare che il titolare del dominio rientri nell'ambito"
+)
 
 # Below this a DKIM key counts as weak (MailRadar's own threshold for full score)
 DKIM_MIN_BITS = 2048
@@ -67,7 +76,7 @@ def findings_of(report) -> dict[str, list[str]]:
     if not report.mta_sts.present:
         found["cleartext"] = ["MTA-STS assente: TLS non obbligatorio in ricezione"]
     elif report.mta_sts.mode != "enforce":
-        found["cleartext"] = [f"MTA-STS in modalità {report.mta_sts.mode or 'sconosciuta'}, non enforce"]
+        found["cleartext_testing"] = [f"MTA-STS in modalità {report.mta_sts.mode or 'sconosciuta'}, non enforce"]
 
     if not report.gpg.found:
         found["gpg_missing"] = ["nessuna chiave pubblica sui keyserver"]
@@ -76,7 +85,8 @@ def findings_of(report) -> dict[str, list[str]]:
 
 
 def notes_of(report) -> list[str]:
-    return []
+    cites_nis2 = not report.dmarc.present or not report.mta_sts.present
+    return [NIS2_SCOPE_NOTE] if cites_nis2 else []
 
 
 # ─── Citations ────────────────────────────────────────────────────────────────
@@ -93,8 +103,8 @@ class Citation:
 @dataclass(frozen=True)
 class ActStatus:
     act: Act
-    # "eur-lex": verified now; "cache": EUR-Lex unreachable, cached copy;
-    # "unavailable": no text at all
+    # "verified": downloaded now from the act's source (EUR-Lex or Normattiva);
+    # "cache": source unreachable, cached copy; "unavailable": no text at all
     source: str
     error: Optional[str] = None
 
@@ -112,10 +122,21 @@ class LawCheckResult:
     notes: list[str] = field(default_factory=list)
 
 
-def check(subject, *, cache: Optional[LawCache] = None, now: Optional[datetime] = None) -> LawCheckResult:
-    """Cite the provisions that apply to the findings about `subject`."""
-    evidence = findings_of(subject)
-    notes = notes_of(subject)
+def check(
+    subject,
+    *,
+    cache: Optional[LawCache] = None,
+    now: Optional[datetime] = None,
+    **context,
+) -> LawCheckResult:
+    """
+    Cite the provisions that apply to the findings about `subject`.
+
+    `context` is passed on to findings_of and notes_of: what the audit found
+    besides `subject` itself.
+    """
+    evidence = findings_of(subject, **context)
+    notes = notes_of(subject, **context)
     cited = [
         (finding, act, ref)
         for finding in evidence
@@ -131,8 +152,10 @@ def check(subject, *, cache: Optional[LawCache] = None, now: Optional[datetime] 
     fresh = {}
     errors = {}
     for act in acts:
-        # Only the articles cited: "32(1)(a)" is part of article 32
-        articles = tuple(dict.fromkeys(ref.split("(")[0] for _, a, ref in cited if a == act))
+        # The articles cited ("32(1)(a)" is part of article 32) and ALSO_FETCH
+        articles = tuple(dict.fromkeys(
+            [ref.split("(")[0] for _, a, ref in cited if a == act] + list(ALSO_FETCH.get(act, ()))
+        ))
         try:
             provisions = law_fetcher.fetch_provisions(act, articles, now=now)
         except LawFetchError as e:
@@ -152,7 +175,7 @@ def check(subject, *, cache: Optional[LawCache] = None, now: Optional[datetime] 
     statuses = []
     for act in acts:
         if act not in errors:
-            statuses.append(ActStatus(act, "eur-lex"))
+            statuses.append(ActStatus(act, "verified"))
         else:
             cached = any((act.celex, ref) in provisions for _, a, ref in cited if a == act)
             statuses.append(ActStatus(act, "cache" if cached else "unavailable", errors[act]))

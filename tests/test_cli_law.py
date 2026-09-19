@@ -12,7 +12,9 @@ from mailradar.checker import (
 )
 from mailradar.cli import app
 
-FIXTURE = Path(__file__).parent / "fixtures" / "gdpr_it_excerpt.html"
+FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURE = FIXTURES / "gdpr_it_excerpt.html"
+NIS2_PAGE = FIXTURES / "nis2_it_excerpt.html"
 runner = CliRunner()
 
 
@@ -31,8 +33,9 @@ def _report(weak=True):
     )
 
 
-def _sha(ref):
-    text = law_fetcher.parse_articles(FIXTURE.read_text(encoding="utf-8"), ("32",))[ref]
+def _sha(ref, page=FIXTURE):
+    article = ref.split("(")[0]
+    text = law_fetcher.parse_articles(page.read_text(encoding="utf-8"), (article,))[ref]
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -42,7 +45,8 @@ def eurlex(monkeypatch):
 
     def fake_fetch_html(url, **kwargs):
         calls.append(url)
-        return FIXTURE.read_text(encoding="utf-8")
+        page = NIS2_PAGE if "32022L2555" in url else FIXTURE
+        return page.read_text(encoding="utf-8")
 
     monkeypatch.setattr(law_fetcher, "fetch_html", fake_fetch_html)
     return calls
@@ -65,7 +69,19 @@ def test_check_cites_article_32(eurlex):
     assert "Norma applicata: GDPR art. 32(1)(a)" in out.output
     assert f"SHA256: {_sha('32(1)(a)')}" in out.output
     assert "Versione del: " in out.output
-    assert eurlex == ["https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32016R0679"]
+    assert eurlex == [
+        "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32016R0679",
+        "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32022L2555",
+    ]
+
+
+def test_check_cites_nis2_for_dmarc_and_mta_sts(eurlex):
+    out = _check(_report())
+
+    assert "Norma applicata: NIS2 dir. 2022/2555 art. 21\n" in out.output
+    assert f"SHA256: {_sha('21', NIS2_PAGE)}" in out.output
+    assert "NIS2 dir. 2022/2555: verificato su EUR-Lex (CELEX 32022L2555)" in out.output
+    assert "soggetti essenziali e importanti" in out.output
 
 
 def test_check_shows_evidence(eurlex):

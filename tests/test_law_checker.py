@@ -11,12 +11,14 @@ from mailradar.law_cache import LawCache
 from mailradar.law_checker import (
     FINDING_ARTICLES,
     FINDING_TITLES,
+    NIS2_SCOPE_NOTE,
     Citation,
     check,
     findings_of,
     format_citation,
+    notes_of,
 )
-from mailradar.law_fetcher import GDPR, LawFetchError, Provision
+from mailradar.law_fetcher import GDPR, NIS2, LawFetchError, Provision
 
 DAY1 = datetime(2026, 9, 19, 14, 0, tzinfo=timezone.utc)
 DAY2 = datetime(2026, 10, 1, 9, 30, tzinfo=timezone.utc)
@@ -67,9 +69,10 @@ def online(monkeypatch):
 
 def test_mapping():
     assert FINDING_ARTICLES == {
-        "dmarc_missing": ((GDPR, "32"),),
+        "dmarc_missing": ((GDPR, "32"), (NIS2, "21")),
         "spf_dkim_weak": ((GDPR, "32"),),
-        "cleartext": ((GDPR, "32(1)(a)"),),
+        "cleartext": ((GDPR, "32(1)(a)"), (NIS2, "21")),
+        "cleartext_testing": ((GDPR, "32(1)(a)"),),
         "gpg_missing": ((GDPR, "32"),),
     }
     assert set(FINDING_TITLES) == set(FINDING_ARTICLES)
@@ -102,12 +105,34 @@ def test_spf_dkim_weak(spf, dkim, evidence):
     assert findings_of(_report(**overrides)) == {"spf_dkim_weak": evidence}
 
 
-@pytest.mark.parametrize("mta_sts", [
-    MTASTSResult(present=False),
-    MTASTSResult(present=True, mode="testing"),
+def test_cleartext_without_mta_sts():
+    assert findings_of(_report(mta_sts=MTASTSResult(present=False))) == {
+        "cleartext": ["MTA-STS assente: TLS non obbligatorio in ricezione"],
+    }
+
+
+def test_mta_sts_testing_is_cleartext_without_nis2():
+    # NIS2 is cited for MTA-STS absent; testing mode only for GDPR art. 32(1)(a)
+    found = findings_of(_report(mta_sts=MTASTSResult(present=True, mode="testing")))
+    assert found == {"cleartext_testing": ["MTA-STS in modalità testing, non enforce"]}
+
+
+@pytest.mark.parametrize("overrides", [
+    dict(dmarc=DMARCResult(present=False)),
+    dict(mta_sts=MTASTSResult(present=False)),
 ])
-def test_cleartext_without_mta_sts_enforce(mta_sts):
-    assert list(findings_of(_report(mta_sts=mta_sts))) == ["cleartext"]
+def test_nis2_scope_is_noted_when_nis2_is_cited(overrides):
+    assert notes_of(_report(**overrides)) == [NIS2_SCOPE_NOTE]
+    assert "soggetti essenziali e importanti" in NIS2_SCOPE_NOTE
+
+
+@pytest.mark.parametrize("overrides", [
+    {},
+    dict(gpg=GPGResult(found=False)),
+    dict(mta_sts=MTASTSResult(present=True, mode="testing")),
+])
+def test_no_nis2_note_without_nis2(overrides):
+    assert notes_of(_report(**overrides)) == []
 
 
 def test_gpg_missing():
@@ -130,18 +155,21 @@ def test_no_findings_no_download(cache, online):
     assert not cache.path.exists()
 
 
-def test_all_findings_cite_article_32(cache, online):
+def test_all_findings_cite_gdpr_and_nis2(cache, online):
     law = check(DomainReport(domain="example.com"), cache=cache, now=DAY1)
 
     assert [(c.finding, c.law, c.article) for c in law.citations] == [
         ("dmarc_missing", "GDPR", "32"),
+        ("dmarc_missing", "NIS2 dir. 2022/2555", "21"),
         ("spf_dkim_weak", "GDPR", "32"),
         ("cleartext", "GDPR", "32(1)(a)"),
+        ("cleartext", "NIS2 dir. 2022/2555", "21"),
         ("gpg_missing", "GDPR", "32"),
     ]
-    # Article 32 is downloaded once, for all four findings
-    assert online == [(GDPR, ("32",))]
-    assert [s.source for s in law.acts] == ["eur-lex"]
+    # Each act is downloaded once, for all the findings citing it
+    assert online == [(GDPR, ("32",)), (NIS2, ("21",))]
+    assert [s.source for s in law.acts] == ["verified", "verified"]
+    assert law.notes == [NIS2_SCOPE_NOTE]
     assert law.citations[0].version_date == "2026-09-19"
     assert law.evidence["dmarc_missing"] == ["nessun record DMARC"]
 
@@ -175,7 +203,7 @@ def test_offline_uses_cache(cache, online, monkeypatch):
     monkeypatch.setattr(law_fetcher, "fetch_provisions", offline)
     law = check(_report(dmarc=DMARCResult(present=False)), cache=cache, now=DAY2)
 
-    assert [(s.source, s.error) for s in law.acts] == [("cache", "offline")]
+    assert [(s.source, s.error) for s in law.acts] == [("cache", "offline"), ("cache", "offline")]
     assert law.citations[0].sha256 == first.citations[0].sha256
     assert law.citations[0].version_date == "2026-09-19"
 
@@ -184,7 +212,7 @@ def test_offline_without_cache(cache):
     # conftest makes every download fail
     law = check(_report(dmarc=DMARCResult(present=False)), cache=cache, now=DAY1)
 
-    assert [s.source for s in law.acts] == ["unavailable"]
+    assert [s.source for s in law.acts] == ["unavailable", "unavailable"]
     assert law.citations[0].sha256 is None
 
 

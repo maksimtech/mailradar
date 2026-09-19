@@ -1,9 +1,11 @@
 """
-MailRadar — EU law text from EUR-Lex.
+MailRadar — EU and Italian law text from EUR-Lex and Normattiva.
 
-Downloads EU acts from EUR-Lex (the GDPR, the consolidated ePrivacy
-directive) and extracts the articles MailRadar reports cite, down to paragraph
-and point: "5", "5(1)", "5(1)(a)". Each provision carries the SHA-256 of its
+Downloads the acts MailRadar reports cite and extracts their articles, down to
+paragraph and point: "5", "5(1)", "5(1)(a)". EU acts come from EUR-Lex (the
+GDPR, the consolidated ePrivacy directive, NIS2, directive 2019/770), the
+Italian Consumer Code from Normattiva, the official source of Italian law in
+force. Each provision carries the SHA-256 of its
 text, so a report can state exactly which wording of the law it applied.
 
 The hash is computed on the UTF-8 text stored with it: whitespace collapsed to
@@ -11,7 +13,7 @@ single spaces, footnote references and amendment markers removed, paragraphs
 of an article one per line. Anyone can recompute it from the text in
 ~/.mailradar/law_cache.json.
 
-Adapted from APKRadar's law_fetcher (GDPR only) to more than one act.
+Shared by the Radar tools; the first version, in APKRadar, read the GDPR only.
 """
 from __future__ import annotations
 
@@ -28,14 +30,21 @@ import httpx
 from mailradar import __version__
 
 SOURCE_URL = "https://eur-lex.europa.eu/legal-content/{lang}/TXT/HTML/?uri=CELEX:{celex}"
+# One page per article, in the version in force (!vig=)
+NORMATTIVA_URL = "https://www.normattiva.it/uri-res/N2Ls?{urn}~art{article}!vig="
 USER_AGENT = f"MailRadar/{__version__} (+https://github.com/maksimtech/mailradar)"
 
 
 @dataclass(frozen=True)
 class Act:
     name: str    # as cited in reports: "GDPR"
-    celex: str   # EUR-Lex document number
+    celex: str   # EUR-Lex document number, or the NIR URN of an Italian act
     note: str = ""
+    source: str = "EUR-Lex"   # or "Normattiva"
+
+    @property
+    def id_label(self) -> str:
+        return "CELEX" if self.source == "EUR-Lex" else "URN"
 
 
 GDPR = Act("GDPR", "32016R0679")
@@ -47,10 +56,19 @@ EPRIVACY = Act(
     "02002L0058-20091219",
     "testo consolidato al 19.12.2009",
 )
+NIS2 = Act("NIS2 dir. 2022/2555", "32022L2555")
+DIGITAL_CONTENT = Act("Contenuti digitali dir. 2019/770", "32019L0770")
+# Not on EUR-Lex, which lists Italian transposition measures without their text
+CONSUMER_CODE = Act(
+    "Codice del Consumo D.Lgs. 206/2005",
+    "urn:nir:stato:decreto.legislativo:2005-09-06;206",
+    "testo vigente",
+    source="Normattiva",
+)
 
 
 class LawFetchError(Exception):
-    """EUR-Lex could not be reached, or its page did not contain the articles."""
+    """The source could not be reached, or its page did not contain the articles."""
 
 
 def text_sha256(text: str) -> str:
@@ -200,6 +218,7 @@ _PARAGRAPH_ID = re.compile(r"^\d{3}\.\d{3}$")   # <div id="005.001"> is art. 5(1
 _PARAGRAPH = re.compile(r"^(\d+)\. ")           # "1. I dati personali sono:"
 _NUMBERED = re.compile(r"^(\d+)\) ")            # GDPR art. 4: "1) «dato personale»: ..."
 _LETTER = re.compile(r"^([a-z]{1,4})\)$")       # table label cell: "a)"
+_POINT = re.compile(r"^([a-z]{1,4})\) ")          # Normattiva point: "a) ingannevoli ..."
 
 
 def _is_heading(node: _Element) -> bool:
@@ -303,6 +322,50 @@ def _parse_eli_article(article: _Element, number: str) -> dict[str, str]:
     return {**points, number: "\n".join(lines)}
 
 
+def _without_update_marks(text: str) -> str:
+    """Normattiva wraps amended text in (( and )): not part of the law."""
+    return normalize_text(text.replace("((", " ").replace("))", " "))
+
+
+def _parse_normattiva_article(root: _Element, number: str) -> dict[str, str]:
+    """
+    Normattiva layout (Akoma Ntoso): <h2 class="article-num-akn" id="art_20">
+    in a <div class="bodyTesto">, a <div class="art-comma-div-akn"> per
+    paragraph ("comma") with its number in <span class="comma-num-akn">, and
+    lettered points in <div class="pointedList-rest-akn">.
+    """
+    for body in _elements(root):
+        if "bodyTesto" not in body.classes or not any(
+            "article-num-akn" in e.classes and e.attrs.get("id") == f"art_{number}"
+            for e in _elements(body)
+        ):
+            continue
+        groups: list[tuple[Optional[int], str, dict[str, str]]] = []
+        for comma in (e for e in _elements(body) if "art-comma-div-akn" in e.classes):
+            text = _without_update_marks(_text(comma))
+            if not text:
+                continue
+            num = next((e for e in _elements(comma) if "comma-num-akn" in e.classes), None)
+            match = _PARAGRAPH.match(_text(num) + " ") if num is not None else None
+            paragraph = int(match.group(1)) if match else None
+            points = {}
+            for item in (e for e in _elements(comma) if "pointedList-rest-akn" in e.classes):
+                point = _without_update_marks(_text(item))
+                letter = _POINT.match(point)
+                if letter and paragraph is not None:
+                    points[f"{number}({paragraph})({letter.group(1)})"] = point
+            groups.append((paragraph, text, points))
+
+        texts: dict[str, str] = {}
+        for paragraph, text, points in groups:
+            if paragraph is not None:
+                texts[f"{number}({paragraph})"] = text
+            texts.update(points)
+        texts[number] = "\n".join(text for _, text, _ in groups)
+        return texts
+    return {}
+
+
 def _ends_article(node: _Element) -> bool:
     return any(
         c == "title-article-norm" or c.startswith(("hd-", "title-doc", "toc-")) or c == "footnote"
@@ -354,8 +417,8 @@ def _split_flat_paragraphs(body: list, number: str) -> dict[str, str]:
 
 def parse_articles(html: str, articles: tuple[str, ...]) -> dict[str, str]:
     """
-    Extract articles from an EUR-Lex HTML page, in the Official Journal or
-    the consolidated layout.
+    Extract articles from an EUR-Lex page (Official Journal or consolidated
+    layout) or a Normattiva article page.
 
     Returns:
         Text by reference, for each article and each of its paragraphs and
@@ -375,7 +438,10 @@ def parse_articles(html: str, articles: tuple[str, ...]) -> dict[str, str]:
         if article is not None:
             parsed = _parse_eli_article(article, number)
         else:
-            parsed = _parse_consolidated_article(builder.root, number)
+            parsed = (
+                _parse_normattiva_article(builder.root, number)
+                or _parse_consolidated_article(builder.root, number)
+            )
         if not parsed.get(number):
             raise LawFetchError(f"Article {number} not found in the EUR-Lex page")
         texts.update(parsed)
@@ -387,6 +453,7 @@ def parse_articles(html: str, articles: tuple[str, ...]) -> dict[str, str]:
 def fetch_html(url: str, *, client: Optional[httpx.Client] = None, timeout: float = 30.0) -> str:
     """Download a page. Anything but HTTP 200 is an error: EUR-Lex answers
     some automated requests with 202 and a JavaScript challenge."""
+    source = "Normattiva" if "normattiva.it" in url else "EUR-Lex"
     headers = {"User-Agent": USER_AGENT}
     try:
         if client is None:
@@ -395,9 +462,9 @@ def fetch_html(url: str, *, client: Optional[httpx.Client] = None, timeout: floa
         else:
             response = client.get(url, headers=headers)
     except httpx.HTTPError as e:
-        raise LawFetchError(f"EUR-Lex unreachable: {e}") from e
+        raise LawFetchError(f"{source} unreachable: {e}") from e
     if response.status_code != 200:
-        raise LawFetchError(f"EUR-Lex answered HTTP {response.status_code}")
+        raise LawFetchError(f"{source} answered HTTP {response.status_code}")
     return response.text
 
 
@@ -409,10 +476,17 @@ def fetch_provisions(
     now: Optional[datetime] = None,
     client: Optional[httpx.Client] = None,
 ) -> dict[str, Provision]:
-    """Download `act` from EUR-Lex and return the provisions of `articles`, by reference."""
-    html = fetch_html(SOURCE_URL.format(lang=lang, celex=act.celex), client=client)
+    """Download `act` and return the provisions of `articles`, by reference."""
+    if act.source == "Normattiva":
+        texts: dict[str, str] = {}
+        for article in articles:
+            html = fetch_html(NORMATTIVA_URL.format(urn=act.celex, article=article), client=client)
+            texts.update(parse_articles(html, (article,)))
+    else:
+        html = fetch_html(SOURCE_URL.format(lang=lang, celex=act.celex), client=client)
+        texts = parse_articles(html, articles)
     fetched_at = utc_stamp(now or datetime.now(timezone.utc))
     return {
         ref: Provision.from_text(ref, text, fetched_at, act.celex)
-        for ref, text in parse_articles(html, articles).items()
+        for ref, text in texts.items()
     }

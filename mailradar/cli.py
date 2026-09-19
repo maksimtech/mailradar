@@ -171,12 +171,12 @@ def _print_report(report: DomainReport) -> None:
 
 
 
-def _law_check(subject, out=None):
+def _law_check(subject, out=None, **context):
     """Run the law check; any failure is reported and never fails the command."""
     from mailradar import law_checker
 
     try:
-        return law_checker.check(subject)
+        return law_checker.check(subject, **context)
     except Exception as e:
         (out or console).print(f"[yellow]⚠️  Verifica delle norme non riuscita: {escape(str(e))}[/yellow]\n")
         return None
@@ -192,15 +192,16 @@ def _print_law_check(law, out=None) -> None:
 
     out.print("[bold]⚖️  Norme applicate[/bold]")
     for status in law.acts:
-        name = escape(status.act.name)
-        if status.source == "eur-lex":
-            out.print(f"[dim]{name}: verificato su EUR-Lex (CELEX {status.act.celex})[/dim]")
+        act = status.act
+        name, source = escape(act.name), escape(act.source)
+        if status.source == "verified":
+            out.print(f"[dim]{name}: verificato su {source} ({act.id_label} {escape(act.celex)})[/dim]")
         elif status.source == "cache":
-            out.print(f"[yellow]{name}: EUR-Lex non raggiungibile, testo dalla copia in cache non riverificato[/yellow]")
+            out.print(f"[yellow]{name}: {source} non raggiungibile, testo dalla copia in cache non riverificato[/yellow]")
         else:
-            out.print(f"[yellow]{name}: EUR-Lex non raggiungibile e nessuna copia in cache, testo non verificabile[/yellow]")
-        if status.act.note:
-            out.print(f"[dim]  {escape(status.act.note)}[/dim]")
+            out.print(f"[yellow]{name}: {source} non raggiungibile e nessuna copia in cache, testo non verificabile[/yellow]")
+        if act.note:
+            out.print(f"[dim]  {escape(act.note)}[/dim]")
         if status.error:
             out.print(f"[dim]  {escape(status.error)}[/dim]")
     for provision, previous in law.changed.items():
