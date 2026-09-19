@@ -8,10 +8,25 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 
 ## [Unreleased]
 
+## [2026.09.9] - 2026-09-19
+
 ### Added
 - `--version` option: `mailradar --version` prints `MailRadar <version>` and exits.
   The version is read from `mailradar.__version__`, the single source of truth
   also used by `pyproject.toml`.
+
+### Fixed
+- Docker: the `latest` image is now rebuilt every week from the most recent tag,
+  without cache and pulling a fresh base image, so Debian security patches are
+  picked up without waiting for a release. Versioned images are left unchanged.
+
+### Security
+- Docker: pip is upgraded before installing MailRadar and then removed from the
+  final image. It is not needed at runtime and its vendored dependencies had
+  known CVEs.
+- `SECURITY.md`: the known open CVEs are now attributed to the correct base
+  image (Debian Trixie) and the list was updated (OpenSSL is no longer
+  affected).
 
 ## [2026.09.8] - 2026-09-16
 
@@ -157,7 +172,8 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.09.8...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.09.9...HEAD
+[2026.09.9]: https://github.com/maksimtech/mailradar/compare/v2026.09.8...v2026.09.9
 [2026.09.8]: https://github.com/maksimtech/mailradar/compare/v2026.09.7...v2026.09.8
 [2026.09.7]: https://github.com/maksimtech/mailradar/compare/v2026.09.6...v2026.09.7
 [2026.09.6]: https://github.com/maksimtech/mailradar/compare/v2026.09.5...v2026.09.6
