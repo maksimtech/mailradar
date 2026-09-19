@@ -8,6 +8,22 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 
 ## [Unreleased]
 
+## [2026.09.10] - 2026-09-19
+
+### Added
+- `check` and `report` end with a "Norme applicate" section: each weakness
+  cites the legal provisions it concerns, with the SHA-256 of the exact text
+  applied and the date of that wording. The text is downloaded from EUR-Lex on
+  every run and cached in `~/.mailradar/law_cache.json` (`MAILRADAR_HOME`
+  moves the folder); a changed text is reported with its previous hash.
+  Offline the cached copy is cited, or "SHA256: non disponibile". A failed law
+  check never changes the result or the exit code.
+  - GDPR art. 32: DMARC missing, weak SPF/DKIM, no GPG key on keyservers;
+    art. 32(1)(a): MTA-STS missing or not enforced (mail may travel in clear).
+  - NIS2, directive (EU) 2022/2555, art. 21: DMARC missing or MTA-STS missing
+    (not for MTA-STS in testing mode). The report notes that NIS2 applies to
+    essential and important entities only.
+
 ## [2026.09.9] - 2026-09-19
 
 ### Added
