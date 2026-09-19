@@ -170,6 +170,57 @@ def _print_report(report: DomainReport) -> None:
     console.print()
 
 
+
+def _law_check(subject, out=None):
+    """Run the law check; any failure is reported and never fails the command."""
+    from mailradar import law_checker
+
+    try:
+        return law_checker.check(subject)
+    except Exception as e:
+        (out or console).print(f"[yellow]⚠️  Verifica delle norme non riuscita: {escape(str(e))}[/yellow]\n")
+        return None
+
+
+def _print_law_check(law, out=None) -> None:
+    """Cite the provisions applied to the findings, with their SHA-256."""
+    from mailradar.law_checker import FINDING_TITLES, format_citation
+
+    out = out or console
+    if law is None or not (law.citations or law.notes):
+        return
+
+    out.print("[bold]⚖️  Norme applicate[/bold]")
+    for status in law.acts:
+        name = escape(status.act.name)
+        if status.source == "eur-lex":
+            out.print(f"[dim]{name}: verificato su EUR-Lex (CELEX {status.act.celex})[/dim]")
+        elif status.source == "cache":
+            out.print(f"[yellow]{name}: EUR-Lex non raggiungibile, testo dalla copia in cache non riverificato[/yellow]")
+        else:
+            out.print(f"[yellow]{name}: EUR-Lex non raggiungibile e nessuna copia in cache, testo non verificabile[/yellow]")
+        if status.act.note:
+            out.print(f"[dim]  {escape(status.act.note)}[/dim]")
+        if status.error:
+            out.print(f"[dim]  {escape(status.error)}[/dim]")
+    for provision, previous in law.changed.items():
+        out.print(f"[yellow]⚠️  Il testo di {escape(provision)} è cambiato dall'ultimo audit[/yellow]")
+        out.print(f"[dim]   precedente: {previous}[/dim]")
+    for note in law.notes:
+        out.print(f"[yellow]⚠️  {escape(note)}[/yellow]")
+
+    out.print()
+    finding = None
+    for citation in law.citations:
+        if citation.finding != finding:
+            finding = citation.finding
+            out.print(f"[bold]{escape(FINDING_TITLES[finding])}[/bold]")
+            if law.evidence.get(finding):
+                out.print(f"[dim]{escape(', '.join(law.evidence[finding]))}[/dim]")
+        out.print(format_citation(citation), markup=False, highlight=False)
+        out.print()
+
+
 @app.command()
 def check(
     domain: str = typer.Argument(..., help="Domain to analyze"),
@@ -232,6 +283,8 @@ def check(
         if report.bimi.raw:
             console.print(f"  BIMI:  {report.bimi.raw}", markup=False)
         console.print()
+
+    _print_law_check(_law_check(report))
 
     # Exit code based on grade
     if report.grade == "CRITICAL":
@@ -329,6 +382,8 @@ def report(
     )
 
     console.print(Panel(Text(text), title=f"📧 Report — {escape(domain)}", border_style="cyan"))
+    console.print()
+    _print_law_check(_law_check(analysis))
 
     if save:
         from mailradar.reporter import save_report
