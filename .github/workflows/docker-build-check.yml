@@ -1,0 +1,55 @@
+name: Docker Build Check
+# Builds the image and runs the smoke test without pushing anything. docker.yml
+# cannot serve this purpose: it publishes to Docker Hub, including the :latest
+# tag, so it is only safe to run for an already released version.
+#
+# The Dockerfile installs mailradar from PyPI rather than from this checkout, so
+# the build needs a published version. It is resolved here rather than taken
+# from the Dockerfile's MAILRADAR_VERSION default, which lags many releases behind.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published version to build (default: the latest on PyPI)'
+        required: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve the version to build
+        id: ver
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          if [ -n "$REQUESTED" ]; then
+            VERSION="${REQUESTED#v}"
+          else
+            VERSION=$(python3 .github/scripts/latest_pypi_version.py mailradar)
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building mailradar $VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          push: false
+          tags: mailradar:build-check
+          build-args: |
+            MAILRADAR_VERSION=${{ steps.ver.outputs.version }}
+
+      - name: Smoke test (the CLI runs as the container user)
+        env:
+          EXPECTED_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          docker run --rm mailradar:build-check --help > /dev/null
+          docker run --rm -i -e EXPECTED_VERSION --entrypoint python mailradar:build-check - < tests/docker/smoke.py
