@@ -8,6 +8,15 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 
 ## [Unreleased]
 
+### Fixed
+- DMARC lookup walks up the domain hierarchy as required by RFC 7489 §6.6.3:
+  when `_dmarc.<domain>` has no record, one label is removed at a time up to
+  the organizational domain (`asufc.sanita.fvg.it` → `sanita.fvg.it` →
+  `fvg.it`). Multi-label public suffixes such as `co.uk` are honoured, and the
+  public suffix itself is never queried. An inherited record is reported with
+  the domain it comes from, and the parent's `sp=` tag becomes the policy
+  scored for the subdomain.
+
 ## [2026.09.10] - 2026-09-19
 
 ### Added

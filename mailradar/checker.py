@@ -13,6 +13,11 @@ import httpx
 class DMARCResult:
     present: bool = False
     policy: str = "none"
+    # Dominio su cui il record è stato effettivamente trovato (RFC 7489 §6.6.3)
+    found_at: str = ""
+    # True se il record appartiene a un dominio padre, non a quello richiesto
+    inherited: bool = False
+    sp: str = ""
     pct: int = 100
     adkim: str = "r"
     aspf: str = "r"
@@ -159,6 +164,89 @@ def find_domain_variants(domain: str) -> list[str]:
     return found
 
 
+# Suffissi pubblici composti da più label: per questi il dominio
+# organizzativo ha una label in più (example.co.uk, non co.uk).
+# Sottoinsieme pragmatico della Public Suffix List — copre i suffissi che si
+# incontrano nella pratica senza aggiungere una dipendenza esterna.
+_MULTI_LABEL_PUBLIC_SUFFIXES = frozenset({
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "sch.uk",
+    "ltd.uk", "plc.uk",
+    "gov.it", "edu.it",
+    "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ed.jp", "gr.jp", "lg.jp",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au", "asn.au", "id.au",
+    "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz", "school.nz",
+    "co.za", "org.za", "web.za", "gov.za", "ac.za",
+    "com.br", "net.br", "org.br", "gov.br", "edu.br",
+    "com.ar", "gob.ar", "org.ar", "edu.ar",
+    "com.mx", "gob.mx", "org.mx", "edu.mx",
+    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn",
+    "com.tr", "gov.tr", "org.tr", "edu.tr",
+    "co.in", "net.in", "org.in", "gov.in", "ac.in", "edu.in",
+    "com.pl", "net.pl", "org.pl", "gov.pl", "edu.pl",
+    "com.sg", "net.sg", "org.sg", "gov.sg", "edu.sg",
+    "co.kr", "or.kr", "ne.kr", "go.kr", "re.kr", "ac.kr",
+    "com.hk", "org.hk", "gov.hk", "edu.hk",
+    "co.il", "org.il", "gov.il", "ac.il",
+    "com.es", "org.es", "gob.es", "edu.es", "nom.es",
+    "com.pt", "gov.pt", "org.pt", "edu.pt",
+    "com.ua", "gov.ua", "org.ua", "edu.ua",
+    "com.ru", "net.ru", "org.ru", "gov.ru", "edu.ru",
+    "co.id", "or.id", "go.id", "ac.id", "web.id",
+    "com.my", "net.my", "org.my", "gov.my", "edu.my",
+    "com.ph", "gov.ph", "org.ph", "edu.ph",
+    "com.vn", "gov.vn", "org.vn", "edu.vn",
+    "com.co", "gov.co", "org.co", "edu.co",
+    "co.th", "in.th", "go.th", "ac.th",
+})
+
+
+def _labels(domain: str) -> list[str]:
+    """Normalizza un dominio in label minuscole, senza punto finale."""
+    labels = domain.strip(" \t\r\n.").lower().split(".")
+    # Le label vuote (punti doppi) sono rare: la comprehension solo se servono
+    return [label for label in labels if label] if "" in labels else labels
+
+
+def _org_depth(labels: list[str]) -> int:
+    """Quante label compongono il dominio organizzativo di `labels`."""
+    if len(labels) < 3:
+        return len(labels)
+    if f"{labels[-2]}.{labels[-1]}" in _MULTI_LABEL_PUBLIC_SUFFIXES:
+        return 3
+    return 2
+
+
+def organizational_domain(domain: str) -> str:
+    """
+    RFC 7489 §3.2 — dominio organizzativo: il nome registrabile
+    immediatamente sotto il suffisso pubblico.
+
+    asufc.sanita.fvg.it -> fvg.it
+    mail.example.co.uk  -> example.co.uk
+    sub.domain.com      -> domain.com
+    """
+    labels = _labels(domain)
+    return ".".join(labels[len(labels) - _org_depth(labels):])
+
+
+def dmarc_lookup_chain(domain: str) -> list[str]:
+    """
+    RFC 7489 §6.6.3 — catena di ricerca del record DMARC: si parte dal
+    dominio richiesto e si rimuove una label per volta, fermandosi al
+    dominio organizzativo. Il suffisso pubblico non viene mai interrogato:
+    un record pubblicato su `it` o `co.uk` non è la policy del dominio.
+
+    asufc.sanita.fvg.it -> [asufc.sanita.fvg.it, sanita.fvg.it, fvg.it]
+    """
+    labels = _labels(domain)
+    if not labels:
+        return []
+    chain = [".".join(labels)]
+    for i in range(1, len(labels) - _org_depth(labels) + 1):
+        chain.append(".".join(labels[i:]))
+    return chain
+
+
 def _query_txt(name: str) -> list[str]:
     """Query TXT records for a given name."""
     try:
@@ -191,64 +279,100 @@ def _parse_pct(value: str) -> Optional[int]:
     return pct if 0 <= pct <= 100 else None
 
 
-def check_dmarc(domain: str) -> DMARCResult:
-    result = DMARCResult()
-    records = _query_txt(f"_dmarc.{domain}")
+def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
+    """Popola e valuta un DMARCResult a partire dal record trovato."""
+    result.present = True
+    result.raw = record
 
-    for record in records:
+    tags = _parse_tags(record)
+
+    result.policy = tags.get("p", "none")
+    result.sp = tags.get("sp", "")
+    # RFC 7489 §6.3: per un sottodominio vale `sp`, se presente sul padre
+    if result.inherited and result.sp:
+        result.policy = result.sp
+        result.issues.append(
+            f"Subdomain policy sp={result.sp} inherited from {result.found_at}"
+        )
+
+    pct = _parse_pct(tags.get("pct", "100"))
+    if pct is None:
+        # RFC 7489 §6.3: valore non valido → si usa il default (100)
+        result.issues.append(f"Invalid DMARC pct value: {tags['pct']!r}")
+        pct = 100
+    result.pct = pct
+    result.adkim = tags.get("adkim", "r")
+    result.aspf = tags.get("aspf", "r")
+    result.rua = "rua" in tags
+    result.ruf = "ruf" in tags
+
+    # Scoring
+    if result.policy == "reject":
+        result.score += 30
+    elif result.policy == "quarantine":
+        result.score += 15
+        result.issues.append("DMARC policy is quarantine — upgrade to reject")
+    else:
+        result.issues.append("DMARC policy is none — no protection active")
+
+    if result.pct == 100:
+        result.score += 5
+    else:
+        result.issues.append(f"pct={result.pct} — not applied to 100% of emails")
+
+    if result.adkim == "s":
+        result.score += 5
+    else:
+        result.issues.append("adkim=r (relaxed) — consider strict alignment")
+
+    if result.aspf == "s":
+        result.score += 5
+    else:
+        result.issues.append("aspf=r (relaxed) — consider strict alignment")
+
+    if result.rua:
+        result.score += 3
+    else:
+        result.issues.append("No rua configured — aggregate reports disabled")
+
+    if result.ruf:
+        result.score += 2
+    else:
+        result.issues.append("No ruf configured — forensic reports disabled")
+
+
+def _first_dmarc_record(name: str) -> Optional[str]:
+    """Primo record TXT di `name` che è un record DMARC, se c'è."""
+    for record in _query_txt(name):
         if record.startswith("v=DMARC1"):
-            result.present = True
-            result.raw = record
+            return record
+    return None
 
-            tags = _parse_tags(record)
 
-            result.policy = tags.get("p", "none")
-            pct = _parse_pct(tags.get("pct", "100"))
-            if pct is None:
-                # RFC 7489 §6.3: valore non valido → si usa il default (100)
-                result.issues.append(f"Invalid DMARC pct value: {tags['pct']!r}")
-                pct = 100
-            result.pct = pct
-            result.adkim = tags.get("adkim", "r")
-            result.aspf = tags.get("aspf", "r")
-            result.rua = "rua" in tags
-            result.ruf = "ruf" in tags
+def check_dmarc(domain: str) -> DMARCResult:
+    """
+    Cerca il record DMARC risalendo la gerarchia del dominio (RFC 7489
+    §6.6.3): prima `_dmarc.<dominio>`, poi si rimuove una label per volta
+    fino al dominio organizzativo.
+    """
+    result = DMARCResult()
+    chain = dmarc_lookup_chain(domain)
+    requested = chain[0] if chain else ""
 
-            # Scoring
-            if result.policy == "reject":
-                result.score += 30
-            elif result.policy == "quarantine":
-                result.score += 15
-                result.issues.append("DMARC policy is quarantine — upgrade to reject")
-            else:
-                result.issues.append("DMARC policy is none — no protection active")
+    for candidate in chain:
+        record = _first_dmarc_record(f"_dmarc.{candidate}")
+        if record is None:
+            continue
 
-            if result.pct == 100:
-                result.score += 5
-            else:
-                result.issues.append(f"pct={result.pct} — not applied to 100% of emails")
-
-            if result.adkim == "s":
-                result.score += 5
-            else:
-                result.issues.append("adkim=r (relaxed) — consider strict alignment")
-
-            if result.aspf == "s":
-                result.score += 5
-            else:
-                result.issues.append("aspf=r (relaxed) — consider strict alignment")
-
-            if result.rua:
-                result.score += 3
-            else:
-                result.issues.append("No rua configured — aggregate reports disabled")
-
-            if result.ruf:
-                result.score += 2
-            else:
-                result.issues.append("No ruf configured — forensic reports disabled")
-
-            break
+        result.found_at = candidate
+        result.inherited = candidate != requested
+        if result.inherited:
+            result.issues.append(
+                f"No DMARC record on {requested} — policy inherited "
+                f"from parent domain {candidate}"
+            )
+        _apply_dmarc_record(result, record)
+        break
 
     if not result.present:
         result.issues.append("No DMARC record found — domain is spoofable")
