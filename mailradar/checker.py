@@ -202,8 +202,18 @@ _MULTI_LABEL_PUBLIC_SUFFIXES = frozenset({
 
 def _labels(domain: str) -> list[str]:
     """Normalizza un dominio in label minuscole, senza punto finale."""
-    return [label for label in domain.strip().strip(".").lower().split(".")
-            if label]
+    labels = domain.strip(" \t\r\n.").lower().split(".")
+    # Le label vuote (punti doppi) sono rare: la comprehension solo se servono
+    return [label for label in labels if label] if "" in labels else labels
+
+
+def _org_depth(labels: list[str]) -> int:
+    """Quante label compongono il dominio organizzativo di `labels`."""
+    if len(labels) < 3:
+        return len(labels)
+    if f"{labels[-2]}.{labels[-1]}" in _MULTI_LABEL_PUBLIC_SUFFIXES:
+        return 3
+    return 2
 
 
 def organizational_domain(domain: str) -> str:
@@ -216,11 +226,7 @@ def organizational_domain(domain: str) -> str:
     sub.domain.com      -> domain.com
     """
     labels = _labels(domain)
-    if len(labels) < 2:
-        return ".".join(labels)
-    if len(labels) >= 3 and ".".join(labels[-2:]) in _MULTI_LABEL_PUBLIC_SUFFIXES:
-        return ".".join(labels[-3:])
-    return ".".join(labels[-2:])
+    return ".".join(labels[len(labels) - _org_depth(labels):])
 
 
 def dmarc_lookup_chain(domain: str) -> list[str]:
@@ -235,8 +241,10 @@ def dmarc_lookup_chain(domain: str) -> list[str]:
     labels = _labels(domain)
     if not labels:
         return []
-    depth = len(organizational_domain(domain).split("."))
-    return [".".join(labels[i:]) for i in range(len(labels) - depth + 1)]
+    chain = [".".join(labels)]
+    for i in range(1, len(labels) - _org_depth(labels) + 1):
+        chain.append(".".join(labels[i:]))
+    return chain
 
 
 def _query_txt(name: str) -> list[str]:
@@ -333,6 +341,14 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
         result.issues.append("No ruf configured — forensic reports disabled")
 
 
+def _first_dmarc_record(name: str) -> Optional[str]:
+    """Primo record TXT di `name` che è un record DMARC, se c'è."""
+    for record in _query_txt(name):
+        if record.startswith("v=DMARC1"):
+            return record
+    return None
+
+
 def check_dmarc(domain: str) -> DMARCResult:
     """
     Cerca il record DMARC risalendo la gerarchia del dominio (RFC 7489
@@ -340,14 +356,11 @@ def check_dmarc(domain: str) -> DMARCResult:
     fino al dominio organizzativo.
     """
     result = DMARCResult()
-    requested = ".".join(_labels(domain))
+    chain = dmarc_lookup_chain(domain)
+    requested = chain[0] if chain else ""
 
-    for candidate in dmarc_lookup_chain(domain):
-        record = next(
-            (r for r in _query_txt(f"_dmarc.{candidate}")
-             if r.startswith("v=DMARC1")),
-            None,
-        )
+    for candidate in chain:
+        record = _first_dmarc_record(f"_dmarc.{candidate}")
         if record is None:
             continue
 
