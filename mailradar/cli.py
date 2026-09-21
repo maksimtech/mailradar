@@ -98,6 +98,9 @@ def _print_report(report: DomainReport) -> None:
             f"aspf={'s' if d.aspf == 's' else 'r'} | "
             f"rua={'✓' if d.rua else '✗'} | ruf={'✓' if d.ruf else '✗'}"
         )
+        if d.inherited:
+            # Record trovato su un dominio padre (RFC 7489 §6.6.3)
+            dmarc_detail += f" | [yellow]via {escape(d.found_at)}[/yellow]"
     else:
         dmarc_detail = "[red]Not configured[/red]"
 
@@ -276,7 +279,8 @@ def check(
     if verbose:
         console.print("[bold]Raw records:[/bold]")
         if report.dmarc.raw:
-            console.print(f"  DMARC: {report.dmarc.raw}", markup=False)
+            origin = f" (@{report.dmarc.found_at})" if report.dmarc.inherited else ""
+            console.print(f"  DMARC{origin}: {report.dmarc.raw}", markup=False)
         if report.spf.raw:
             console.print(f"  SPF:   {report.spf.raw}", markup=False)
         if report.dkim.raw:

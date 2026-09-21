@@ -10,6 +10,7 @@ from mailradar.checker import (
     check_dmarc, check_spf, check_dkim, check_bimi,
     check_mta_sts, check_tls_rpt, analyze_domain,
     domain_exists, find_domain_variants,
+    organizational_domain, dmarc_lookup_chain,
     DMARCResult, SPFResult, DKIMResult
 )
 
@@ -74,6 +75,199 @@ class TestCheckDMARC:
         assert result.aspf == "r"
         assert any("adkim" in issue for issue in result.issues)
         assert any("aspf" in issue for issue in result.issues)
+
+
+# ─── DMARC tree walk — RFC 7489 §6.6.3 ──────────────────────────────────────
+
+def make_zone_resolver(zone: dict[str, list[str]], queried: list[str] = None):
+    """Resolver mock: solo i nomi presenti in `zone` rispondono, gli altri
+    sollevano NXDOMAIN. Ogni nome interrogato viene registrato in `queried`."""
+    def resolve(name, rdtype="TXT", *args, **kwargs):
+        key = str(name).rstrip(".")
+        if queried is not None:
+            queried.append(key)
+        if key in zone:
+            return make_txt_answer(zone[key])
+        raise dns.resolver.NXDOMAIN
+    return resolve
+
+
+class TestOrganizationalDomain:
+
+    @pytest.mark.parametrize("domain,expected", [
+        ("asufc.sanita.fvg.it", "fvg.it"),
+        ("sanita.fvg.it", "fvg.it"),
+        ("sub.domain.com", "domain.com"),
+        ("domain.com", "domain.com"),
+        ("mail.example.co.uk", "example.co.uk"),
+        ("example.co.uk", "example.co.uk"),
+        ("a.b.c.d.example.gov.uk", "example.gov.uk"),
+    ])
+    def test_organizational_domain(self, domain, expected):
+        assert organizational_domain(domain) == expected
+
+    def test_normalizes_case_and_trailing_dot(self):
+        assert organizational_domain("Sub.Domain.COM.") == "domain.com"
+
+    def test_single_label_is_returned_as_is(self):
+        assert organizational_domain("localhost") == "localhost"
+
+
+class TestDMARCLookupChain:
+
+    def test_chain_multilevel_it_domain(self):
+        assert dmarc_lookup_chain("asufc.sanita.fvg.it") == [
+            "asufc.sanita.fvg.it",
+            "sanita.fvg.it",
+            "fvg.it",
+        ]
+
+    def test_chain_multi_label_public_suffix(self):
+        assert dmarc_lookup_chain("mail.example.co.uk") == [
+            "mail.example.co.uk",
+            "example.co.uk",
+        ]
+
+    def test_chain_normal_subdomain(self):
+        assert dmarc_lookup_chain("sub.domain.com") == [
+            "sub.domain.com",
+            "domain.com",
+        ]
+
+    def test_chain_apex_domain_is_single_step(self):
+        assert dmarc_lookup_chain("example.com") == ["example.com"]
+
+    @pytest.mark.parametrize("domain,forbidden", [
+        ("asufc.sanita.fvg.it", "it"),
+        ("mail.example.co.uk", "co.uk"),
+        ("mail.example.co.uk", "uk"),
+        ("sub.domain.com", "com"),
+    ])
+    def test_chain_never_reaches_the_public_suffix(self, domain, forbidden):
+        assert forbidden not in dmarc_lookup_chain(domain)
+
+
+class TestCheckDMARCTreeWalk:
+
+    def test_climbs_to_organizational_domain(self):
+        """asufc.sanita.fvg.it senza record proprio → policy da fvg.it."""
+        zone = {"_dmarc.fvg.it": ["v=DMARC1; p=reject; rua=mailto:r@fvg.it"]}
+        queried = []
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone, queried)):
+            result = check_dmarc("asufc.sanita.fvg.it")
+        assert result.present is True
+        assert result.policy == "reject"
+        assert result.found_at == "fvg.it"
+        assert result.inherited is True
+        assert queried == [
+            "_dmarc.asufc.sanita.fvg.it",
+            "_dmarc.sanita.fvg.it",
+            "_dmarc.fvg.it",
+        ]
+        assert any("fvg.it" in issue for issue in result.issues)
+
+    def test_stops_at_the_first_parent_that_answers(self):
+        zone = {
+            "_dmarc.sanita.fvg.it": ["v=DMARC1; p=quarantine"],
+            "_dmarc.fvg.it": ["v=DMARC1; p=reject"],
+        }
+        queried = []
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone, queried)):
+            result = check_dmarc("asufc.sanita.fvg.it")
+        assert result.found_at == "sanita.fvg.it"
+        assert result.policy == "quarantine"
+        assert "_dmarc.fvg.it" not in queried
+
+    def test_own_record_wins_over_parent(self):
+        zone = {
+            "_dmarc.asufc.sanita.fvg.it": ["v=DMARC1; p=reject; adkim=s; aspf=s"],
+            "_dmarc.fvg.it": ["v=DMARC1; p=none"],
+        }
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone)):
+            result = check_dmarc("asufc.sanita.fvg.it")
+        assert result.found_at == "asufc.sanita.fvg.it"
+        assert result.inherited is False
+        assert result.policy == "reject"
+        assert not any("inherited" in issue.lower() for issue in result.issues)
+
+    def test_multi_label_suffix_climbs_only_to_org_domain(self):
+        """mail.example.co.uk → example.co.uk, mai _dmarc.co.uk."""
+        zone = {"_dmarc.example.co.uk": ["v=DMARC1; p=reject; rua=mailto:r@example.co.uk"]}
+        queried = []
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone, queried)):
+            result = check_dmarc("mail.example.co.uk")
+        assert result.present is True
+        assert result.found_at == "example.co.uk"
+        assert result.inherited is True
+        assert queried == ["_dmarc.mail.example.co.uk", "_dmarc.example.co.uk"]
+
+    def test_normal_subdomain_falls_back_to_apex(self):
+        zone = {"_dmarc.domain.com": ["v=DMARC1; p=reject; adkim=s; aspf=s"]}
+        queried = []
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone, queried)):
+            result = check_dmarc("sub.domain.com")
+        assert result.present is True
+        assert result.found_at == "domain.com"
+        assert result.inherited is True
+        assert queried == ["_dmarc.sub.domain.com", "_dmarc.domain.com"]
+
+    def test_normal_subdomain_with_own_record(self):
+        zone = {"_dmarc.sub.domain.com": ["v=DMARC1; p=reject"]}
+        queried = []
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone, queried)):
+            result = check_dmarc("sub.domain.com")
+        assert result.found_at == "sub.domain.com"
+        assert result.inherited is False
+        assert queried == ["_dmarc.sub.domain.com"]
+
+    def test_nothing_anywhere_never_queries_the_tld(self):
+        queried = []
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver({}, queried)):
+            result = check_dmarc("sub.domain.com")
+        assert result.present is False
+        assert result.found_at == ""
+        assert result.inherited is False
+        assert queried == ["_dmarc.sub.domain.com", "_dmarc.domain.com"]
+        assert "_dmarc.com" not in queried
+        assert any("spoofable" in issue for issue in result.issues)
+
+    def test_non_dmarc_txt_on_subdomain_does_not_stop_the_walk(self):
+        zone = {
+            "_dmarc.sub.domain.com": ["some unrelated txt record"],
+            "_dmarc.domain.com": ["v=DMARC1; p=reject"],
+        }
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone)):
+            result = check_dmarc("sub.domain.com")
+        assert result.found_at == "domain.com"
+        assert result.policy == "reject"
+
+    def test_sp_overrides_policy_for_subdomains(self):
+        """RFC 7489 §6.3: `sp` è la policy che vale per i sottodomini."""
+        zone = {"_dmarc.domain.com": ["v=DMARC1; p=reject; sp=none; rua=mailto:r@domain.com"]}
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone)):
+            result = check_dmarc("sub.domain.com")
+        assert result.inherited is True
+        assert result.sp == "none"
+        assert result.policy == "none"
+        assert any("sp=none" in issue for issue in result.issues)
+
+    def test_sp_ignored_when_record_is_the_domains_own(self):
+        zone = {"_dmarc.domain.com": ["v=DMARC1; p=reject; sp=none"]}
+        with patch('mailradar.checker.dns.resolver.resolve',
+                   side_effect=make_zone_resolver(zone)):
+            result = check_dmarc("domain.com")
+        assert result.inherited is False
+        assert result.sp == "none"
+        assert result.policy == "reject"
 
 
 # ─── SPF ────────────────────────────────────────────────────────────────────
