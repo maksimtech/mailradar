@@ -8,6 +8,8 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 
 ## [Unreleased]
 
+## [2026.09.11] - 2026-09-21
+
 ### Fixed
 - DMARC lookup walks up the domain hierarchy as required by RFC 7489 §6.6.3:
   when `_dmarc.<domain>` has no record, one label is removed at a time up to
@@ -197,7 +199,9 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.09.9...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.09.11...HEAD
+[2026.09.11]: https://github.com/maksimtech/mailradar/compare/v2026.09.10...v2026.09.11
+[2026.09.10]: https://github.com/maksimtech/mailradar/compare/v2026.09.9...v2026.09.10
 [2026.09.9]: https://github.com/maksimtech/mailradar/compare/v2026.09.8...v2026.09.9
 [2026.09.8]: https://github.com/maksimtech/mailradar/compare/v2026.09.7...v2026.09.8
 [2026.09.7]: https://github.com/maksimtech/mailradar/compare/v2026.09.6...v2026.09.7
