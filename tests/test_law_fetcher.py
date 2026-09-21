@@ -129,7 +129,7 @@ def test_fetch_provisions(page, monkeypatch):
     monkeypatch.setattr(law_fetcher, "fetch_html", fake_fetch_html)
     provisions = fetch_provisions(GDPR, ARTICLES, now=NOW)
 
-    assert urls == ["https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32016R0679"]
+    assert urls == ["https://publications.europa.eu/resource/celex/32016R0679"]
     p = provisions[POINT_REF]
     assert isinstance(p, Provision)
     assert p.article == POINT_REF
@@ -150,3 +150,71 @@ def test_provision_dict_round_trip():
         "celex": "32016R0679",
     }
     assert Provision.from_dict(p.to_dict()) == p
+
+
+# ─── where the text comes from ────────────────────────────────────────────────
+
+def test_cellar_is_tried_first(monkeypatch):
+    seen = []
+
+    def fake(url, **kwargs):
+        seen.append(url)
+        return "<html></html>"
+
+    monkeypatch.setattr(law_fetcher, "fetch_html", fake)
+    law_fetcher.fetch_act_html(GDPR, "IT")
+
+    assert len(seen) == 1
+    assert "publications.europa.eu" in seen[0]
+    assert GDPR.celex in seen[0]
+
+
+def test_the_web_interface_is_the_fallback(monkeypatch):
+    """Kept, because a WAF rule can be relaxed again."""
+    seen = []
+
+    def fake(url, **kwargs):
+        seen.append(url)
+        if "publications.europa.eu" in url:
+            raise LawFetchError("Cellar answered HTTP 500")
+        return "<html>fallback</html>"
+
+    monkeypatch.setattr(law_fetcher, "fetch_html", fake)
+    assert law_fetcher.fetch_act_html(GDPR, "IT") == "<html>fallback</html>"
+
+    assert len(seen) == 2
+    assert "eur-lex.europa.eu" in seen[1]
+
+
+def test_both_sources_failing_names_both(monkeypatch):
+    """An error that says only "unreachable" costs a debugging session."""
+    def fake(url, **kwargs):
+        raise LawFetchError("HTTP 202" if "publications" in url else "HTTP 403")
+
+    monkeypatch.setattr(law_fetcher, "fetch_html", fake)
+    with pytest.raises(LawFetchError) as caught:
+        law_fetcher.fetch_act_html(GDPR, "IT")
+
+    assert "202" in str(caught.value)
+    assert "403" in str(caught.value)
+
+
+def test_the_language_reaches_cellar_as_a_three_letter_code(monkeypatch):
+    """Cellar negotiates on Accept-Language and wants "ita", not "IT"."""
+    seen = {}
+
+    def fake(url, **kwargs):
+        seen.update(kwargs.get("headers") or {})
+        return "<html></html>"
+
+    monkeypatch.setattr(law_fetcher, "fetch_html", fake)
+    law_fetcher.fetch_act_html(GDPR, "IT")
+
+    assert seen["Accept-Language"] == "ita"
+    assert seen["Accept"] == law_fetcher.CELLAR_TYPE
+
+
+def test_an_error_from_cellar_names_cellar():
+    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(503)))
+    with pytest.raises(LawFetchError, match="Cellar answered HTTP 503"):
+        real_fetch_html("https://publications.europa.eu/resource/celex/x", client=client)

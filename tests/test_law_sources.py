@@ -140,8 +140,8 @@ def test_fetch_eurlex_acts_by_celex(monkeypatch):
     fetch_provisions(DIGITAL_CONTENT, ("3", "8"))
 
     assert urls == [
-        "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32022L2555",
-        "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32019L0770",
+        "https://publications.europa.eu/resource/celex/32022L2555",
+        "https://publications.europa.eu/resource/celex/32019L0770",
     ]
 
 
