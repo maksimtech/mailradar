@@ -8,6 +8,8 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 
 ## [Unreleased]
 
+## [2026.09.11] - 2026-09-21
+
 ### Fixed
 - DMARC lookup walks up the domain hierarchy as required by RFC 7489 §6.6.3:
   when `_dmarc.<domain>` has no record, one label is removed at a time up to
