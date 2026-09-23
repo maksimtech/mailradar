@@ -70,8 +70,8 @@ def test_check_cites_article_32(eurlex):
     assert f"SHA256: {_sha('32(1)(a)')}" in out.output
     assert "Versione del: " in out.output
     assert eurlex == [
-        "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32016R0679",
-        "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32022L2555",
+        "https://publications.europa.eu/resource/celex/32016R0679",
+        "https://publications.europa.eu/resource/celex/32022L2555",
     ]
 
 

@@ -31,3 +31,24 @@ jobs:
           mailradar --help
           mailradar check maksimtech.com
           mailradar discover maksimtech.com --no-gpg
+
+  summary:
+    # The branch ruleset requires a check named exactly "Tests". The matrix job
+    # cannot provide it: its contexts carry the Python version, so they change
+    # whenever the matrix does, which is how the ruleset came to require names
+    # that no longer existed. This job gives the ruleset one stable name.
+    # always(): a skipped required check counts as passed, so this has to run
+    # even when the matrix fails, and fail explicitly in that case.
+    name: Tests
+    needs: [test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All test jobs succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = "success" ] || { echo "::error::A required test job ended with: $result"; exit 1; }
+          done

@@ -14,6 +14,13 @@ of an article one per line. Anyone can recompute it from the text in
 ~/.mailradar/law_cache.json.
 
 Shared by the Radar tools; the first version, in APKRadar, read the GDPR only.
+
+EU acts are fetched from the Publications Office's Cellar service, with the
+eur-lex.europa.eu page as the fallback. That page now answers every automated
+request with HTTP 202 and an AWS WAF challenge, whichever act is asked for, so
+it is no longer a source. The text is the same one: the provisions cited by
+these tools hash identically from both, which is what the move was checked
+against.
 """
 from __future__ import annotations
 
@@ -32,6 +39,15 @@ from mailradar import __version__
 SOURCE_URL = "https://eur-lex.europa.eu/legal-content/{lang}/TXT/HTML/?uri=CELEX:{celex}"
 # One page per article, in the version in force (!vig=)
 NORMATTIVA_URL = "https://www.normattiva.it/uri-res/N2Ls?{urn}~art{article}!vig="
+# The Publications Office serves the Official Journal to machines here, by
+# content negotiation, and is not behind the bot challenge that now guards the
+# EUR-Lex web interface. Same documents, same ELI markup, same text.
+CELLAR_URL = "https://publications.europa.eu/resource/celex/{celex}"
+# Negotiated, and particular about it: "text/html" answers 404 here and
+# "text/html;notice=branch" answers 400. Only this type returns the act.
+CELLAR_TYPE = "application/xhtml+xml"
+# Cellar negotiates language in ISO 639-2; the acts are named in two letters.
+CELLAR_LANGUAGES = {"IT": "ita", "EN": "eng", "FR": "fra", "DE": "deu", "ES": "spa"}
 USER_AGENT = f"MailRadar/{__version__} (+https://github.com/maksimtech/mailradar)"
 
 
@@ -450,11 +466,25 @@ def parse_articles(html: str, articles: tuple[str, ...]) -> dict[str, str]:
 
 # ─── Download ─────────────────────────────────────────────────────────────────
 
-def fetch_html(url: str, *, client: Optional[httpx.Client] = None, timeout: float = 30.0) -> str:
+def _source_of(url: str) -> str:
+    if "normattiva.it" in url:
+        return "Normattiva"
+    if "publications.europa.eu" in url:
+        return "Cellar"
+    return "EUR-Lex"
+
+
+def fetch_html(
+    url: str,
+    *,
+    client: Optional[httpx.Client] = None,
+    timeout: float = 30.0,
+    headers: Optional[dict] = None,
+) -> str:
     """Download a page. Anything but HTTP 200 is an error: EUR-Lex answers
     some automated requests with 202 and a JavaScript challenge."""
-    source = "Normattiva" if "normattiva.it" in url else "EUR-Lex"
-    headers = {"User-Agent": USER_AGENT}
+    source = _source_of(url)
+    headers = {"User-Agent": USER_AGENT, **(headers or {})}
     try:
         if client is None:
             with httpx.Client(timeout=timeout, follow_redirects=True) as own_client:
@@ -466,6 +496,44 @@ def fetch_html(url: str, *, client: Optional[httpx.Client] = None, timeout: floa
     if response.status_code != 200:
         raise LawFetchError(f"{source} answered HTTP {response.status_code}")
     return response.text
+
+
+def fetch_act_html(
+    act: Act,
+    lang: str = "IT",
+    *,
+    client: Optional[httpx.Client] = None,
+    timeout: float = 30.0,
+) -> str:
+    """An EU act's page, from Cellar if it answers and from EUR-Lex if not.
+
+    The order is not a preference. eur-lex.europa.eu sits behind a WAF rule
+    that answers every automated request with HTTP 202 and an empty body,
+    whichever act is asked for, so it cannot be the first choice any more. It
+    is kept as the fallback because a WAF rule can be relaxed again and the
+    page carries the same text.
+
+    Both failures are reported together: an error that says only "unreachable"
+    turns a five-minute diagnosis into an afternoon.
+    """
+    if act.source != "EUR-Lex":
+        raise ValueError(f"{act.name} is published by {act.source}, which Cellar does not serve")
+
+    language = CELLAR_LANGUAGES.get(lang.upper(), lang.lower())
+    try:
+        return fetch_html(
+            CELLAR_URL.format(celex=act.celex),
+            client=client,
+            timeout=timeout,
+            headers={"Accept": CELLAR_TYPE, "Accept-Language": language},
+        )
+    except LawFetchError as cellar_failed:
+        try:
+            return fetch_html(
+                SOURCE_URL.format(lang=lang, celex=act.celex), client=client, timeout=timeout
+            )
+        except LawFetchError as page_failed:
+            raise LawFetchError(f"{cellar_failed}; and {page_failed}") from page_failed
 
 
 def fetch_provisions(
@@ -483,7 +551,7 @@ def fetch_provisions(
             html = fetch_html(NORMATTIVA_URL.format(urn=act.celex, article=article), client=client)
             texts.update(parse_articles(html, (article,)))
     else:
-        html = fetch_html(SOURCE_URL.format(lang=lang, celex=act.celex), client=client)
+        html = fetch_act_html(act, lang, client=client)
         texts = parse_articles(html, articles)
     fetched_at = utc_stamp(now or datetime.now(timezone.utc))
     return {

@@ -1,0 +1,198 @@
+name: Snyk
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  snyk:
+    name: Snyk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Both are what github/codeql-action/upload-sarif needs to publish into
+      # the repository's code scanning alerts.
+      security-events: write
+      actions: read
+
+    # Same guard as sonarcloud.yml, for the same reason: GitHub passes no
+    # Actions secrets to Dependabot or fork pull requests, so there the token
+    # is empty and every Snyk call fails with "Authentication error". A step's
+    # `if:` cannot read `secrets`, so the job publishes only whether the token
+    # exists; the token itself stays in the steps that need it. This also keeps
+    # the workflow green before SNYK_TOKEN is added to the repository at all.
+    env:
+      SNYK_ENABLED: ${{ secrets.SNYK_TOKEN != '' }}
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The dependency comparison below needs the base commit, which a
+          # shallow clone does not have.
+          fetch-depth: 0
+
+      - name: Report skipped scan
+        if: ${{ env.SNYK_ENABLED != 'true' }}
+        run: |
+          echo "::notice title=Snyk skipped::SNYK_TOKEN is not available to this run (Dependabot PR, fork PR, or the secret is not set yet)."
+
+      - name: Set up Python
+        if: ${{ env.SNYK_ENABLED == 'true' }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install Snyk CLI
+        if: ${{ env.SNYK_ENABLED == 'true' }}
+        run: |
+          npm install -g snyk
+          snyk --version
+
+      # ------------------------------------------------------------------
+      # Snyk Code (SAST)
+      #
+      # continue-on-error, always upload: the SARIF is the point, and a scan
+      # that found issues exits non-zero. Which of those issues block the merge
+      # is not decided here — GitHub code scanning compares the uploaded run
+      # against the one on main and only flags what this pull request added, so
+      # pre-existing findings never fail a PR. That is the whole reason the
+      # SARIF goes to code scanning rather than being read in the job.
+      # ------------------------------------------------------------------
+      - name: Snyk Code test
+        if: ${{ env.SNYK_ENABLED == 'true' }}
+        continue-on-error: true
+        run: snyk code test --sarif-file-output=snyk-code.sarif
+
+      - name: Upload Snyk Code results
+        # `always()` so the SARIF is published even when the scan step failed;
+        # `hashFiles` so a scan that produced nothing does not fail the upload.
+        if: ${{ always() && env.SNYK_ENABLED == 'true' && hashFiles('snyk-code.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code
+
+      # ------------------------------------------------------------------
+      # Snyk Open Source (dependencies)
+      #
+      # These projects use hatchling with PEP 621 dependencies and ship no
+      # lockfile. Snyk reads poetry.lock, requirements.txt, Pipfile or
+      # setup.py, none of which is here, so the tree is resolved first: pip
+      # installs the project into a clean virtualenv and freezes it. That also
+      # gives Snyk the transitive dependencies, which a hand-written
+      # requirements.txt would not.
+      # ------------------------------------------------------------------
+      - name: Resolve the dependency tree
+        if: ${{ env.SNYK_ENABLED == 'true' }}
+        run: |
+          python tools/snyk_requirements.py . requirements.snyk.txt
+          echo "Resolved $(grep -c . requirements.snyk.txt) packages"
+
+      # The scan and the reading of its output are two steps on purpose. Snyk
+      # exits non-zero when it finds something, and under `bash -e` that would
+      # end the script before the results were read. Swallowing it with
+      # `|| true` would also swallow a crash, so the exit code is handled where
+      # it belongs — `continue-on-error` here, `always()` on the step that
+      # reads the file.
+      - name: Snyk Open Source test
+        if: ${{ env.SNYK_ENABLED == 'true' }}
+        continue-on-error: true
+        run: |
+          snyk test \
+            --file=requirements.snyk.txt \
+            --package-manager=pip \
+            --severity-threshold=high \
+            --json-file-output=snyk-deps.json
+
+      - name: Collect the issues found on this revision
+        if: ${{ always() && env.SNYK_ENABLED == 'true' }}
+        run: |
+          python tools/snyk_ids.py snyk-deps.json > snyk-deps-head.txt
+          echo "High or critical issues on this revision: $(grep -c . snyk-deps-head.txt)"
+
+      # Only a pull request has something to compare against. The base is
+      # resolved and scanned the same way, and the merge is blocked only by
+      # issue ids present here and absent there — a dependency this pull
+      # request introduced or upgraded into.
+      # BASE_SHA reaches the script through env, never through ${{ }} inside
+      # run: an expression is pasted in before the shell parses the line, so a
+      # value carrying quotes or $() would run as a command rather than be
+      # read as data.
+      - name: Snyk Open Source test on the base branch
+        if: ${{ env.SNYK_ENABLED == 'true' && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add ../base "$BASE_SHA"
+          python tools/snyk_requirements.py ../base ../base/requirements.snyk.txt
+          snyk test \
+            --file=../base/requirements.snyk.txt \
+            --package-manager=pip \
+            --severity-threshold=high \
+            --json-file-output=snyk-deps-base.json
+
+      - name: Collect the issues found on the base branch
+        if: ${{ always() && env.SNYK_ENABLED == 'true' && github.event_name == 'pull_request' }}
+        run: |
+          python tools/snyk_ids.py snyk-deps-base.json > snyk-deps-base.txt
+          echo "High or critical issues on the base: $(grep -c . snyk-deps-base.txt)"
+
+      - name: Fail only on dependency issues this pull request adds
+        if: ${{ env.SNYK_ENABLED == 'true' && github.event_name == 'pull_request' }}
+        run: |
+          touch snyk-deps-base.txt snyk-deps-head.txt
+
+          # A base scan that did not run at all produces no JSON, and an empty
+          # list of base issues would make every finding on this branch look
+          # new. "No information" is not "no issues", so say so and let the
+          # merge through rather than blocking on a comparison never made.
+          if [ ! -s snyk-deps-base.json ]; then
+            echo "::warning title=Comparison skipped::The base branch could not be scanned, so new dependency issues cannot be told from existing ones. Findings on this branch:"
+            cat snyk-deps-head.txt
+            exit 0
+          fi
+
+          comm -13 snyk-deps-base.txt snyk-deps-head.txt > snyk-deps-new.txt
+          if [ -s snyk-deps-new.txt ]; then
+            echo "::error title=New dependency vulnerabilities::This pull request introduces high or critical issues that are not on the base branch."
+            cat snyk-deps-new.txt
+            exit 1
+          fi
+          echo "No new high or critical dependency issues."
+
+      # ------------------------------------------------------------------
+      # Snyk Container
+      #
+      # Runs only where there is a Dockerfile, so the same file serves every
+      # repository. Report only: the image is rebuilt from the base image on
+      # every release, so its findings come and go with upstream Debian and
+      # blocking a merge on them would block work nobody here can fix.
+      # ------------------------------------------------------------------
+      - name: Build the image for scanning
+        id: image
+        if: ${{ env.SNYK_ENABLED == 'true' && hashFiles('Dockerfile') != '' }}
+        run: docker build -t "snyk-scan:${GITHUB_SHA}" .
+
+      - name: Snyk Container test
+        if: ${{ env.SNYK_ENABLED == 'true' && steps.image.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          snyk container test "snyk-scan:${GITHUB_SHA}" \
+            --file=Dockerfile \
+            --severity-threshold=high \
+            --sarif-file-output=snyk-container.sarif
+
+      - name: Upload Snyk Container results
+        if: ${{ always() && env.SNYK_ENABLED == 'true' && hashFiles('snyk-container.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: snyk-container.sarif
+          category: snyk-container

@@ -266,6 +266,16 @@ fails SPF and DKIM checks. It is the single most important record.
 A missing DMARC record means the domain is spoofable. The ✅ status is shown
 only for `p=reject`.
 
+Multi-level domains are resolved the way RFC 7489 §6.6.3 prescribes: if
+`_dmarc.<domain>` has no record, one label is removed at a time up to the
+organizational domain. For `asufc.sanita.fvg.it` that means
+`_dmarc.asufc.sanita.fvg.it`, then `_dmarc.sanita.fvg.it`, then
+`_dmarc.fvg.it`. The public suffix itself is never queried — a record on `it`
+or `co.uk` is not the domain's policy. An inherited record is marked
+`via <parent domain>` in the table and listed under Issues found, since the
+subdomain has no policy of its own; where the parent publishes `sp=`, that is
+the policy scored for the subdomain.
+
 ### SPF (up to 20 points)
 
 SPF (a TXT record on the domain) lists the servers allowed to send mail for
