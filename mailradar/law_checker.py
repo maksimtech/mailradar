@@ -29,19 +29,19 @@ FINDING_ARTICLES = {
 }
 
 FINDING_TITLES = {
-    "dmarc_missing": "DMARC assente",
-    "spf_dkim_weak": "SPF/DKIM deboli",
-    "cleartext": "Invio in chiaro possibile",
-    "cleartext_testing": "Invio in chiaro possibile",
-    "gpg_missing": "GPG non disponibile",
+    "dmarc_missing": "DMARC missing",
+    "spf_dkim_weak": "SPF/DKIM weak",
+    "cleartext": "Cleartext delivery possible",
+    "cleartext_testing": "Cleartext delivery possible",
+    "gpg_missing": "GPG not available",
 }
 
 # Articles downloaded and cached even when not cited, by act
 ALSO_FETCH: dict = {}
 
 NIS2_SCOPE_NOTE = (
-    "NIS2 art. 21 obbliga i soggetti essenziali e importanti (art. 3 della direttiva): "
-    "verificare che il titolare del dominio rientri nell'ambito"
+    "NIS2 art. 21 binds essential and important entities (art. 3 of the directive): "
+    "check that the domain holder falls within scope"
 )
 
 # Below this a DKIM key counts as weak (MailRadar's own threshold for full score)
@@ -58,27 +58,27 @@ def findings_of(report) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
 
     if not report.dmarc.present:
-        found["dmarc_missing"] = ["nessun record DMARC"]
+        found["dmarc_missing"] = ["no DMARC record"]
 
     weak = []
     if not report.spf.present:
-        weak.append("nessun record SPF")
+        weak.append("no SPF record")
     elif report.spf.permissive:
         weak.append(f"SPF {report.spf.all_mechanism or 'permissivo'}")
     if not report.dkim.present:
-        weak.append("nessuna chiave DKIM con i selettori comuni")
+        weak.append("no DKIM key under the common selectors")
     elif report.dkim.key_bits < DKIM_MIN_BITS:
         weak.append(f"DKIM {report.dkim.key_bits} bit")
     if weak:
         found["spf_dkim_weak"] = weak
 
     if not report.mta_sts.present:
-        found["cleartext"] = ["MTA-STS assente: TLS non obbligatorio in ricezione"]
+        found["cleartext"] = ["MTA-STS missing: TLS not mandatory on delivery"]
     elif report.mta_sts.mode != "enforce":
-        found["cleartext_testing"] = [f"MTA-STS in modalità {report.mta_sts.mode or 'sconosciuta'}, non enforce"]
+        found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce"]
 
     if not report.gpg.found:
-        found["gpg_missing"] = ["nessuna chiave pubblica sui keyserver"]
+        found["gpg_missing"] = ["no public key on the keyservers"]
 
     return {finding: found[finding] for finding in FINDING_ARTICLES if finding in found}
 
@@ -208,7 +208,7 @@ def check(
 
 def format_citation(citation: Citation) -> str:
     return (
-        f"Norma applicata: {citation.law} art. {citation.article}\n"
-        f"SHA256: {citation.sha256 or 'non disponibile'}\n"
-        f"Versione del: {citation.version_date or 'non disponibile'}"
+        f"Provision applied: {citation.law} art. {citation.article}\n"
+        f"SHA256: {citation.sha256 or 'not available'}\n"
+        f"Version of: {citation.version_date or 'not available'}"
     )

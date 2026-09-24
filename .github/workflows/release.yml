@@ -29,7 +29,7 @@ jobs:
         id: changelog
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          # Estrai la sezione del CHANGELOG per questa versione
+          # Extract this version's section of the CHANGELOG
           NOTES=$(awk "/## \[$VERSION\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md)
           if [ -z "$NOTES" ]; then
             NOTES="Release $VERSION"

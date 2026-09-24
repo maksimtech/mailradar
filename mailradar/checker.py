@@ -99,7 +99,7 @@ def domain_exists(domain: str) -> bool:
     Check if a domain exists in DNS.
     A valid domain must have at least one dot (e.g. apple.com not just apple).
     """
-    # Deve avere almeno un punto — senza TLD non è un dominio valido
+    # At least one dot: without a TLD it is not a domain
     if "." not in domain:
         return False
 
@@ -133,7 +133,7 @@ def find_domain_variants(domain: str) -> list[str]:
     Given a domain input, find all existing TLD variants.
     e.g. 'apple' -> ['apple.com', 'apple.it', 'apple.eu', ...]
     """
-    # Estrai il nome base senza TLD
+    # The base name, without the TLD
     parts = domain.split(".")
     base = domain if len(parts) == 1 else parts[0]
 
@@ -155,8 +155,8 @@ def find_domain_variants(domain: str) -> list[str]:
 
 # Suffissi pubblici composti da più label: per questi il dominio
 # organizzativo ha una label in più (example.co.uk, non co.uk).
-# Sottoinsieme pragmatico della Public Suffix List — copre i suffissi che si
-# incontrano nella pratica senza aggiungere una dipendenza esterna.
+# A pragmatic subset of the Public Suffix List: the suffixes actually met in
+# practice, without taking on an external dependency for them.
 _MULTI_LABEL_PUBLIC_SUFFIXES = frozenset({
     "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "sch.uk",
     "ltd.uk", "plc.uk",
@@ -190,7 +190,7 @@ _MULTI_LABEL_PUBLIC_SUFFIXES = frozenset({
 
 
 def _labels(domain: str) -> list[str]:
-    """Normalizza un dominio in label minuscole, senza punto finale."""
+    """A domain as lower-case labels, with no trailing dot."""
     labels = domain.strip(" \t\r\n.").lower().split(".")
     # Le label vuote (punti doppi) sono rare: la comprehension solo se servono
     return [label for label in labels if label] if "" in labels else labels
@@ -222,7 +222,7 @@ def dmarc_lookup_chain(domain: str) -> list[str]:
     """
     RFC 7489 §6.6.3 — catena di ricerca del record DMARC: si parte dal
     dominio richiesto e si rimuove una label per volta, fermandosi al
-    dominio organizzativo. Il suffisso pubblico non viene mai interrogato:
+    organizational domain. The public suffix itself is never queried:
     un record pubblicato su `it` o `co.uk` non è la policy del dominio.
 
     asufc.sanita.fvg.it -> [asufc.sanita.fvg.it, sanita.fvg.it, fvg.it]
@@ -240,7 +240,7 @@ def _query_txt(name: str) -> list[str]:
     """Query TXT records for a given name."""
     try:
         answers = dns.resolver.resolve(name, "TXT")
-        # Concatena le stringhe multiple di ogni record (importante per DKIM)
+        # Join a record's multiple strings (DKIM keys are split across them)
         # errors="replace": un TXT non UTF-8 non deve far crashare l'analisi
         return [b"".join(rdata.strings).decode("utf-8", errors="replace")
                 for rdata in answers]
@@ -565,8 +565,8 @@ def check_tls_rpt(domain: str) -> TLSRPTResult:
     return result
 
 
-# Punteggio grezzo massimo di ogni check — la somma supera 100, quindi il
-# totale viene normalizzato su scala 0-100 in analyze_domain.
+# The highest raw score each check can reach. They sum to more than 100, so
+# analyze_domain normalises the total onto a 0-100 scale.
 MAX_SCORES = {
     "dmarc": 50,    # reject 30 + pct 5 + adkim 5 + aspf 5 + rua 3 + ruf 2
     "spf": 20,      # -all

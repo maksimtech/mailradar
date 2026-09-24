@@ -5,8 +5,8 @@ of having no verified text to hash. Printing one anyway would assert a
 verification that never happened.
 
 But the reader has to be able to reach that conclusion from the report alone.
-Before this, the warning said only "testo non verificabile" at the top, while
-"SHA256: non disponibile" appeared further down against each citation, and
+Before this, the warning said only "text not verifiable" at the top, while
+"SHA256: not available" appeared further down against each citation, and
 nothing connected the two — so a missing hash read as a bug in the tool.
 
 Verified on 2026-09-24 against a real cache: every one of the 56 cached
@@ -53,7 +53,7 @@ def test_the_warning_itself_says_the_citations_will_have_no_hash():
     two facts ever being joined — which was the state being corrected.
     """
     out = render(law("unavailable", sha256=None))
-    warning = next(line for line in out.splitlines() if "non verificabile" in line)
+    warning = next(line for line in out.splitlines() if "not verifiable" in line)
 
     assert "SHA" in warning, warning
 
@@ -61,7 +61,7 @@ def test_the_warning_itself_says_the_citations_will_have_no_hash():
 def test_the_unverifiable_state_still_names_the_act_and_its_source():
     """The new clause must not crowd out what the line already said."""
     out = render(law("unavailable", sha256=None))
-    warning = next(line for line in out.splitlines() if "non verificabile" in line)
+    warning = next(line for line in out.splitlines() if "not verifiable" in line)
 
     assert GDPR.name in warning, warning
     assert GDPR.source in warning, warning
@@ -74,8 +74,8 @@ def test_a_verified_act_does_not_mention_a_missing_hash():
     """Nothing is missing there, and saying so would only worry the reader."""
     out = render(law("verified", sha256=HASH))
 
-    assert "verificato" in out
-    assert "non verificabile" not in out
+    assert "verified" in out
+    assert "not verifiable" not in out
 
 
 def test_an_act_read_from_the_cache_still_has_its_hash():
@@ -83,5 +83,5 @@ def test_an_act_read_from_the_cache_still_has_its_hash():
     out = render(law("cache", sha256=HASH))
 
     assert "cache" in out
-    assert "non verificabile" not in out, out
+    assert "not verifiable" not in out, out
 

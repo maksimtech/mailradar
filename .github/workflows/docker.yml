@@ -5,7 +5,7 @@ on:
       - 'v*'
   schedule:
     # Rebuild settimanale di latest dall'ultimo tag: riceve le patch Debian
-    # senza bisogno di una release
+    # without needing a release
     - cron: '0 5 * * 1'
   workflow_dispatch:
     inputs:
@@ -56,7 +56,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          # Il rebuild schedulato aggiorna solo latest: le immagini di versione
+          # The scheduled rebuild updates only latest: the versioned images
           # restano quelle pubblicate con la release
           tags: |
             maksimtech/mailradar:latest
@@ -64,7 +64,7 @@ jobs:
           build-args: |
             MAILRADAR_VERSION=${{ steps.version.outputs.PIP_VERSION }}
           pull: true
-          # La cache riuserebbe il layer di apt-get upgrade: senza patch Debian
+          # The cache would reuse the apt-get upgrade layer: without Debian patches
           no-cache: ${{ github.event_name == 'schedule' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

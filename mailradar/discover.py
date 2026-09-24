@@ -218,8 +218,8 @@ def _discover_common_contacts(domain: str) -> list[str]:
 def _check_gpg_for_emails(emails: list[str]) -> list[str]:
     """Check which emails have GPG public keys on keyservers."""
     from mailradar.gpg import lookup_gpg_by_email
-    # Lookup in parallelo: ogni indirizzo interroga fino a 3 keyserver con
-    # timeout di 15s, in sequenza sarebbero minuti
+    # In parallel: each address queries up to three keyservers with a 15s
+    # timeout, which in sequence would be minutes.
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(lookup_gpg_by_email, emails))
 
@@ -266,7 +266,7 @@ def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
     result.emails = sorted(all_emails)
     result.candidates = sorted(set(common) - all_emails)
 
-    # GPG check — anche sui candidati: una chiave pubblica per security@ è utile
+    # GPG is checked on the candidates too: a public key for security@ is worth
     to_check = result.emails + result.candidates
     if check_gpg and to_check:
         result.gpg_capable = _check_gpg_for_emails(to_check)

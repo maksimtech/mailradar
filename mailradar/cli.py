@@ -216,7 +216,7 @@ def _law_check(subject, out=None, **context):
     try:
         return law_checker.check(subject, **context)
     except Exception as e:
-        (out or console).print(f"[yellow]⚠️  Verifica delle norme non riuscita: {escape(str(e))}[/yellow]\n")
+        (out or console).print(f"[yellow]⚠️  Law check failed: {escape(str(e))}[/yellow]\n")
         return None
 
 
@@ -228,16 +228,16 @@ def _print_law_check(law, out=None) -> None:
     if law is None or not (law.citations or law.notes):
         return
 
-    out.print("[bold]⚖️  Norme applicate[/bold]")
+    out.print("[bold]⚖️  Provisions applied[/bold]")
     for status in law.acts:
         act = status.act
         name, source = escape(act.name), escape(act.source)
         if status.source == "verified":
-            out.print(f"[dim]{name}: verificato su {source} ({act.id_label} {escape(act.celex)})[/dim]")
+            out.print(f"[dim]{name}: verified against {source} ({act.id_label} {escape(act.celex)})[/dim]")
         elif status.source == "cache":
             out.print(
-                f"[yellow]{name}: {source} non raggiungibile, "
-                "testo dalla copia in cache non riverificato[/yellow]"
+                f"[yellow]{name}: {source} unreachable, "
+                "text from the cached copy, not re-verified[/yellow]"
             )
         else:
             # The missing SHA-256 below is the consequence of this line, and
@@ -245,8 +245,8 @@ def _print_law_check(law, out=None) -> None:
             # for a bug in the hashing. There is no verified text to hash, and
             # printing one anyway would assert a verification never made.
             out.print(
-                f"[yellow]{name}: {source} non raggiungibile e nessuna copia in cache, "
-                "testo non verificabile: le citazioni che seguono restano senza SHA-256[/yellow]"
+                f"[yellow]{name}: {source} unreachable and nothing cached, "
+                "text not verifiable: the citations below have no SHA-256[/yellow]"
             )
         if act.note:
             out.print(f"[dim]  {escape(act.note)}[/dim]")

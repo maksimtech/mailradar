@@ -89,7 +89,7 @@ def test_secure_domain_has_no_findings():
 
 def test_dmarc_missing():
     assert findings_of(_report(dmarc=DMARCResult(present=False))) == {
-        "dmarc_missing": ["nessun record DMARC"],
+        "dmarc_missing": ["no DMARC record"],
     }
 
 
@@ -98,9 +98,9 @@ def test_dmarc_policy_none_is_not_missing():
 
 
 @pytest.mark.parametrize("spf, dkim, evidence", [
-    (SPFResult(present=False), None, ["nessun record SPF"]),
+    (SPFResult(present=False), None, ["no SPF record"]),
     (SPFResult(present=True, all_mechanism="~all", permissive=True), None, ["SPF ~all"]),
-    (None, DKIMResult(present=False), ["nessuna chiave DKIM con i selettori comuni"]),
+    (None, DKIMResult(present=False), ["no DKIM key under the common selectors"]),
     (None, DKIMResult(present=True, key_bits=1024), ["DKIM 1024 bit"]),
     (SPFResult(present=True, all_mechanism="+all", permissive=True),
      DKIMResult(present=True, key_bits=512), ["SPF +all", "DKIM 512 bit"]),
@@ -112,14 +112,14 @@ def test_spf_dkim_weak(spf, dkim, evidence):
 
 def test_cleartext_without_mta_sts():
     assert findings_of(_report(mta_sts=MTASTSResult(present=False))) == {
-        "cleartext": ["MTA-STS assente: TLS non obbligatorio in ricezione"],
+        "cleartext": ["MTA-STS missing: TLS not mandatory on delivery"],
     }
 
 
 def test_mta_sts_testing_is_cleartext_without_nis2():
     # NIS2 is cited for MTA-STS absent; testing mode only for GDPR art. 32(1)(a)
     found = findings_of(_report(mta_sts=MTASTSResult(present=True, mode="testing")))
-    assert found == {"cleartext_testing": ["MTA-STS in modalità testing, non enforce"]}
+    assert found == {"cleartext_testing": ["MTA-STS in testing mode, not enforce"]}
 
 
 @pytest.mark.parametrize("overrides", [
@@ -128,7 +128,7 @@ def test_mta_sts_testing_is_cleartext_without_nis2():
 ])
 def test_nis2_scope_is_noted_when_nis2_is_cited(overrides):
     assert notes_of(_report(**overrides)) == [NIS2_SCOPE_NOTE]
-    assert "soggetti essenziali e importanti" in NIS2_SCOPE_NOTE
+    assert "essential and important entities" in NIS2_SCOPE_NOTE
 
 
 @pytest.mark.parametrize("overrides", [
@@ -142,7 +142,7 @@ def test_no_nis2_note_without_nis2(overrides):
 
 def test_gpg_missing():
     assert findings_of(_report(gpg=GPGResult(found=False))) == {
-        "gpg_missing": ["nessuna chiave pubblica sui keyserver"],
+        "gpg_missing": ["no public key on the keyservers"],
     }
 
 
@@ -176,7 +176,7 @@ def test_all_findings_cite_gdpr_and_nis2(cache, online):
     assert [s.source for s in law.acts] == ["verified", "verified"]
     assert law.notes == [NIS2_SCOPE_NOTE]
     assert law.citations[0].version_date == "2026-09-19"
-    assert law.evidence["dmarc_missing"] == ["nessun record DMARC"]
+    assert law.evidence["dmarc_missing"] == ["no DMARC record"]
 
 
 def test_second_audit_same_text_keeps_version_date(cache, online):
@@ -229,7 +229,7 @@ def test_default_cache_location(tmp_path, online):
 def test_format_citation():
     c = Citation("cleartext", "GDPR", "32(1)(a)", "ab" * 32, "2026-09-19")
     assert format_citation(c) == (
-        "Norma applicata: GDPR art. 32(1)(a)\n"
+        "Provision applied: GDPR art. 32(1)(a)\n"
         f"SHA256: {'ab' * 32}\n"
-        "Versione del: 2026-09-19"
+        "Version of: 2026-09-19"
     )

@@ -34,7 +34,7 @@ class TestDockerfile(unittest.TestCase):
                      if re.search(r"pip uninstall .*\bpip\b", r) and "-y" in r]
         self.assertTrue(uninstall, "no RUN step uninstalls pip")
         self.assertGreater(uninstall[0], install[-1])
-        # Dopo la rimozione nessun altro passo può usare pip
+        # Once removed, no later step may use pip
         for r in runs[uninstall[0] + 1:]:
             self.assertNotRegex(r, r"\bpip3? install\b")
 
@@ -66,7 +66,7 @@ class TestDockerWorkflow(unittest.TestCase):
         )
 
     def test_schedule_builds_without_cache(self):
-        # Senza questo la cache GHA riusa il layer di apt-get upgrade
+        # Without this the GHA cache reuses the apt-get upgrade layer
         # e il rebuild non riceve le patch Debian
         self.assertIn("no-cache: ${{ github.event_name == 'schedule' }}", DOCKER_WORKFLOW)
 

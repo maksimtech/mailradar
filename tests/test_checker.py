@@ -91,7 +91,7 @@ class TestCheckDMARC:
 
 def make_zone_resolver(zone: dict[str, list[str]], queried: list[str] = None):
     """Resolver mock: solo i nomi presenti in `zone` rispondono, gli altri
-    sollevano NXDOMAIN. Ogni nome interrogato viene registrato in `queried`."""
+    raise NXDOMAIN. Every name queried is recorded in `queried`."""
     def resolve(name, rdtype="TXT", *args, **kwargs):
         key = str(name).rstrip(".")
         if queried is not None:
@@ -160,7 +160,7 @@ class TestDMARCLookupChain:
 class TestCheckDMARCTreeWalk:
 
     def test_climbs_to_organizational_domain(self):
-        """asufc.sanita.fvg.it senza record proprio → policy da fvg.it."""
+        """asufc.sanita.fvg.it with no record of its own -> policy from fvg.it."""
         zone = {"_dmarc.fvg.it": ["v=DMARC1; p=reject; rua=mailto:r@fvg.it"]}
         queried = []
         with patch('mailradar.checker.dns.resolver.resolve',

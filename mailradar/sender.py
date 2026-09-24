@@ -59,7 +59,7 @@ def _encrypt_with_gpg(
                     return None
             result = subprocess.run(
                 base + [
-                    # Chiave appena scaricata: senza questo gpg --batch la rifiuta
+                    # A key just fetched: without this, gpg --batch refuses it
                     "--trust-model", "always",
                     "--armor",
                     "--encrypt",

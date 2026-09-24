@@ -74,16 +74,16 @@ def _offenders(path: pathlib.Path) -> list[str]:
                 for v in (text, universal) if v is not None
             )
             if decodes and _kwarg(node, "encoding") is None:
-                found.append(f"{path.name}:{node.lineno}: {name}(text=True) senza encoding=")
+                found.append(f"{path.name}:{node.lineno}: {name}(text=True) with no encoding=")
 
         # Path.read_text / Path.write_text
         elif name in ("read_text", "write_text") and _kwarg(node, "encoding") is None:
-            found.append(f"{path.name}:{node.lineno}: .{name}() senza encoding=")
+            found.append(f"{path.name}:{node.lineno}: .{name}() with no encoding=")
 
         # builtin open() in text mode
         elif name == "open" and isinstance(node.func, ast.Name):
             if not _is_binary(node) and _kwarg(node, "encoding") is None:
-                found.append(f"{path.name}:{node.lineno}: open() in modo testo senza encoding=")
+                found.append(f"{path.name}:{node.lineno}: open() in text mode with no encoding=")
 
     return found
 
