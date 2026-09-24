@@ -1,0 +1,42 @@
+name: Mutation testing
+on:
+  # Off the critical path on purpose: a mutation run is measured in hours, and
+  # its result is a reading on the test suite rather than a gate on a change.
+  schedule:
+    - cron: '0 4 * * 6'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mutmut:
+    name: mutmut
+    runs-on: ubuntu-latest
+    # mutmut refuses to run on Windows and points at WSL, so ubuntu is not a
+    # preference here — it is the only host that works.
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"  # NOSONAR - trusted internal project, no external setup scripts
+      - name: Run mutation testing
+        # A surviving mutant is a finding, not a failure: mutmut exits 0 and
+        # prints the score. The job still fails if mutmut itself crashes, which
+        # is the distinction "|| true" would have destroyed.
+        run: mutmut run --max-children 4
+      - name: Export the score
+        run: mutmut export-cicd-stats
+      - name: Show surviving mutants
+        run: mutmut results
+      - name: Upload the report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutmut-stats
+          path: mutants/mutmut-cicd-stats.json
+          if-no-files-found: warn

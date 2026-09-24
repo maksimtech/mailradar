@@ -43,7 +43,10 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-mock>=3.14",
     "pytest-cov>=5.0",
-    "ruff>=0.4",
+    "ruff>=0.16",
+    "mypy>=1.18",
+    "hypothesis>=6.140",
+    "mutmut>=3.8",
 ]
 
 [project.scripts]
@@ -58,6 +61,53 @@ Changelog = "https://github.com/maksimtech/mailradar/CHANGELOG.md"
 [tool.hatch.version]
 path = "mailradar/__init__.py"
 
+[tool.pytest.ini_options]
+# The one pytest setting mailradar was missing. asyncio_mode is deliberately
+# absent: unlike the other four Radar, mailradar has no async tests at all.
+testpaths = ["tests"]
+
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py311"
+
+[tool.ruff.lint]
+# Useful without being noisy. The security ruleset S is deliberately absent:
+# ruff's S rules *are* flake8-bandit — measured on 2026-09-24, S110 and B110
+# reported the same four try-except-pass — so selecting it here would report
+# every finding twice, under two ids, in two places to be archived.
+select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 objects to a function call in an argument default, and Typer's entire
+# API is exactly that: `def cmd(x: str = typer.Option(...))`. There is no fix
+# on this side — moving the call into the body would stop Typer seeing the
+# option at all — so the two calls are declared immutable instead.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
+[tool.ruff.lint.per-file-ignores]
+# A test may import for a side effect, or redefine a fixture name to make the
+# case read; neither is a defect there.
+"tests/*" = ["F811", "E402"]
+
+[tool.mypy]
+python_version = "3.11"
+# Permissive on purpose, not for lack of stubs: dnspython, cryptography, typer,
+# rich, httpx and jinja2 all ship py.typed. The setting is kept identical across
+# the five Radar so one command means the same thing everywhere.
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# Tests assert against deliberately malformed input; annotating that would
+# describe the fixtures rather than check the code.
+module = "tests.*"
+ignore_errors = true
+
+[tool.mutmut]
+source_paths = ["mailradar"]
+pytest_add_cli_args_test_selection = ["tests/"]
+# mutmut 3.8 refuses to run on Windows and points at WSL, so this is a CI-only
+# configuration: the scheduled workflow runs it on ubuntu.
+do_not_mutate = ["mailradar/__init__.py"]

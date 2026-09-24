@@ -1,0 +1,29 @@
+name: Quality
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+jobs:
+  quality:
+    # One name, not a matrix: ruff and mypy read their target version from
+    # pyproject.toml, so running them on four interpreters would repeat the
+    # same answer four times.
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"  # NOSONAR - trusted internal project, no external setup scripts
+      - name: Lint (ruff)
+        run: ruff check mailradar tests
+      - name: Type check (mypy)
+        run: mypy mailradar
