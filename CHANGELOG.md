@@ -8,6 +8,54 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 
 ## [Unreleased]
 
+## [2026.09.12] - 2026-09-24
+
+### Fixed
+- **`mailradar batch` reads its list of domains as UTF-8.** It used a bare
+  `open(file)`, so the locale chose the encoding. An internationalised domain is
+  the ordinary case here, not an exotic one — `società.it` and `müller.de` are
+  both registrable — and read through cp1252 the query went to a domain that
+  does not resolve, reported as though it had been the one asked for. Three more
+  defects in the same four lines: a byte order mark, which Notepad writes by
+  default, became part of the first domain; an `OSError` that is not
+  `FileNotFoundError` escaped as a traceback; and `#` was tested against the
+  unstripped line, so an **indented comment was queried as a domain**.
+- **One `GPGResult`, not two.** The class was declared in both `checker.py` and
+  `gpg.py`, and the two were not the same: `gpg.py`'s carries a `fingerprint`
+  field the other lacked. Since `lookup_gpg` returns `gpg.py`'s, a scanned
+  `DomainReport` and a default-built one held different shapes in the same
+  field. The duplicate is removed.
+- **An unverifiable law now says what it costs.** The report warned that an act
+  could not be fetched and separately printed `SHA256: non disponibile` against
+  each citation, with nothing joining the two, so a missing hash read as a
+  defect in the hashing. It is not: with no verified text there is nothing to
+  hash.
+- **`MAILRADAR_HOME` is no longer taken literally.** `~/cache` made a directory
+  named `~`, a relative value followed the working directory so the cache
+  stopped being one cache, and `"   "` became a directory name.
+- `_discover_via_website` declared `extra_subdomains: list[str]` and defaulted
+  it to `None`. The GPG lookup now pairs addresses with results under
+  `strict=True`: `executor.map` yields one result per input, so the lengths are
+  equal by construction, and this checks it rather than assuming it.
+
+### Changed
+- ruff, mypy, hypothesis and mutmut are development dependencies, with a
+  `Quality` workflow running ruff and mypy on every push and pull request, and a
+  weekly, non-blocking mutation run.
+- Fifteen new properties checked against generated input: the DMARC and BIMI tag
+  parsers read a string a domain owner writes by hand, and the email extractor is
+  checked against its near-misses — `example.community` and
+  `example.com.evil.org` must not match `example.com`.
+- A contract test refuses any code in this repository that lets the locale
+  choose a text encoding.
+- **Every string the tool writes itself is now in English**, which the
+  CHANGELOGs already were. The report's section is `Provisions applied` rather
+  than `Norme applicate`, and finding titles, scope notes, evidence lines and
+  the release script's messages follow. What the tool *quotes* is unchanged: a
+  provision's text is fetched from the official Italian version of each act and
+  hashed, so translating it would change every SHA-256 in every cache and report
+  "the law changed" for every citation on the next run, for nothing.
+
 ## [2026.09.11] - 2026-09-21
 
 ### Fixed
@@ -22,7 +70,7 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 ## [2026.09.10] - 2026-09-19
 
 ### Added
-- `check` and `report` end with a "Norme applicate" section: each weakness
+- `check` and `report` end with a "Provisions applied" section: each weakness
   cites the legal provisions it concerns, with the SHA-256 of the exact text
   applied and the date of that wording. The text is downloaded from EUR-Lex on
   every run and cached in `~/.mailradar/law_cache.json` (`MAILRADAR_HOME`
