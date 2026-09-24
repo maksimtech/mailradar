@@ -22,7 +22,6 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 from mailradar.law_fetcher import Provision, text_sha256
 
@@ -30,14 +29,34 @@ Key = tuple[str, str]   # (celex, article)
 
 
 def default_cache_path() -> Path:
-    home = os.environ.get("MAILRADAR_HOME")
-    base = Path(home) if home else Path.home() / ".mailradar"
-    return base / "law_cache.json"
+    """Where the cache lives, from MAILRADAR_HOME or the default under $HOME.
+
+    The value is expanded and resolved rather than used as written. Path()
+    takes "~/cache" as a directory actually named "~", and a relative value
+    against the working directory — so the same setting produced a different
+    cache depending on where the command was run from, quietly turning one
+    cache into several. Blank or whitespace means "unset", not "a directory
+    named space".
+
+    Only the directory is configurable. The filename is fixed here, which is
+    what keeps the variable from choosing which file gets written over.
+    """
+    home = (os.environ.get("MAILRADAR_HOME") or "").strip()
+    if not home:
+        return Path.home() / ".mailradar" / "law_cache.json"
+    base = Path(home).expanduser()
+    # A relative value is anchored to $HOME, not to the working
+    # directory: otherwise the same setting names a different
+    # cache from every directory the command is run in, and one
+    # cache quietly becomes several.
+    if not base.is_absolute():
+        base = Path.home() / base
+    return base.resolve() / "law_cache.json"
 
 
 class LawCache:
 
-    def __init__(self, path: Optional[Union[str, Path]] = None):
+    def __init__(self, path: str | Path | None = None):
         self.path = Path(path) if path else default_cache_path()
 
     def load(self) -> dict[Key, Provision]:

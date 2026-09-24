@@ -2,11 +2,15 @@
 MailRadar — DNS record checker for email security posture analysis.
 """
 
-import dns.resolver
-import dns.exception
 from dataclasses import dataclass, field
-from typing import Optional
+
+import dns.exception
+import dns.resolver
 import httpx
+
+# The one GPGResult: lookup_gpg returns this, and it carries `fingerprint`,
+# which the copy that used to live here did not.
+from mailradar.gpg import GPGResult
 
 
 @dataclass
@@ -77,18 +81,6 @@ class TLSRPTResult:
 
 
 @dataclass
-class GPGResult:
-    found: bool = False
-    keyserver: str = ""
-    uid: str = ""
-    key_id: str = ""
-    emails: list = field(default_factory=list)
-    raw_key: str = ""
-    score: int = 0
-    issues: list = field(default_factory=list)
-
-
-@dataclass
 class DomainReport:
     domain: str = ""
     dmarc: DMARCResult = field(default_factory=DMARCResult)
@@ -143,10 +135,7 @@ def find_domain_variants(domain: str) -> list[str]:
     """
     # Estrai il nome base senza TLD
     parts = domain.split(".")
-    if len(parts) == 1:
-        base = domain
-    else:
-        base = parts[0]
+    base = domain if len(parts) == 1 else parts[0]
 
     # TLD comuni da provare
     tlds = [
@@ -270,7 +259,7 @@ def _parse_tags(record: str) -> dict[str, str]:
     return tags
 
 
-def _parse_pct(value: str) -> Optional[int]:
+def _parse_pct(value: str) -> int | None:
     """Parse DMARC pct — returns None if not an integer in 0-100."""
     try:
         pct = int(value)
@@ -341,7 +330,7 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
         result.issues.append("No ruf configured — forensic reports disabled")
 
 
-def _first_dmarc_record(name: str) -> Optional[str]:
+def _first_dmarc_record(name: str) -> str | None:
     """Primo record TXT di `name` che è un record DMARC, se c'è."""
     for record in _query_txt(name):
         if record.startswith("v=DMARC1"):
@@ -448,8 +437,9 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
                     key_part = record.split("p=")[-1].split(";")[0].strip()
                     try:
                         import base64
-                        from cryptography.hazmat.primitives.serialization import load_der_public_key
+
                         from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+                        from cryptography.hazmat.primitives.serialization import load_der_public_key
                         der = base64.b64decode(key_part + "==")
                         pub = load_der_public_key(der)
                         if isinstance(pub, RSAPublicKey):

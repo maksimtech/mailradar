@@ -2,10 +2,11 @@
 MailRadar — Email address discovery via Certificate Transparency (crt.sh).
 """
 
-import httpx
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+
+import httpx
 
 
 @dataclass
@@ -27,7 +28,7 @@ def _extract_emails_from_text(text: str, domain: str) -> list[str]:
         r'(?![a-zA-Z0-9\-]|\.[a-zA-Z0-9])'
     )
     found = re.findall(pattern, text, re.IGNORECASE)
-    return list(set(e.lower() for e in found))
+    return list({e.lower() for e in found})
 
 
 def _discover_subdomains_via_crtsh(domain: str) -> list[str]:
@@ -38,7 +39,7 @@ def _discover_subdomains_via_crtsh(domain: str) -> list[str]:
     import time
     subdomains = set()
 
-    for attempt in range(3):
+    for _attempt in range(3):
         try:
             url = f"https://crt.sh/?q=%.{domain}&output=json"
             resp = httpx.get(url, timeout=20, follow_redirects=True)
@@ -71,7 +72,7 @@ def _discover_subdomains_via_crtsh(domain: str) -> list[str]:
     return list(subdomains)
 
 
-def _discover_via_website(domain: str, extra_subdomains: list[str] = None) -> list[str]:
+def _discover_via_website(domain: str, extra_subdomains: list[str] | None = None) -> list[str]:
     """
     Scrape the domain's website for email addresses.
     Checks common pages plus subdomains discovered via crt.sh.
@@ -116,8 +117,8 @@ def _discover_via_website(domain: str, extra_subdomains: list[str] = None) -> li
 
 def _discover_via_dns(domain: str) -> list[str]:
     """Extract email hints from DNS records — SOA, TXT."""
-    import dns.resolver
     import dns.exception
+    import dns.resolver
     emails = []
 
     # SOA rname — admin email in dot notation
@@ -125,7 +126,7 @@ def _discover_via_dns(domain: str) -> list[str]:
         answers = dns.resolver.resolve(domain, "SOA")
         for r in answers:
             rname = str(r.rname).rstrip(".")
-            # SOA rname usa il primo punto come @ 
+            # SOA rname usa il primo punto come @
             # es: hostmaster.tplfvg.it → hostmaster@tplfvg.it
             parts = rname.split(".", 1)
             if len(parts) == 2 and parts[1] == domain:
@@ -222,7 +223,7 @@ def _check_gpg_for_emails(emails: list[str]) -> list[str]:
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(lookup_gpg_by_email, emails))
 
-    return [email for email, r in zip(emails, results) if r.found]
+    return [email for email, r in zip(emails, results, strict=True) if r.found]
 
 
 def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:

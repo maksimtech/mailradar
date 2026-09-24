@@ -2,18 +2,19 @@
 MailRadar — CLI interface.
 """
 
+import contextlib
+import sys
+
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.text import Text
-from rich.markup import escape
 from rich import box
-from typing import Optional
+from rich.console import Console
+from rich.markup import escape
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 import mailradar
-from mailradar.checker import analyze_domain, DomainReport
-import sys
+from mailradar.checker import DomainReport, analyze_domain
 
 
 def enable_utf8_output() -> None:
@@ -39,10 +40,8 @@ def enable_utf8_output() -> None:
         encoding = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
         if encoding == "utf8":
             continue
-        try:
+        with contextlib.suppress(ValueError, OSError):
             reconfigure(encoding="utf-8", errors="replace")
-        except (ValueError, OSError):
-            pass
 
 enable_utf8_output()
 
@@ -64,7 +63,7 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def _root(
-    version: Optional[bool] = typer.Option(
+    version: bool | None = typer.Option(
         None,
         "--version",
         callback=_version_callback,
@@ -180,7 +179,10 @@ def _print_report(report: DomainReport) -> None:
 
     # GPG row
     g = report.gpg
-    gpg_detail = f"uid: {escape(g.uid)} | {escape(g.keyserver)}" if g.found else "[dim]No public key on keyservers[/dim]"
+    gpg_detail = (
+        f"uid: {escape(g.uid)} | {escape(g.keyserver)}" if g.found
+        else "[dim]No public key on keyservers[/dim]"
+    )
     gpg_icon = "✅" if g.found else "❌"
     table.add_row("GPG", gpg_icon, gpg_detail, f"[{_score_color(g.score)}]{g.score}[/{_score_color(g.score)}]")
 
@@ -233,9 +235,19 @@ def _print_law_check(law, out=None) -> None:
         if status.source == "verified":
             out.print(f"[dim]{name}: verificato su {source} ({act.id_label} {escape(act.celex)})[/dim]")
         elif status.source == "cache":
-            out.print(f"[yellow]{name}: {source} non raggiungibile, testo dalla copia in cache non riverificato[/yellow]")
+            out.print(
+                f"[yellow]{name}: {source} non raggiungibile, "
+                "testo dalla copia in cache non riverificato[/yellow]"
+            )
         else:
-            out.print(f"[yellow]{name}: {source} non raggiungibile e nessuna copia in cache, testo non verificabile[/yellow]")
+            # The missing SHA-256 below is the consequence of this line, and
+            # the two used to sit apart: a reader who saw the gap went looking
+            # for a bug in the hashing. There is no verified text to hash, and
+            # printing one anyway would assert a verification never made.
+            out.print(
+                f"[yellow]{name}: {source} non raggiungibile e nessuna copia in cache, "
+                "testo non verificabile: le citazioni che seguono restano senza SHA-256[/yellow]"
+            )
         if act.note:
             out.print(f"[dim]  {escape(act.note)}[/dim]")
         if status.error:
@@ -275,7 +287,7 @@ def check(
 
     if not exists:
         console.print(f"\n[yellow]⚠️  Domain [bold]{escape(domain)}[/bold] not found in DNS.[/yellow]")
-        console.print(f"[dim]Scanning TLD variants...[/dim]\n")
+        console.print("[dim]Scanning TLD variants...[/dim]\n")
 
         with console.status("[cyan]Scanning variants...[/cyan]"):
             variants = find_domain_variants(domain)
@@ -331,6 +343,18 @@ def check(
         raise typer.Exit(1)
 
 
+def _read_list(path: str) -> list[str]:
+    """Non-empty lines of the file, skipping comments (also indented ones).
+
+    utf-8-sig, not utf-8: it consumes a Windows byte order mark if there is one
+    and behaves identically when there is not. The strip happens before the "#"
+    test so an indented comment is a comment.
+    """
+    with open(path, encoding="utf-8-sig") as f:
+        lines = [line.strip() for line in f]
+    return [line for line in lines if line and not line.startswith("#")]
+
+
 @app.command()
 def batch(
     file: str = typer.Argument(..., help="File with one domain per line"),
@@ -339,11 +363,16 @@ def batch(
     Analyze multiple domains from a file.
     """
     try:
-        with open(file) as f:
-            domains = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        domains = _read_list(file)
     except FileNotFoundError:
         console.print(f"[red]File not found: {file}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
+    except UnicodeDecodeError:
+        console.print(f"[red]Cannot read {file}: not valid UTF-8[/red]")
+        raise typer.Exit(1) from None
+    except OSError as e:
+        console.print(f"[red]Cannot read {file}: {e.strerror or e}[/red]")
+        raise typer.Exit(1) from None
 
     results = []
     failed = []
@@ -453,7 +482,7 @@ def send(
     """
     from mailradar.checker import analyze_domain
     from mailradar.reporter import generate_report
-    from mailradar.sender import send_report, SMTPConfig
+    from mailradar.sender import SMTPConfig, send_report
 
     console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
@@ -513,7 +542,7 @@ def send(
         raise typer.Exit(1)
 
     else:
-        console.print(f"\n[yellow]ℹ️  No SMTP configured or send failed.[/yellow]")
+        console.print("\n[yellow]ℹ️  No SMTP configured or send failed.[/yellow]")
         console.print(f"[dim]Send manually to: {escape(result.recipient)}[/dim]\n")
         console.print(Panel(Text(report_text), title=f"📧 Report — {escape(domain)} (copy-paste)", border_style="cyan"))
 
@@ -528,7 +557,6 @@ def discover(
     Sources: Certificate Transparency (crt.sh), website scraping, RDAP/WHOIS.
     """
     from mailradar.discover import discover as run_discover
-    from mailradar.checker import domain_exists
 
     if "." not in domain:
         console.print(f"[red]Invalid domain: {escape(domain)} — missing TLD[/red]")

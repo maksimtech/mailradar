@@ -11,12 +11,11 @@ Shared by the Radar tools: only the mapping section is specific to MailRadar.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from mailradar import law_fetcher
-from mailradar.law_cache import LawCache
-from mailradar.law_fetcher import GDPR, NIS2, Act, LawFetchError
+from mailradar.law_cache import Key, LawCache
+from mailradar.law_fetcher import GDPR, NIS2, Act, LawFetchError, Provision
 
 # ─── Mapping: MailRadar findings → provisions ─────────────────────────────────
 
@@ -96,8 +95,8 @@ class Citation:
     finding: str
     law: str                      # act as cited: "GDPR"
     article: str                  # "32(1)(a)"
-    sha256: Optional[str]         # None when the text could not be obtained
-    version_date: Optional[str]   # YYYY-MM-DD the wording was downloaded
+    sha256: str | None         # None when the text could not be obtained
+    version_date: str | None   # YYYY-MM-DD the wording was downloaded
 
 
 @dataclass(frozen=True)
@@ -106,7 +105,7 @@ class ActStatus:
     # "verified": downloaded now from the act's source (EUR-Lex or Normattiva);
     # "cache": source unreachable, cached copy; "unavailable": no text at all
     source: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
@@ -125,8 +124,8 @@ class LawCheckResult:
 def check(
     subject,
     *,
-    cache: Optional[LawCache] = None,
-    now: Optional[datetime] = None,
+    cache: LawCache | None = None,
+    now: datetime | None = None,
     **context,
 ) -> LawCheckResult:
     """
@@ -146,24 +145,25 @@ def check(
         return LawCheckResult(citations=[], notes=notes)
 
     cache = cache or LawCache()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     acts = list(dict.fromkeys(act for _, act, _ in cited))
-    fresh = {}
-    errors = {}
+    # Keyed by (celex, article) — the cache's key, not the fetcher's.
+    fresh: dict[Key, Provision] = {}
+    errors: dict[Act, str] = {}
     for act in acts:
         # The articles cited ("32(1)(a)" is part of article 32) and ALSO_FETCH
         articles = tuple(dict.fromkeys(
             [ref.split("(")[0] for _, a, ref in cited if a == act] + list(ALSO_FETCH.get(act, ()))
         ))
         try:
-            provisions = law_fetcher.fetch_provisions(act, articles, now=now)
+            by_article = law_fetcher.fetch_provisions(act, articles, now=now)
         except LawFetchError as e:
             errors[act] = str(e)
         else:
-            fresh.update({p.key: p for p in provisions.values()})
+            fresh.update({p.key: p for p in by_article.values()})
 
-    changed = {}
+    changed: dict[Key, str] = {}
     try:
         if fresh:
             provisions, changed = cache.update(fresh, checked_at=law_fetcher.utc_stamp(now))
