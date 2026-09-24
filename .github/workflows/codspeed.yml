@@ -24,7 +24,7 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install -e .  # NOSONAR - trusted internal project
+          pip install -e ".[dev]"  # NOSONAR - trusted internal project
           pip install pytest-codspeed --only-binary :all:
       - name: Run benchmarks
         uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5
