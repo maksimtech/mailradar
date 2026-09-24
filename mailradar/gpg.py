@@ -2,10 +2,10 @@
 MailRadar — GPG public key lookup on keyservers.
 """
 
-import httpx
-from urllib.parse import urlparse
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
+import httpx
 
 KEYSERVERS = [
     "https://keys.openpgp.org",

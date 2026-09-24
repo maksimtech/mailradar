@@ -27,10 +27,10 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html.parser import HTMLParser
-from typing import Iterator, Optional, Union
 
 import httpx
 
@@ -93,7 +93,7 @@ def text_sha256(text: str) -> str:
 
 def utc_stamp(moment: datetime) -> str:
     """ISO 8601 UTC timestamp, e.g. 2026-09-19T14:00:00Z."""
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @dataclass(frozen=True)
@@ -105,14 +105,14 @@ class Provision:
     celex: str
 
     @classmethod
-    def from_text(cls, article: str, text: str, fetched_at: str, celex: str) -> "Provision":
+    def from_text(cls, article: str, text: str, fetched_at: str, celex: str) -> Provision:
         return cls(
             article=article, text=text, sha256=text_sha256(text),
             fetched_at=fetched_at, celex=celex,
         )
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Provision":
+    def from_dict(cls, data: dict) -> Provision:
         values = {key: data[key] for key in ("article", "text", "sha256", "fetched_at", "celex")}
         if not all(isinstance(value, str) for value in values.values()):
             raise TypeError("provision fields must be strings")
@@ -139,7 +139,7 @@ class _Element:
     def __init__(self, tag: str, attrs: dict):
         self.tag = tag
         self.attrs = attrs
-        self.children: list[Union[_Element, str]] = []
+        self.children: list[_Element | str] = []
 
     @property
     def classes(self) -> list[str]:
@@ -217,14 +217,14 @@ def normalize_text(text: str) -> str:
     return text.strip()
 
 
-def _raw_text(node: Union[_Element, str]) -> str:
+def _raw_text(node: _Element | str) -> str:
     if isinstance(node, str):
         return node
     inner = "".join(_raw_text(child) for child in node.children)
     return f" {inner} " if node.tag in _BLOCK else inner
 
 
-def _text(node: Union[_Element, str]) -> str:
+def _text(node: _Element | str) -> str:
     return normalize_text(_raw_text(node))
 
 
@@ -244,7 +244,7 @@ def _is_heading(node: _Element) -> bool:
     )
 
 
-def _flatten(nodes: list) -> Iterator[Union[_Element, str]]:
+def _flatten(nodes: list) -> Iterator[_Element | str]:
     """Paragraph content as a sequence of <p>, <table> and loose text."""
     for node in nodes:
         if isinstance(node, str):
@@ -258,7 +258,7 @@ def _flatten(nodes: list) -> Iterator[Union[_Element, str]]:
             yield node
 
 
-def _table_point(table: _Element) -> Optional[tuple[str, str]]:
+def _table_point(table: _Element) -> tuple[str, str] | None:
     """(letter, text) of a point laid out as a label cell and a text cell."""
     rows = [
         row
@@ -288,7 +288,7 @@ def _parse_block(nodes: list, prefix: str) -> tuple[list[str], dict[str, str]]:
     definitions of GDPR art. 4) are paragraphs starting with "1)"; their own
     lettered sub-points stay part of them.
     """
-    items: list[tuple[Optional[str], list[str]]] = []
+    items: list[tuple[str | None, list[str]]] = []
     numbered = False
     for node in _flatten(nodes):
         point = _table_point(node) if isinstance(node, _Element) and node.tag == "table" else None
@@ -356,7 +356,7 @@ def _parse_normattiva_article(root: _Element, number: str) -> dict[str, str]:
             for e in _elements(body)
         ):
             continue
-        groups: list[tuple[Optional[int], str, dict[str, str]]] = []
+        groups: list[tuple[int | None, str, dict[str, str]]] = []
         for comma in (e for e in _elements(body) if "art-comma-div-akn" in e.classes):
             text = _without_update_marks(_text(comma))
             if not text:
@@ -477,9 +477,9 @@ def _source_of(url: str) -> str:
 def fetch_html(
     url: str,
     *,
-    client: Optional[httpx.Client] = None,
+    client: httpx.Client | None = None,
     timeout: float = 30.0,
-    headers: Optional[dict] = None,
+    headers: dict | None = None,
 ) -> str:
     """Download a page. Anything but HTTP 200 is an error: EUR-Lex answers
     some automated requests with 202 and a JavaScript challenge."""
@@ -502,7 +502,7 @@ def fetch_act_html(
     act: Act,
     lang: str = "IT",
     *,
-    client: Optional[httpx.Client] = None,
+    client: httpx.Client | None = None,
     timeout: float = 30.0,
 ) -> str:
     """An EU act's page, from Cellar if it answers and from EUR-Lex if not.
@@ -541,8 +541,8 @@ def fetch_provisions(
     articles: tuple[str, ...],
     *,
     lang: str = "IT",
-    now: Optional[datetime] = None,
-    client: Optional[httpx.Client] = None,
+    now: datetime | None = None,
+    client: httpx.Client | None = None,
 ) -> dict[str, Provision]:
     """Download `act` and return the provisions of `articles`, by reference."""
     if act.source == "Normattiva":
@@ -553,7 +553,7 @@ def fetch_provisions(
     else:
         html = fetch_act_html(act, lang, client=client)
         texts = parse_articles(html, articles)
-    fetched_at = utc_stamp(now or datetime.now(timezone.utc))
+    fetched_at = utc_stamp(now or datetime.now(UTC))
     return {
         ref: Provision.from_text(ref, text, fetched_at, act.celex)
         for ref, text in texts.items()

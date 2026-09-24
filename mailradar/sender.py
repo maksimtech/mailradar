@@ -2,15 +2,14 @@
 MailRadar — Email sender with optional GPG encryption.
 """
 
+import getpass
 import smtplib
 import subprocess
 import tempfile
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional
-import getpass
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 
 @dataclass
 class SMTPConfig:
@@ -35,8 +34,8 @@ class SendResult:
 def _encrypt_with_gpg(
     text: str,
     recipient_email: str,
-    public_key: Optional[str] = None,
-) -> Optional[str]:
+    public_key: str | None = None,
+) -> str | None:
     """
     Encrypt text with recipient's GPG public key.
 
@@ -76,7 +75,7 @@ def _encrypt_with_gpg(
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None
 
-def _sign_with_gpg(text: str, sender_email: str) -> Optional[str]:
+def _sign_with_gpg(text: str, sender_email: str) -> str | None:
     """Sign text with sender's GPG private key — asks passphrase interactively."""
     try:
         passphrase = getpass.getpass(f"GPG passphrase for {sender_email}: ")
@@ -142,10 +141,10 @@ def send_report(
     domain: str,
     report_text: str,
     gpg_result,
-    config: Optional[SMTPConfig] = None,
+    config: SMTPConfig | None = None,
     lang: str = "it",
     sign: bool = False,
-    sign_email: Optional[str] = None,
+    sign_email: str | None = None,
 ) -> SendResult:
     """
     Smart send logic:

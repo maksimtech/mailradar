@@ -4,9 +4,10 @@ MailRadar — Report generator from domain analysis results.
 
 from datetime import date
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from mailradar.checker import DomainReport
 
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from mailradar.checker import DomainReport
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
