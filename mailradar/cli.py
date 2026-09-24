@@ -13,6 +13,39 @@ from typing import Optional
 
 import mailradar
 from mailradar.checker import analyze_domain, DomainReport
+import sys
+
+
+def enable_utf8_output() -> None:
+    """Make stdout and stderr accept characters the console cannot encode.
+
+    On Windows the console code page is cp1252, and Python encodes output with
+    it: the first emoji — the one in this CLI's own help text — ended the
+    program with UnicodeEncodeError before any command had run. It was never
+    the command failing, only the printing of its output.
+
+    errors="replace" rather than "strict": a glyph the terminal cannot show
+    should come out as a question mark, never as a traceback.
+
+    Streams that cannot be reconfigured are left alone. pytest's capture and
+    anything wrapping a pipe are not TextIOWrapper, and replacing them would
+    break whatever is reading them; a cosmetic setting is not worth raising
+    over, so this gives up quietly.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        encoding = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
+        if encoding == "utf8":
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+enable_utf8_output()
+
 
 app = typer.Typer(
     name="mailradar",
