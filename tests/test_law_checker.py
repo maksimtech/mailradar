@@ -1,11 +1,16 @@
 """Tests for mapping MailRadar findings to GDPR provisions."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from mailradar import law_fetcher
 from mailradar.checker import (
-    DKIMResult, DMARCResult, DomainReport, GPGResult, MTASTSResult, SPFResult,
+    DKIMResult,
+    DMARCResult,
+    DomainReport,
+    GPGResult,
+    MTASTSResult,
+    SPFResult,
 )
 from mailradar.law_cache import LawCache
 from mailradar.law_checker import (
@@ -20,19 +25,19 @@ from mailradar.law_checker import (
 )
 from mailradar.law_fetcher import GDPR, NIS2, LawFetchError, Provision
 
-DAY1 = datetime(2026, 9, 19, 14, 0, tzinfo=timezone.utc)
-DAY2 = datetime(2026, 10, 1, 9, 30, tzinfo=timezone.utc)
+DAY1 = datetime(2026, 9, 19, 14, 0, tzinfo=UTC)
+DAY2 = datetime(2026, 10, 1, 9, 30, tzinfo=UTC)
 
 
 def _report(**overrides):
     """A domain with nothing to report; overrides add the weaknesses."""
-    parts = dict(
-        dmarc=DMARCResult(present=True, policy="reject"),
-        spf=SPFResult(present=True, all_mechanism="-all", permissive=False),
-        dkim=DKIMResult(present=True, selector="default", key_bits=2048),
-        mta_sts=MTASTSResult(present=True, mode="enforce"),
-        gpg=GPGResult(found=True),
-    )
+    parts = {
+        "dmarc": DMARCResult(present=True, policy="reject"),
+        "spf": SPFResult(present=True, all_mechanism="-all", permissive=False),
+        "dkim": DKIMResult(present=True, selector="default", key_bits=2048),
+        "mta_sts": MTASTSResult(present=True, mode="enforce"),
+        "gpg": GPGResult(found=True),
+    }
     parts.update(overrides)
     return DomainReport(domain="example.com", **parts)
 
@@ -118,8 +123,8 @@ def test_mta_sts_testing_is_cleartext_without_nis2():
 
 
 @pytest.mark.parametrize("overrides", [
-    dict(dmarc=DMARCResult(present=False)),
-    dict(mta_sts=MTASTSResult(present=False)),
+    {"dmarc": DMARCResult(present=False)},
+    {"mta_sts": MTASTSResult(present=False)},
 ])
 def test_nis2_scope_is_noted_when_nis2_is_cited(overrides):
     assert notes_of(_report(**overrides)) == [NIS2_SCOPE_NOTE]
@@ -128,8 +133,8 @@ def test_nis2_scope_is_noted_when_nis2_is_cited(overrides):
 
 @pytest.mark.parametrize("overrides", [
     {},
-    dict(gpg=GPGResult(found=False)),
-    dict(mta_sts=MTASTSResult(present=True, mode="testing")),
+    {"gpg": GPGResult(found=False)},
+    {"mta_sts": MTASTSResult(present=True, mode="testing")},
 ])
 def test_no_nis2_note_without_nis2(overrides):
     assert notes_of(_report(**overrides)) == []

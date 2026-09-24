@@ -2,18 +2,25 @@
 Tests for MailRadar checker module.
 Uses mocks to avoid real DNS queries in CI.
 """
-import pytest
-from unittest.mock import patch, MagicMock
-import dns.resolver
-import dns.exception
-from mailradar.checker import (
-    check_dmarc, check_spf, check_dkim, check_bimi,
-    check_mta_sts, check_tls_rpt, analyze_domain,
-    domain_exists, find_domain_variants,
-    organizational_domain, dmarc_lookup_chain,
-    DMARCResult, SPFResult, DKIMResult
-)
+from unittest.mock import MagicMock, patch
 
+import dns.exception
+import dns.resolver
+import pytest
+
+from mailradar.checker import (
+    DMARCResult,
+    analyze_domain,
+    check_bimi,
+    check_dkim,
+    check_dmarc,
+    check_mta_sts,
+    check_spf,
+    check_tls_rpt,
+    dmarc_lookup_chain,
+    domain_exists,
+    organizational_domain,
+)
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -32,7 +39,10 @@ def make_txt_answer(strings: list[str]):
 class TestCheckDMARC:
 
     def test_dmarc_reject_perfect(self):
-        txt = "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:rua@example.com; ruf=mailto:ruf@example.com; fo=1"
+        txt = (
+            "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:rua@example.com; ruf=mailto:ruf@example.com; "
+            "fo=1"
+        )
         with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
             result = check_dmarc("example.com")
         assert result.present is True
@@ -321,7 +331,12 @@ class TestCheckDKIM:
 
     def test_dkim_2048(self):
         # Chiave RSA 2048-bit reale (troncata per il test)
-        key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwGFMFCN431WpLoJNLzE1qfqj2jjXsKiMps8Nafya4wg3jmchjT2qlejmUW6EYQRvy+c9jHskfk6+eIFpeLcFnBg/X3AMVbxazFqatYDoRY08/eCOPF5LzpBgcclDac6Nx+kuaFEN8e0oujGWd66H+v9Q8URN2h21cSvxDKb7QzNaUUuO79SBMMQdZE0sG3KHwKnFihc3FWRqPrxx5t9y8F0RKMDG2psAlWdE6U4yMcwNqpVLpFappxFls0EjjXnebOkmvNqXlp38/DBWGjbykiN8iFrlwYwGanrH25EZ/DpWQuucBR+7zlKNiAz8H1QSFqz+jwcW/MNXwTnNClI6XwIDAQAB"
+        key = (
+            "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwGFMFCN431WpLoJNLzE1qfqj2jjXsKiMps8Nafya4wg3jmchjT2qlejmUW6E"
+            "YQRvy+c9jHskfk6+eIFpeLcFnBg/X3AMVbxazFqatYDoRY08/eCOPF5LzpBgcclDac6Nx+kuaFEN8e0oujGWd66H+v9Q8URN2h21cSvx"
+            "DKb7QzNaUUuO79SBMMQdZE0sG3KHwKnFihc3FWRqPrxx5t9y8F0RKMDG2psAlWdE6U4yMcwNqpVLpFappxFls0EjjXnebOkmvNqXlp38"
+            "/DBWGjbykiN8iFrlwYwGanrH25EZ/DpWQuucBR+7zlKNiAz8H1QSFqz+jwcW/MNXwTnNClI6XwIDAQAB"
+        )
         txt = f"v=DKIM1; t=s; p={key}"
 
         def mock_resolve(name, rtype):
@@ -338,7 +353,11 @@ class TestCheckDKIM:
 
     def test_dkim_1024(self):
         # Chiave 1024-bit simulata — lunghezza base64 corta
-        key = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC7fmTaeGQi0HcKC1r+aVWwlPSKMjLFiUiCnkp2xGXh8Bk0r9qeMJkCwOUv1gaSfBRbUbvHyC0lBhWEFQJO6qqc+9k7rWMmXEZ0g6DfnQaTHGY2rNtVbZ6BKzHpFGi7XHJ8GS5yzZ7pGilWmqX/zYvKqxEJoKPX3nAsTbxjwIDAQAB"
+        key = (
+            "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC7fmTaeGQi0HcKC1r+aVWwlPSKMjLFiUiCnkp2xGXh8Bk0r9qeMJkCwOUv1gaSfBRb"
+            "UbvHyC0lBhWEFQJO6qqc+9k7rWMmXEZ0g6DfnQaTHGY2rNtVbZ6BKzHpFGi7XHJ8GS5yzZ7pGilWmqX/zYvKqxEJoKPX3nAsTbxjwIDA"
+            "QAB"
+        )
         txt = f"v=DKIM1; p={key}"
 
         def mock_resolve(name, rtype):
@@ -462,9 +481,16 @@ class TestDomainExists:
 class TestAnalyzeDomain:
 
     def test_analyze_domain_excellent(self):
-        dmarc_txt = "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:rua@example.com; ruf=mailto:ruf@example.com"
+        dmarc_txt = (
+            "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:rua@example.com; ruf=mailto:ruf@example.com"
+        )
         spf_txt = "v=spf1 include:spf.example.com -all"
-        dkim_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwGFMFCN431WpLoJNLzE1qfqj2jjXsKiMps8Nafya4wg3jmchjT2qlejmUW6EYQRvy+c9jHskfk6+eIFpeLcFnBg/X3AMVbxazFqatYDoRY08/eCOPF5LzpBgcclDac6Nx+kuaFEN8e0oujGWd66H+v9Q8URN2h21cSvxDKb7QzNaUUuO79SBMMQdZE0sG3KHwKnFihc3FWRqPrxx5t9y8F0RKMDG2psAlWdE6U4yMcwNqpVLpFappxFls0EjjXnebOkmvNqXlp38/DBWGjbykiN8iFrlwYwGanrH25EZ/DpWQuucBR+7zlKNiAz8H1QSFqz+jwcW/MNXwTnNClI6XwIDAQAB"
+        dkim_key = (
+            "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwGFMFCN431WpLoJNLzE1qfqj2jjXsKiMps8Nafya4wg3jmchjT2qlejmUW6E"
+            "YQRvy+c9jHskfk6+eIFpeLcFnBg/X3AMVbxazFqatYDoRY08/eCOPF5LzpBgcclDac6Nx+kuaFEN8e0oujGWd66H+v9Q8URN2h21cSvx"
+            "DKb7QzNaUUuO79SBMMQdZE0sG3KHwKnFihc3FWRqPrxx5t9y8F0RKMDG2psAlWdE6U4yMcwNqpVLpFappxFls0EjjXnebOkmvNqXlp38"
+            "/DBWGjbykiN8iFrlwYwGanrH25EZ/DpWQuucBR+7zlKNiAz8H1QSFqz+jwcW/MNXwTnNClI6XwIDAQAB"
+        )
         dkim_txt = f"v=DKIM1; t=s; p={dkim_key}"
 
         def mock_resolve(name, rtype):
@@ -472,11 +498,7 @@ class TestAnalyzeDomain:
                 return make_txt_answer([dmarc_txt])
             elif "_domainkey" in name:
                 return make_txt_answer([dkim_txt])
-            elif "_mta-sts" in name:
-                raise dns.resolver.NXDOMAIN
-            elif "_smtp._tls" in name:
-                raise dns.resolver.NXDOMAIN
-            elif "default._bimi" in name:
+            elif "_mta-sts" in name or "_smtp._tls" in name or "default._bimi" in name:
                 raise dns.resolver.NXDOMAIN
             else:
                 return make_txt_answer([spf_txt])
@@ -562,7 +584,7 @@ class TestMalformedRecords:
 
 # ─── Score normalization ────────────────────────────────────────────────────
 
-from mailradar.checker import MAX_SCORES, MAX_RAW_SCORE
+from mailradar.checker import MAX_RAW_SCORE, MAX_SCORES
 
 
 def _mock_checks(**scores):
@@ -570,10 +592,7 @@ def _mock_checks(**scores):
     from contextlib import ExitStack
     stack = ExitStack()
     for check in MAX_SCORES:
-        if check == "gpg":
-            target = "mailradar.gpg.lookup_gpg"
-        else:
-            target = f"mailradar.checker.check_{check}"
+        target = "mailradar.gpg.lookup_gpg" if check == "gpg" else f"mailradar.checker.check_{check}"
         stack.enter_context(patch(
             target, return_value=MagicMock(score=scores.get(check, 0), issues=[])
         ))
@@ -585,13 +604,17 @@ class TestScoreNormalization:
     def test_max_scores_match_real_checks(self):
         """MAX_SCORES must reflect what a perfect configuration actually earns."""
         import base64
+
         from cryptography.hazmat.primitives.asymmetric import rsa
         from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
         der = rsa.generate_private_key(public_exponent=65537, key_size=2048).public_key() \
             .public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
         dkim_2048 = f"v=DKIM1; k=rsa; p={base64.b64encode(der).decode()}"
         records = {
-            "_dmarc.example.com": "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:a@example.com; ruf=mailto:f@example.com",
+            "_dmarc.example.com": (
+                "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; "
+                "rua=mailto:a@example.com; ruf=mailto:f@example.com"
+            ),
             "example.com": "v=spf1 -all",
             "default._domainkey.example.com": dkim_2048,
             "default._bimi.example.com": "v=BIMI1; l=https://example.com/l.svg; a=https://example.com/vmc.pem",

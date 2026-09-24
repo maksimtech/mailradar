@@ -33,7 +33,7 @@ class TestVersion(unittest.TestCase):
         self.assertEqual(result.output.strip(), "MailRadar 9999.99.99")
 
     def test_version_aligned_with_pyproject(self):
-        pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         project = pyproject["project"]
         if "version" in project:
             expected = project["version"]
@@ -41,7 +41,7 @@ class TestVersion(unittest.TestCase):
             self.assertIn("version", project.get("dynamic", []))
             source = ROOT / pyproject["tool"]["hatch"]["version"]["path"]
             match = re.search(
-                r'^__version__\s*=\s*["\']([^"\']+)["\']', source.read_text(), re.MULTILINE
+                r'^__version__\s*=\s*["\']([^"\']+)["\']', source.read_text(encoding="utf-8"), re.MULTILINE
             )
             self.assertIsNotNone(match)
             expected = match.group(1)

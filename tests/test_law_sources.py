@@ -15,9 +15,11 @@ from mailradar.law_fetcher import (
     GDPR,
     NIS2,
     LawFetchError,
-    fetch_html as real_fetch_html,
     fetch_provisions,
     parse_articles,
+)
+from mailradar.law_fetcher import (
+    fetch_html as real_fetch_html,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"

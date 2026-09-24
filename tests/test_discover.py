@@ -1,15 +1,17 @@
 """Tests for MailRadar discover module."""
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from mailradar.discover import (
     DiscoveryResult,
-    _extract_emails_from_text,
-    _discover_subdomains_via_crtsh,
-    _discover_via_website,
-    _discover_via_dns,
-    _discover_via_whois,
-    _discover_common_contacts,
     _check_gpg_for_emails,
+    _discover_common_contacts,
+    _discover_subdomains_via_crtsh,
+    _discover_via_dns,
+    _discover_via_website,
+    _discover_via_whois,
+    _extract_emails_from_text,
     discover,
 )
 
@@ -123,7 +125,6 @@ class TestDiscoverViaWebsite:
 class TestDiscoverViaDns:
 
     def test_returns_list(self):
-        import dns.resolver
         mock_answer = MagicMock()
         mock_answer.exchange = MagicMock()
         mock_answer.exchange.__str__ = MagicMock(return_value="mail.example.com.")
@@ -229,35 +230,41 @@ class TestCheckGpgForEmails:
 class TestDiscover:
 
     def test_discover_returns_result(self):
-        with patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]):
-            with patch("mailradar.discover._discover_via_website", return_value=["info@example.com"]):
-                with patch("mailradar.discover._discover_via_dns", return_value=[]):
-                    with patch("mailradar.discover._discover_via_whois", return_value=[]):
-                        with patch("mailradar.discover._discover_common_contacts", return_value=[]):
-                            with patch("mailradar.discover._check_gpg_for_emails", return_value=[]):
-                                result = discover("example.com", check_gpg=False)
-                                assert isinstance(result, DiscoveryResult)
-                                assert result.domain == "example.com"
+        with (
+            patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]),
+            patch("mailradar.discover._discover_via_website", return_value=["info@example.com"]),
+            patch("mailradar.discover._discover_via_dns", return_value=[]),
+            patch("mailradar.discover._discover_via_whois", return_value=[]),
+            patch("mailradar.discover._discover_common_contacts", return_value=[]),
+            patch("mailradar.discover._check_gpg_for_emails", return_value=[]),
+        ):
+            result = discover("example.com", check_gpg=False)
+            assert isinstance(result, DiscoveryResult)
+            assert result.domain == "example.com"
 
     def test_discover_with_gpg_check(self):
-        with patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]):
-            with patch("mailradar.discover._discover_via_website", return_value=["security@example.com"]):
-                with patch("mailradar.discover._discover_via_dns", return_value=[]):
-                    with patch("mailradar.discover._discover_via_whois", return_value=[]):
-                        with patch("mailradar.discover._discover_common_contacts", return_value=[]):
-                            with patch("mailradar.discover._check_gpg_for_emails", return_value=["security@example.com"]):
-                                result = discover("example.com", check_gpg=True)
-                                assert isinstance(result, DiscoveryResult)
+        with (
+            patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]),
+            patch("mailradar.discover._discover_via_website", return_value=["security@example.com"]),
+            patch("mailradar.discover._discover_via_dns", return_value=[]),
+            patch("mailradar.discover._discover_via_whois", return_value=[]),
+            patch("mailradar.discover._discover_common_contacts", return_value=[]),
+            patch("mailradar.discover._check_gpg_for_emails", return_value=["security@example.com"]),
+        ):
+            result = discover("example.com", check_gpg=True)
+            assert isinstance(result, DiscoveryResult)
 
     def test_discover_empty_domain(self):
-        with patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]):
-            with patch("mailradar.discover._discover_via_website", return_value=[]):
-                with patch("mailradar.discover._discover_via_dns", return_value=[]):
-                    with patch("mailradar.discover._discover_via_whois", return_value=[]):
-                        with patch("mailradar.discover._discover_common_contacts", return_value=[]):
-                            with patch("mailradar.discover._check_gpg_for_emails", return_value=[]):
-                                result = discover("example.com", check_gpg=False)
-                                assert result.emails == []
+        with (
+            patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]),
+            patch("mailradar.discover._discover_via_website", return_value=[]),
+            patch("mailradar.discover._discover_via_dns", return_value=[]),
+            patch("mailradar.discover._discover_via_whois", return_value=[]),
+            patch("mailradar.discover._discover_common_contacts", return_value=[]),
+            patch("mailradar.discover._check_gpg_for_emails", return_value=[]),
+        ):
+            result = discover("example.com", check_gpg=False)
+            assert result.emails == []
 
 
 class TestDiscoveryResult:

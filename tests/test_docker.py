@@ -5,9 +5,9 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCKERFILE = (ROOT / "Dockerfile").read_text()
-DOCKER_WORKFLOW = (ROOT / ".github" / "workflows" / "docker.yml").read_text()
-SECURITY = (ROOT / "SECURITY.md").read_text()
+DOCKERFILE = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+DOCKER_WORKFLOW = (ROOT / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
+SECURITY = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
 
 
 def _run_instructions(dockerfile: str) -> list[str]:

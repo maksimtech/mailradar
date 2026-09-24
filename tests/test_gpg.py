@@ -1,8 +1,10 @@
 """Tests for GPG keyserver lookup."""
 import sys
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from mailradar.gpg import lookup_gpg, lookup_gpg_by_email, GPGResult
+
+from mailradar.gpg import lookup_gpg, lookup_gpg_by_email
 
 
 class TestLookupGPG:

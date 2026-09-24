@@ -2,13 +2,21 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from typer.testing import CliRunner
-from mailradar.cli import app
+
 from mailradar.checker import (
-    DomainReport, DMARCResult, SPFResult, DKIMResult,
-    BIMIResult, MTASTSResult, TLSRPTResult, GPGResult
+    BIMIResult,
+    DKIMResult,
+    DMARCResult,
+    DomainReport,
+    GPGResult,
+    MTASTSResult,
+    SPFResult,
+    TLSRPTResult,
 )
+from mailradar.cli import app
 
 
 def _make_domain_report(domain="example.com", score=75, grade="GOOD"):
@@ -331,8 +339,14 @@ class TestCheckCommandWithIssues(unittest.TestCase):
     def test_check_with_issues(self, mock_analyze):
         """Test report with issues list populated."""
         from mailradar.checker import (
-            DomainReport, DMARCResult, SPFResult, DKIMResult,
-            BIMIResult, MTASTSResult, TLSRPTResult, GPGResult
+            BIMIResult,
+            DKIMResult,
+            DMARCResult,
+            DomainReport,
+            GPGResult,
+            MTASTSResult,
+            SPFResult,
+            TLSRPTResult,
         )
         report = DomainReport(
             domain="example.com",

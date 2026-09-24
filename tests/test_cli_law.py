@@ -8,7 +8,12 @@ from typer.testing import CliRunner
 
 from mailradar import law_fetcher
 from mailradar.checker import (
-    DKIMResult, DMARCResult, DomainReport, GPGResult, MTASTSResult, SPFResult,
+    DKIMResult,
+    DMARCResult,
+    DomainReport,
+    GPGResult,
+    MTASTSResult,
+    SPFResult,
 )
 from mailradar.cli import app
 

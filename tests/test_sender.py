@@ -4,18 +4,18 @@ Uses mocks to avoid real SMTP connections and GPG interactions.
 """
 import shutil
 import tempfile
-import pytest
-from unittest.mock import patch, MagicMock
-from mailradar.sender import (
-    _encrypt_with_gpg,
-    _sign_with_gpg,
-    _send_smtp,
-    send_report,
-    SMTPConfig,
-    SendResult,
-)
-from mailradar.checker import GPGResult
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from mailradar.checker import GPGResult
+from mailradar.sender import (
+    SMTPConfig,
+    _encrypt_with_gpg,
+    _send_smtp,
+    _sign_with_gpg,
+    send_report,
+)
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -235,7 +235,40 @@ def test_send_report_encryption_failure_without_smtp():
     assert result.method == "gpg-failed"
 
 
-@pytest.mark.skipif(shutil.which("gpg") is None, reason="gpg not installed")
+def _gpg_can_generate_a_key() -> bool:
+    """Whether gpg is not merely installed but usable from here.
+
+    which("gpg") was not enough. Under Git Bash the gpg on PATH is the MSYS
+    build: it works with a POSIX homedir and exits 2 on a Windows one, which is
+    what tempfile hands it. The test then reported a broken encryption path
+    when the only broken thing was the toolchain — so the probe does the same
+    thing the test does, once, and the answer decides whether to run it.
+    """
+    import subprocess
+    import tempfile
+    binary = shutil.which("gpg")
+    if binary is None:
+        return False
+    home = tempfile.mkdtemp(prefix="mr-probe-")
+    try:
+        completed = subprocess.run(
+            [binary, "--batch", "--homedir", home, "--passphrase", "",
+             "--pinentry-mode", "loopback", "--quick-gen-key",
+             "Probe <probe@example.invalid>", "default", "default", "never"],
+            capture_output=True, timeout=120,
+        )
+        return completed.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+    finally:
+        subprocess.run(["gpgconf", "--homedir", home, "--kill", "all"], capture_output=True)
+        shutil.rmtree(home, ignore_errors=True)
+
+
+@pytest.mark.skipif(
+    not _gpg_can_generate_a_key(),
+    reason="gpg is absent, or cannot create a keyring at the path tempfile gives it",
+)
 def test_encrypt_with_fetched_key_real_gpg():
     """End-to-end: a key that is NOT in the user's keyring can be used."""
     import subprocess

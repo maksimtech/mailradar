@@ -1,9 +1,15 @@
 """Tests for report generation."""
-import pytest
-from unittest.mock import MagicMock
+from mailradar.checker import (
+    BIMIResult,
+    DKIMResult,
+    DMARCResult,
+    DomainReport,
+    GPGResult,
+    MTASTSResult,
+    SPFResult,
+    TLSRPTResult,
+)
 from mailradar.reporter import generate_report
-from mailradar.checker import DomainReport, DMARCResult, SPFResult, DKIMResult
-from mailradar.checker import BIMIResult, MTASTSResult, TLSRPTResult, GPGResult
 
 
 def make_report(domain="example.com", score=85, grade="GOOD") -> DomainReport:

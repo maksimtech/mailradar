@@ -1,6 +1,6 @@
 """Tests for the EUR-Lex fetcher, on an excerpt of the real GDPR page."""
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -11,14 +11,16 @@ from mailradar.law_fetcher import (
     GDPR,
     LawFetchError,
     Provision,
-    fetch_html as real_fetch_html,
     fetch_provisions,
     parse_articles,
+)
+from mailradar.law_fetcher import (
+    fetch_html as real_fetch_html,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GDPR_PAGE = FIXTURES / "gdpr_it_excerpt.html"
-NOW = datetime(2026, 9, 19, 14, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 19, 14, 0, tzinfo=UTC)
 
 ARTICLES = ("32", "33")
 POINT_REF, POINT_TEXT = ("32(1)(a)", "a) la pseudonimizzazione e la cifratura dei dati personali;")
@@ -145,7 +147,7 @@ def test_provision_dict_round_trip():
     assert p.to_dict() == {
         "article": "32(1)(a)",
         "text": "a) testo;",
-        "sha256": hashlib.sha256("a) testo;".encode("utf-8")).hexdigest(),
+        "sha256": hashlib.sha256(b"a) testo;").hexdigest(),
         "fetched_at": "2026-09-19T14:00:00Z",
         "celex": "32016R0679",
     }
