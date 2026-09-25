@@ -1,0 +1,33 @@
+name: License Check
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+jobs:
+  licenses:
+    name: License Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -e .  # NOSONAR
+          pip install pip-licenses
+      - name: Check licenses
+        run: |
+          pip-licenses \
+            --order=license \
+            --format=markdown \
+            --output-file=licenses.md
+          cat licenses.md
+      - name: Fail on forbidden licenses
+        run: |
+          pip-licenses --fail-on="GPL;AGPL;LGPL"
