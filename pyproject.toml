@@ -47,6 +47,11 @@ dev = [
     "mypy>=1.18",
     "hypothesis>=6.140",
     "mutmut>=3.8",
+    # Read by the tests that check the workflows against pyproject.toml. It
+    # used to arrive on its own through mutmut -> libcst, until libcst started
+    # asking for pyyaml-ft instead on Python 3.13 and `import yaml` stopped
+    # resolving there — green on 3.11, 3.12 and 3.14, red on one version.
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
