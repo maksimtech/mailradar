@@ -25,12 +25,36 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install -e .  # NOSONAR - trusted internal project, no external setup scripts
+        # The dev extra, or pytest is not here to run the suite with.
+        run: pip install -e ".[dev]"  # NOSONAR - trusted internal project, no external setup scripts
+
+      - name: Run test suite
+        # --ignore=tests/benchmarks: they import pytest-codspeed, which is not
+        # in the dev extra — codspeed.yml runs them with what they need.
+        run: >-
+          pytest tests/ -v --ignore=tests/benchmarks
+          --cov=mailradar --cov-report=xml --cov-report=term-missing
+
       - name: Test CLI
-        run: |
-          mailradar --help
-          mailradar check maksimtech.com
-          mailradar discover maksimtech.com --no-gpg
+        # --help only. `check` and `discover` used to run here against a live
+        # domain, so this check depended on DNS and on somebody else's mail
+        # server; what they exercised, 368 tests exercise without the network.
+        # This one still catches an import error or a broken entry point, which
+        # the suite cannot: it imports the modules directly.
+        run: mailradar --help
+
+      - name: Upload coverage to Codecov
+        # Once, not once per matrix entry: the same report three times is three
+        # uploads of one measurement.
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          # A failed upload loses a metric, it does not invalidate the tests that
+          # just passed. What it must not do is stay silent forever — ask Codecov
+          # whether the report arrived.
+          fail_ci_if_error: false
 
   summary:
     # The branch ruleset requires a check named exactly "Tests". The matrix job
