@@ -47,6 +47,21 @@ def normalised(name: str) -> str:
     return name.lower().replace("_", "-")
 
 
+def repo_modules() -> set[str]:
+    """Modules this repository provides itself, outside the package.
+
+    scripts/ and tools/ hold this project's own code, and a test that reaches
+    one of them through sys.path is not borrowing anything from anybody. The
+    distinction is the whole point of this file: `bump_version` is declared
+    nowhere because there is nobody to declare it to.
+    """
+    return {
+        path.stem
+        for folder in ("scripts", "tools")
+        for path in (ROOT / folder).glob("*.py")
+    }
+
+
 def _optional_in(tree: ast.AST) -> set[str]:
     """Modules this file has declared it can do without.
 
@@ -84,7 +99,7 @@ def required_modules() -> list[str]:
     for path in sorted(TESTS.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         needed |= _imports_in(tree) - _optional_in(tree)
-    needed -= set(sys.stdlib_module_names) | FIRST_PARTY
+    needed -= set(sys.stdlib_module_names) | FIRST_PARTY | repo_modules()
     return sorted(m for m in needed if not m.startswith("_"))
 
 
