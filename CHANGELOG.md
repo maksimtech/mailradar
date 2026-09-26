@@ -8,6 +8,34 @@ versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`)
 
 ## [Unreleased]
 
+## [2026.40] - 2026-09-26
+
+### Changed
+
+- **Nothing in the shipped package.** `mailradar/` is byte-identical to
+  2026.09.12: no behaviour changes, no fixes, nothing to upgrade for. This
+  version exists because the five Radar restarted from a common baseline, and a
+  baseline that skips whoever had nothing to say would not be one. It is said
+  here rather than left to be guessed from an empty diff.
+
+- **Baseline: the five Radar restart from a common number.** They had drifted to
+  .32, .12, .11, .6 and .3 of the same generation, which left the shared part of
+  the version meaning nothing at all. The highest count in the suite was taken,
+  rounded up for headroom, and every Radar starts again from 2026.40. From here
+  the count belongs to each Radar again, and something urgent gets a third
+  segment on top: 2026.40.1 before 2026.41.
+
+- **The workflow named Tests now runs the tests.** It contained no pytest
+  invocation: it installed the package and ran three CLI commands, two of them
+  against a live domain, so the check required on every pull request depended on
+  DNS and on somebody else's mail server. The suite was running inside
+  `sonarcloud.yml`, on 3.12 only, which meant the four-version matrix here was
+  proving that `mailradar --help` exits zero on four versions.
+
+- PyYAML is declared. The tests read the workflow files and had been borrowing
+  it from `mutmut` -> `libcst`, which on Python 3.13 requires `pyyaml-ft`
+  instead — a fork that installs no module called `yaml`.
+
 ## [2026.09.12] - 2026-09-24
 
 ### Fixed
