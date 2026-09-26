@@ -27,7 +27,12 @@ jobs:
       - name: Docker Scout CVE scan
         uses: docker/scout-action@v1
         with:
-          command: cves
+          # cves says what is broken in the image; recommendations says
+          # whether a base image exists that fixes it. On 2026-09-26 the first
+          # scan of exeradar found five HIGH CVEs, all of them in
+          # python:3.14-slim-trixie and none in this project's code — which is
+          # a fact nobody can act on without the second command.
+          command: cves,recommendations
           image: maksimtech/mailradar:latest
           only-severities: critical,high
           exit-code: false
