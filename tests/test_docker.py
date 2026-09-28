@@ -86,7 +86,7 @@ class TestSecurityPolicy(unittest.TestCase):
         self.assertNotIn("Bookworm", SECURITY)
 
     def test_openssl_not_listed_as_open_cve(self):
-        # OpenSSL non compare nella scansione Trivy dell'immagine su Trixie
+        # OpenSSL does not appear in the Trivy scan of the image on Trixie
         self.assertNotIn("OpenSSL", SECURITY)
 
     def test_last_reviewed_after_trixie_scan(self):

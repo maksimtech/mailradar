@@ -57,24 +57,25 @@ console = Console()
 
 @contextlib.contextmanager
 def _status(message: str):
-    """console.status(), svuotando i flussi prima che lo spinner si fermi.
+    """console.status(), flushing the streams before the spinner stops.
 
-    Mentre lo spinner gira, Rich sostituisce sys.stdout e sys.stderr con un
-    FileProxy che trattiene il testo finche' non incontra un newline, e `Live`
-    ripristina i flussi originali senza svuotarlo. Una riga parziale scritta da
-    una libreria resta nel buffer e viene stampata soltanto quando l'interprete
-    finalizza il proxy, quando importare non e' piu' possibile:
+    While the spinner runs, Rich replaces sys.stdout and sys.stderr with a
+    FileProxy that holds text until it meets a newline, and `Live` puts the
+    original streams back without flushing it. A partial line written by a library
+    stays in that buffer and is printed only when the interpreter finalises the
+    proxy, at a point where importing is no longer possible:
 
         Exception ignored while finalizing file <rich.file_proxy.FileProxy ...>
         ImportError: sys.meta_path is None, Python is likely shutting down
 
-    Un comando riuscito finisce cosi' con un traceback, e chi guarda non ha modo
-    di sapere che il risultato era valido. Solo su terminale: in pipe Rich non
-    installa il proxy e il difetto non si vede. Osservato su APKRadar con rich
-    15.0.0 e Python 3.14.7; qui gli spinner avvolgono le query DNS e l'invio.
+    A successful command therefore ends in a traceback, and whoever is watching
+    has no way of knowing the result was valid. Only on a terminal: through a pipe
+    Rich does not install the proxy and the defect cannot be seen. Observed on
+    APKRadar with rich 15.0.0 and Python 3.14.7; here the spinners wrap the DNS
+    queries and the sending.
 
-    Lo `finally` copre anche il caso con eccezione: e' quello in cui il messaggio
-    parziale della libreria serve di piu'.
+    The `finally` also covers the case with an exception: that is the one where
+    the library's partial message matters most.
     """
     with console.status(message):
         try:

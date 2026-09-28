@@ -1,23 +1,24 @@
 """
-MailRadar — lo spinner non deve lasciare niente nel buffer di Rich.
+MailRadar — the spinner must leave nothing in Rich's buffer.
 
-Mentre `console.status()` gira, Rich sostituisce `sys.stdout` e `sys.stderr` con
-un `FileProxy` che trattiene il testo finché non incontra un newline, e `Live`
-ripristina i flussi originali **senza svuotare quel buffer**. Una riga parziale
-scritta da una libreria resta lì e viene stampata quando l'interprete finalizza
-l'oggetto, quando importare non è più possibile:
+While `console.status()` runs, Rich replaces `sys.stdout` and `sys.stderr` with a
+`FileProxy` that holds text until it meets a newline. `Live` puts the original
+streams back **without flushing that buffer**: a partial line written by a library
+stays there, and is printed only when the interpreter finalises the object, at a
+point where importing is no longer possible:
 
     Exception ignored while finalizing file <rich.file_proxy.FileProxy object …>
     ImportError: sys.meta_path is None, Python is likely shutting down
 
-Un comando riuscito finisce quindi con un traceback. Osservato su APKRadar con
-rich 15.0.0 e Python 3.14.7; qui gli spinner avvolgono le query DNS, la lettura
-di crt.sh e l'invio delle lettere, cioè codice di terzi che scrive sui flussi.
+A successful command therefore ends in a traceback, and whoever is watching has
+no way of knowing the result was valid. Observed on APKRadar with rich 15.0.0 and
+Python 3.14.7; here the spinners wrap the DNS interrogations, the crt.sh lookup
+and the sending of letters, that is third party code writing to the streams.
 
-Il test gira in un sottoprocesso perché la finalizzazione è ciò che si misura, e
-dentro il processo di pytest non avverrebbe mai. Serve un `Console` che si crede
-un terminale: Rich installa il proxy solo in quel caso, ed è la ragione per cui
-in pipe il difetto non si vede.
+The test runs in a subprocess because finalisation is the thing being measured,
+and inside pytest's own process it would never happen. It needs a `Console` that
+believes it is a terminal: Rich installs the proxy only in that case, which is why
+the defect cannot be seen through a pipe.
 """
 import subprocess
 import sys
@@ -38,7 +39,7 @@ def fake_domain_exists(domain):
     # FileProxy di Rich oltre la fine dello spinner, con la riga parziale dentro.
     global held_stdout
     held_stdout = sys.stdout
-    sys.stdout.write("riga-parziale-senza-newline")
+    sys.stdout.write("partial-line-without-newline")
     return False
 
 
@@ -65,4 +66,4 @@ def test_check_leaves_nothing_in_the_proxy_buffer():
     # E la riga parziale non va persa: svuotare il buffer significa stamparla,
     # non buttarla. Una correzione che la scartasse passerebbe i due controlli
     # sopra e nasconderebbe l'output di una libreria.
-    assert "riga-parziale-senza-newline" in proc.stdout
+    assert "partial-line-without-newline" in proc.stdout
