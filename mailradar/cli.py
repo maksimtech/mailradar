@@ -55,6 +55,37 @@ app = typer.Typer(
 console = Console()
 
 
+@contextlib.contextmanager
+def _status(message: str):
+    """console.status(), svuotando i flussi prima che lo spinner si fermi.
+
+    Mentre lo spinner gira, Rich sostituisce sys.stdout e sys.stderr con un
+    FileProxy che trattiene il testo finche' non incontra un newline, e `Live`
+    ripristina i flussi originali senza svuotarlo. Una riga parziale scritta da
+    una libreria resta nel buffer e viene stampata soltanto quando l'interprete
+    finalizza il proxy, quando importare non e' piu' possibile:
+
+        Exception ignored while finalizing file <rich.file_proxy.FileProxy ...>
+        ImportError: sys.meta_path is None, Python is likely shutting down
+
+    Un comando riuscito finisce cosi' con un traceback, e chi guarda non ha modo
+    di sapere che il risultato era valido. Solo su terminale: in pipe Rich non
+    installa il proxy e il difetto non si vede. Osservato su APKRadar con rich
+    15.0.0 e Python 3.14.7; qui gli spinner avvolgono le query DNS e l'invio.
+
+    Lo `finally` copre anche il caso con eccezione: e' quello in cui il messaggio
+    parziale della libreria serve di piu'.
+    """
+    with console.status(message):
+        try:
+            yield
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+    console.file.flush()
+
+
+
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(f"MailRadar {mailradar.__version__}")
@@ -282,14 +313,14 @@ def check(
     from mailradar.checker import domain_exists, find_domain_variants
 
     # Verifica se il dominio esiste
-    with console.status(f"[cyan]Checking if {escape(domain)} exists...[/cyan]"):
+    with _status(f"[cyan]Checking if {escape(domain)} exists...[/cyan]"):
         exists = domain_exists(domain)
 
     if not exists:
         console.print(f"\n[yellow]⚠️  Domain [bold]{escape(domain)}[/bold] not found in DNS.[/yellow]")
         console.print("[dim]Scanning TLD variants...[/dim]\n")
 
-        with console.status("[cyan]Scanning variants...[/cyan]"):
+        with _status("[cyan]Scanning variants...[/cyan]"):
             variants = find_domain_variants(domain)
 
         if not variants:
@@ -316,7 +347,7 @@ def check(
 
     console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
-    with console.status("[cyan]Running DNS checks...[/cyan]"):
+    with _status("[cyan]Running DNS checks...[/cyan]"):
         report = analyze_domain(domain)
 
     _print_report(report)
@@ -433,7 +464,7 @@ def report(
 
     console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
-    with console.status("[cyan]Running DNS checks...[/cyan]"):
+    with _status("[cyan]Running DNS checks...[/cyan]"):
         from mailradar.checker import analyze_domain
         analysis = analyze_domain(domain)
 
@@ -486,7 +517,7 @@ def send(
 
     console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
-    with console.status("[cyan]Running DNS checks...[/cyan]"):
+    with _status("[cyan]Running DNS checks...[/cyan]"):
         analysis = analyze_domain(domain)
 
     _print_report(analysis)
@@ -514,7 +545,7 @@ def send(
 
     # Smart send
     console.print("\n[bold cyan]📧 Sending report...[/bold cyan]")
-    with console.status("[cyan]Checking GPG keys and sending...[/cyan]"):
+    with _status("[cyan]Checking GPG keys and sending...[/cyan]"):
         result = send_report(
             domain=domain,
             report_text=report_text,
@@ -564,7 +595,7 @@ def discover(
 
     console.print(f"\n[dim]Discovering email addresses for [bold]{escape(domain)}[/bold]...[/dim]")
 
-    with console.status("[cyan]Querying crt.sh, website and RDAP...[/cyan]"):
+    with _status("[cyan]Querying crt.sh, website and RDAP...[/cyan]"):
         result = run_discover(domain, check_gpg=not no_gpg)
 
     if not result.emails and not result.candidates:
