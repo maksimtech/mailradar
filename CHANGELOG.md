@@ -3,10 +3,51 @@
 All notable changes to MailRadar are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project uses calendar versioning (`YYYY.0M.PATCH`). PyPI normalizes
-versions by dropping leading zeros (e.g. `2026.09.8` is published as `2026.9.8`).
+and this project uses **CalVer, Apple style**: `YYYY.count[.fix]`, not SemVer.
+`YYYY` is the generation, shared by the five Radar; the count belongs to each of
+them and moves when its code moves; the third segment is for something urgent on
+what has already shipped. The line above described `YYYY.0M.PATCH` until
+2026-09-29, which no version in this file has ever matched — 40 is not a month,
+and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
+
+## [2026.41] - 2026-09-29
+
+### Fixed
+
+- **The report no longer ends with a traceback.** Rich wraps `sys.stdout` in a
+  `FileProxy` while a spinner runs and restores the stream without flushing it, so
+  a partial line sat in that buffer until the proxy was garbage-collected — often
+  during interpreter shutdown, where the message is
+  `ImportError: sys.meta_path is None`. It appeared after a completed analysis, on
+  a terminal only, and looked like the software failing at the worst possible
+  moment. All eight spinners now flush both streams before they stop.
+
+- **One pull request per CodeQL upgrade, not four.** The four `codeql-action`
+  steps are pinned to a commit here, and Dependabot treats each path as its own
+  dependency: on 2026-09-29 it opened #18, #19, #21 and #22 for the same
+  4.38.1 → 4.38.2 bump, and every one failed with "Loaded a configuration file for
+  version '4.38.1', but running version '4.38.2'" — each moved one step and left
+  three behind, while CodeQL requires them to match. All four are on 4.38.2 now,
+  and a `groups` entry keeps them moving together. mailradar was the only Radar
+  exposed: the other four track the moving `@v4` tag, which hides the skew.
+
+### Added
+
+- **A CI gate that refuses.** Every other security workflow reports: `snyk.yml`
+  carries `continue-on-error`, CodeQL and Docker Scout upload SARIF, and
+  SonarCloud decides its quality gate after the job has already succeeded. On
+  2026-09-29 all of them were green while ten high-severity alerts were open.
+  `security-posture.yml` reads what they published and fails when a blocking
+  finding has nobody's name against it; `SECURITY-EXCEPTIONS.toml` records the
+  accepted ones, each with a reason and a review date. `sonarcloud.yml` now waits
+  for its own quality gate, without which a red gate is a green job.
+
+### Changed
+
+- The prose is in English throughout. The quoted law stays in Italian, because
+  that is the language it is read in.
 
 ## [2026.40] - 2026-09-26
 
