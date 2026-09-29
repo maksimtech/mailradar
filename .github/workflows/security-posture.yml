@@ -1,0 +1,112 @@
+name: Security Posture
+# The gate that refuses. Every other security workflow here reports: snyk.yml
+# carries `continue-on-error` so a pull request is not blocked by findings that
+# were already there, CodeQL and Docker Scout upload SARIF, and SonarCloud
+# evaluates its quality gate after its job has finished succeeding. On 2026-09-28
+# all of them were green while thirteen high-severity alerts were open and the
+# Sonar gate was red.
+#
+# This job reads what they published — GitHub's code scanning alerts, which is
+# where all four end up — and fails when a blocking finding has nobody's name
+# against it. `SECURITY-EXCEPTIONS.toml` holds the accepted ones, each with a
+# reason and a review date; tools/security_exceptions.py is the rule, and its
+# tests are in tests/test_security_exceptions.py.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Weekly, because an exception expires by the calendar and not by a commit: a
+  # review date that passes while nobody pushes has to fail on its own.
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Reading the alerts the other workflows uploaded.
+  security-events: read
+
+jobs:
+  posture:
+    name: Security Posture
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      # The gate reads what the scanners published, so it has to run after they
+      # have spoken about *this* commit. On 5fa1774 it did not: it read the alerts
+      # while CodeQL was still analysing, reported the finding that commit had
+      # just fixed, and failed a build whose product was clean.
+      #
+      # Waiting on the runs of this SHA rather than sleeping a fixed time: the
+      # analyses take what they take, and a sleep is either too short or wasted.
+      # A timeout says so and checks nothing, because "the scanners did not
+      # finish" is not "there is nothing wrong".
+      - name: Wait for this commit's analyses
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPLOADERS: CodeQL,Snyk,Docker Scout CVE Scan,Trivy Security Scan
+        run: |
+          # The counting is done in Python and not in `--jq`: gh's own jq takes a
+          # filter and not `--arg`, so the commit and the names would have to be
+          # pasted into the expression.
+          deadline=$(( SECONDS + 1200 ))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            gh run list --limit 40 --json name,status,headSha > runs.json
+            pending=$(python - <<'COUNT'
+          import json, os
+          wanted = set(os.environ["UPLOADERS"].split(","))
+          sha = os.environ["GITHUB_SHA"]
+          runs = json.load(open("runs.json", encoding="utf-8"))
+          print(sum(1 for r in runs
+                    if r["headSha"] == sha and r["name"] in wanted
+                    and r["status"] != "completed"))
+          COUNT
+          )
+            if [ "$pending" = "0" ]; then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "waiting for $pending analysis run(s) of $GITHUB_SHA"
+            sleep 30
+          done
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+
+      - name: Report that the analyses did not finish
+        if: ${{ steps.wait.outputs.ready == 'false' }}
+        run: |
+          echo "::notice title=Posture not evaluated::The scanners of this commit did not finish within twenty minutes, so their alerts describe an earlier commit. Nothing was checked — and that is not the same as nothing being wrong."
+
+      # A fork pull request gets a token that cannot read code scanning alerts,
+      # and an empty list would read as a clean product. The job says so and
+      # stops instead of passing on no information.
+      - name: Collect the open alerts
+        if: ${{ steps.wait.outputs.ready == 'true' }}
+        id: alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100" \
+               > alerts.json 2>api-error.txt; then
+            echo "count=$(python -c 'import json;print(len(json.load(open("alerts.json"))))')" >> "$GITHUB_OUTPUT"
+          else
+            echo "readable=false" >> "$GITHUB_OUTPUT"
+            cat api-error.txt
+          fi
+
+      - name: Report that the alerts could not be read
+        if: ${{ steps.alerts.outputs.readable == 'false' }}
+        run: |
+          echo "::notice title=Posture not evaluated::This run cannot read code scanning alerts (a fork pull request, or the feature is off). Nothing was checked — and that is not the same as nothing being wrong."
+
+      - name: Every blocking alert is explained, and every exception is in date
+        if: ${{ steps.wait.outputs.ready == 'true' && steps.alerts.outputs.readable != 'false' }}
+        run: python tools/security_exceptions.py alerts.json

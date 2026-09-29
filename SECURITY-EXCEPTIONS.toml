@@ -1,0 +1,148 @@
+# Findings that are open, known, and accepted for now — each with a reason and a
+# date. `.github/workflows/security-posture.yml` reads this file: an open high or
+# critical alert with no entry here fails the build, an entry past its
+# `review_by` fails the build, and an entry that no longer matches anything fails
+# the build too, so the record cannot drift away from the product.
+#
+# The rule this file exists to serve: block on everything we can fix, never block
+# on an upstream flaw with no fix available — but write down why, and when that
+# will be looked at again.
+#
+# Fields: id, where, why, review_by are required. `source` narrows an entry to one
+# scanner; `path` narrows it to one file, which matters for a rule that can fire
+# anywhere — an entry for a CodeQL rule without a path would excuse the next real
+# occurrence of it somewhere else.
+#
+# Written on 2026-09-29 against the ten blocking alerts GitHub then held for this
+# repository. The Debian positions were read out of the security tracker with
+# `patchradar debian`, and the CodeQL ones by opening the lines.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Debian 13 (trixie) packages of the base image. `apt-get upgrade` runs at build
+# time and the image is rebuilt at every release, so a fix Debian ships arrives
+# here without anyone chasing it.
+#
+# The four below are not one case, although every scanner prints them the same
+# way — "no fix available", one line, no distinction:
+#
+#   zlib, perl   open in bookworm, trixie, sid and forky alike, nothing
+#                scheduled anywhere. Waiting is not a plan; the Debian bug is
+#                where evidence goes.
+#   attr, acl    already fixed in unstable, filed no-dsa for trixie *because the
+#                fix comes in a point release*. That waiting ends at a dated
+#                event: rebuild after it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-85091"
+source = "Docker Scout"
+where = "zlib 1:1.3.dfsg+really1.3.1-1, python slim-trixie base image"
+why = """
+Debian reports no fixed version in any suite — open in bookworm, trixie, sid and \
+forky, urgency not yet assigned, Debian bug 1146895. There is nothing to wait \
+for and nothing to ask for; what moves a flaw in this state is evidence on that \
+bug.
+
+Nothing in this repository can close it either: the package comes from the base \
+image and is rebuilt at every release. An out-of-bounds write reached through \
+gzprintf; mailradar touches zlib only through Python's own module, for HTTP \
+decompression of responses it requested.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "SNYK-DEBIAN13-ZLIB-19520500"
+source = "Snyk Container"
+where = "zlib, python slim-trixie base image"
+why = "The same zlib flaw as CVE-2026-85091 above, reported by the other scanner."
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-82560"
+source = "Docker Scout"
+where = "perl-base, python slim-trixie base image"
+why = """
+Open in all four suites, including sid — Debian bug 1148455, nothing scheduled. \
+Scout names the *source* package `perl`, which in Debian produces both the \
+removable `perl` and `perl-base`, which is Essential and which dpkg itself \
+depends on. Measured inside the built patchradar image on 2026-09-29, only \
+`perl-base` is installed; this image is built the same way, so the finding is \
+ours to record and not ours to close.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "SNYK-DEBIAN13-ATTR-17678182"
+source = "Snyk Container"
+where = "attr 1:2.5.2-3, python slim-trixie base image"
+why = """
+CVE-2026-54371, and not "no fix available" as the one-line report implies: \
+Debian has fixed it in unstable and forky (attr 1:2.6.0-1) and filed it no-dsa \
+for trixie with the note "Will be fixed first in unstable, then point release \
+update; not to be backported by individual patches" — Debian bug 1141107.
+
+The fix is scheduled, not absent, so the only thing to do is rebuild after the \
+next trixie point release. The date below is set for that: if the point release \
+has happened and this is still reported, the rebuild did not happen. The flaw is \
+a symlink traversal in recursive getfattr/setfattr, which mailradar never runs.
+"""
+review_by = "2026-11-30"
+
+[[exception]]
+id = "SNYK-DEBIAN13-ACL-17677866"
+source = "Snyk Container"
+where = "acl 2.3.2-2, python slim-trixie base image"
+why = """
+CVE-2026-54369, Debian bug 1141110, in the same position as attr above: fixed in \
+unstable and forky (acl 2.4.0-1), no-dsa for trixie with the fix scheduled for a \
+point release. Debian's note says why it cannot be backported piecemeal — the \
+fix adds the `acl_*_at()` ABI of 2.4.0.
+
+A local TOCTOU in recursive setfacl/chacl; mailradar calls neither.
+"""
+review_by = "2026-11-30"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CodeQL `py/incomplete-url-substring-sanitization`, five alerts across two test
+# files. Read line by line on 2026-09-29 before being written down.
+#
+# The rule fires on `"something.tld" in text`, on the assumption that a hostname
+# literal tested with `in` is a URL being checked. In these files the right side
+# is a report mailradar just generated and the left side is the domain the report
+# is about: `assert "example.com" in text`. Nothing is sanitized, and the only
+# consequence of the result is whether the test passes.
+#
+# The check that matters is not in the tests but in the code, and it was made
+# rather than assumed: mailradar compares hostnames by equality and suffix —
+# discover.py:62 `name.endswith("." + domain)`, gpg.py:40
+# `hostname == "keys.openpgp.org" or hostname.endswith(".openpgp.org")` — so a
+# lookalike domain does not pass for the real one. Had it been a substring test
+# there, these alerts would have been a fix and not an entry.
+#
+# An entry here is scoped to its file, so a genuine occurrence of this rule
+# anywhere else still fails the build.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "py/incomplete-url-substring-sanitization"
+source = "CodeQL"
+path = "tests/test_reporter.py"
+where = "test_reporter.py:46, 56, 65, 71 — assertions on the generated report"
+why = """
+Four assertions that the audited domain appears in the report text, one per \
+language the reporter can produce, including the fallback when an unknown \
+language is asked for. The subject is text generated in the same test; there is \
+no URL and no sanitization.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "py/incomplete-url-substring-sanitization"
+source = "CodeQL"
+path = "tests/benchmarks/test_bench_checker.py"
+where = "test_bench_checker.py:67 — the benchmark's own assertion"
+why = """
+One assertion of the same shape, in a benchmark that measures how long a check \
+takes. Same reasoning as tests/test_reporter.py above.
+"""
+review_by = "2026-12-31"

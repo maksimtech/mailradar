@@ -35,6 +35,13 @@ CORE = {
     "mutation",     # do the tests actually test
     "publish",      # PyPI
     "release",      # GitHub release from a tag
+    # The gate that refuses. Every other security workflow reports: snyk
+    # carries continue-on-error, CodeQL and Docker Scout upload SARIF, and
+    # SonarCloud decides its gate after the job has already succeeded. This
+    # one reads what they published and fails when a blocking finding has
+    # nobody's name against it. It belongs here and not in CAPABILITY: the
+    # policy is not optional.
+    "security-posture",
 }
 
 # Required only of a Radar that has what they need.
