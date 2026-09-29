@@ -53,3 +53,15 @@ jobs:
         run: |
           docker run --rm mailradar:build-check --help > /dev/null
           docker run --rm -i -e EXPECTED_VERSION --entrypoint python mailradar:build-check - < tests/docker/smoke.py
+
+      # What the image contains, read from the image itself. This is the only place
+      # it can be read: Docker Desktop will not install on the machine this is
+      # developed on, where Windows 10 IoT Enterprise LTSC 2021 is build 19044 and
+      # Docker requires 19045 — a build that edition never receives. A Linux runner
+      # is the truer place for the question anyway.
+      #
+      # See tests/docker/inspect.sh for what it settles: SECURITY-EXCEPTIONS.toml
+      # answers two of its claims with evidence borrowed from patchradar's image
+      # rather than measured in this one.
+      - name: What the image contains
+        run: docker run --rm -i --entrypoint sh mailradar:build-check - < tests/docker/inspect.sh
