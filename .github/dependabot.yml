@@ -21,3 +21,17 @@ updates:
     labels:
       - dependencies
       - github-actions
+    # The four codeql-action steps have to move together or not at all. They are
+    # pinned to a commit here, and Dependabot treats each path under
+    # github/codeql-action as its own dependency: on 2026-09-29 it opened #18,
+    # #19, #21 and #22 for the same 4.38.1 → 4.38.2 bump, and every one of them
+    # failed with "Loaded a configuration file for version '4.38.1', but running
+    # version '4.38.2'" — because each PR left three steps on the old commit and
+    # moved the fourth. Four red pull requests for an upgrade that was correct.
+    #
+    # Grouping them means one pull request that is either green or red about the
+    # upgrade itself, which is the only thing worth knowing.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
