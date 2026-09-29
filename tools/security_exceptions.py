@@ -79,6 +79,10 @@ class Verdict:
     unexplained: list[dict] = field(default_factory=list)
     expired: list[Exception_] = field(default_factory=list)
     unused: list[Exception_] = field(default_factory=list)
+    # Reported and not counted: the finding is not open any more, but GitHub still
+    # has it, so the entry describes something real that a scanner stopped
+    # mentioning. See `review` for why that is not the same as a stale record.
+    settled: list[Exception_] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -86,10 +90,24 @@ class Verdict:
 
     def describe(self) -> str:
         """For whoever has to act. The exit code is for the machine."""
-        if self.ok:
-            return "ok: every blocking alert is explained and every exception is in date"
-
         lines: list[str] = []
+        if self.settled:
+            # First, because it is the one part that asks for judgement rather
+            # than a fix, and last place is where a passing build's output is not
+            # read.
+            lines.append(f"{len(self.settled)} exception(s) whose finding is not "
+                         f"reported any more:")
+            lines += [f"  {e.id}  ({e.where})" for e in self.settled]
+            lines.append("  GitHub still has the alert, closed, so this is not a "
+                         "stale record — a scanner stopped mentioning it. Docker "
+                         "Scout has done this and changed its mind back. Delete "
+                         "the entry once the absence holds, not on the first "
+                         "quiet run.")
+        if self.ok:
+            lines.append("ok: every blocking alert is explained and every "
+                         "exception is in date")
+            return "\n".join(lines)
+
         if self.unexplained:
             lines.append(f"{len(self.unexplained)} blocking alert(s) with no exception:")
             lines += [
@@ -173,7 +191,8 @@ def load_exceptions(path: str | pathlib.Path) -> list[Exception_]:
 
 
 def review(alerts: list[dict], exceptions: list[Exception_], *,
-           today: dt.date | None = None) -> Verdict:
+           today: dt.date | None = None,
+           closed: list[dict] | None = None) -> Verdict:
     """The three ways this can fail, reported together rather than one at a time.
 
     An alert that is explained by an overdue exception appears under `expired`
@@ -184,34 +203,68 @@ def review(alerts: list[dict], exceptions: list[Exception_], *,
     alerts is not a clean product — it is also what a scan that failed to upload
     produces — and calling every exception stale there would fail the build for
     the one reason that is not the product's fault.
+
+    `closed` is the same distinction one step further in. An entry that matches no
+    open alert but matches a closed one is `settled`, which is reported and does
+    not fail: the finding was there and a scanner stopped mentioning it. Measured
+    on 2026-09-29, Docker Scout dropped CVE-2026-82560 from exeradar while
+    patchradar and mailradar held it both open and closed, having already lost and
+    regained it the day before. Failing on the first quiet run means one commit to
+    delete the entry and another to put it back, and a rule that demands
+    alternating commits gets ignored. An entry matching nothing in either state is
+    still `unused`, which is the drift the rule was written for.
     """
     today = today or dt.date.today()
+    closed = closed or []
     interesting = blocking(alerts)
     tools_that_spoke = {_tool_of(a) for a in alerts}
 
     unexplained = [a for a in interesting
                    if not any(entry.covers(a) for entry in exceptions)]
     expired = [entry for entry in exceptions if entry.overdue(today)]
-    unused = [
+
+    orphaned = [
         entry for entry in exceptions
         if not any(entry.covers(a) for a in alerts)
         and (entry.source in tools_that_spoke if entry.source else bool(alerts))
     ]
-    return Verdict(unexplained=unexplained, expired=expired, unused=unused)
+    # `covers` is reused unchanged, so a closed alert has to match the entry's
+    # source as well as its rule: Scout going quiet says nothing about whether
+    # Snyk still reports the same CVE, and the two disagree about these packages
+    # routinely.
+    settled = [entry for entry in orphaned
+               if any(entry.covers(a) for a in closed)]
+    unused = [entry for entry in orphaned if entry not in settled]
+    return Verdict(unexplained=unexplained, expired=expired, unused=unused,
+                   settled=settled)
+
+
+def _read_alerts(path: str) -> list[dict]:
+    alerts = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    if not isinstance(alerts, list):
+        raise ValueError(f"{path}: expected the list the code-scanning API returns")
+    return alerts
 
 
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print(f"usage: {argv[0]} <alerts.json> [{DEFAULT_FILE}]", file=sys.stderr)
+        print(f"usage: {argv[0]} <open-alerts.json> [closed-alerts.json] "
+              f"[{DEFAULT_FILE}]", file=sys.stderr)
         return 2
-    alerts = json.loads(pathlib.Path(argv[1]).read_text(encoding="utf-8"))
-    if not isinstance(alerts, list):
-        print(f"{argv[1]}: expected the list the code-scanning API returns", file=sys.stderr)
+    try:
+        alerts = _read_alerts(argv[1])
+        # Optional, and optional on purpose: a run that cannot read the closed
+        # alerts still checks everything else, and falls back to the stricter
+        # reading of `unused` rather than to no check at all.
+        closed = _read_alerts(argv[2]) if len(argv) > 2 and argv[2].endswith(".json") else []
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
-    record = argv[2] if len(argv) > 2 else DEFAULT_FILE
+    record = next((a for a in argv[2:] if not a.endswith(".json")), DEFAULT_FILE)
 
-    verdict = review(alerts, load_exceptions(record))
-    print(f"{len(alerts)} open alert(s), {len(blocking(alerts))} of them blocking\n")
+    verdict = review(alerts, load_exceptions(record), closed=closed)
+    print(f"{len(alerts)} open alert(s), {len(blocking(alerts))} of them blocking"
+          f"{f', {len(closed)} closed' if closed else ''}\n")
     print(verdict.describe())
     return 0 if verdict.ok else 1
 

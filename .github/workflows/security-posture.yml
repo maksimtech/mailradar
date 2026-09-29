@@ -101,6 +101,14 @@ jobs:
             echo "readable=false" >> "$GITHUB_OUTPUT"
             cat api-error.txt
           fi
+          # The closed ones tell a finding that went quiet apart from an entry
+          # that never described anything. A scanner that drops a finding for one
+          # run must not fail the build — Docker Scout did exactly that to
+          # CVE-2026-82560 on 2026-09-29 and had already changed its mind back
+          # once. Best effort: without this file the tool falls back to the
+          # stricter reading, which is the safe direction.
+          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100" \
+            > closed.json 2>/dev/null || echo "[]" > closed.json
 
       - name: Report that the alerts could not be read
         if: ${{ steps.alerts.outputs.readable == 'false' }}
@@ -109,4 +117,4 @@ jobs:
 
       - name: Every blocking alert is explained, and every exception is in date
         if: ${{ steps.wait.outputs.ready == 'true' && steps.alerts.outputs.readable != 'false' }}
-        run: python tools/security_exceptions.py alerts.json
+        run: python tools/security_exceptions.py alerts.json closed.json

@@ -204,6 +204,99 @@ def test_a_sourceless_exception_is_only_unused_when_some_alert_exists():
     assert not review([alert(1, "OTHER")], [entry], today=TODAY).ok
 
 
+# ── a finding that came and went ────────────────────────────────────────────
+#
+# Measured on 2026-09-29, and the reason this section exists. Docker Scout
+# reported CVE-2026-82560 against all five Radar, then stopped reporting it
+# against exeradar at 15:08 — GitHub marked that alert `state: fixed`, nobody
+# having dismissed it. The published image had not changed. patchradar and
+# mailradar carry the same CVE both open *and* closed: it had already gone and
+# come back once, on 2026-09-28.
+#
+# So a scanner dropping a finding for one run is not evidence that the finding is
+# gone, and the first version of this tool failed the build for it — then failed
+# it again, for "unexplained", once the entry was deleted and Scout changed its
+# mind back. An oscillation that demands alternating commits is worse than no
+# rule at all, because the way out is to stop reading the output.
+#
+# What separates the two cases is whether GitHub has the finding at all. An entry
+# matching an alert that is closed describes something real that was reported
+# recently; an entry matching nothing in any state is drift, and that is what the
+# rule was written for.
+
+def test_an_exception_whose_finding_is_only_closed_does_not_fail_the_build():
+    """Scout dropped it this run. The entry is reported, not condemned."""
+    verdict = review([alert(1, "OTHER", severity="note")], [allowed("CVE-2026-82560")],
+                     today=TODAY, closed=[alert(9, "CVE-2026-82560")])
+
+    assert verdict.unused == [], "a closed finding is not a stale entry"
+    assert [e.id for e in verdict.settled] == ["CVE-2026-82560"]
+    assert verdict.ok, "worth saying, not worth failing"
+
+
+def test_an_exception_matching_nothing_in_any_state_still_fails():
+    """The rule keeps its teeth. Nothing open, nothing closed: the record
+    describes something this repository does not have."""
+    verdict = review([alert(1, "OTHER", severity="note")], [allowed("CVE-1")],
+                     today=TODAY, closed=[alert(9, "SOMETHING-ELSE")])
+
+    assert not verdict.ok
+    assert [e.id for e in verdict.unused] == ["CVE-1"]
+    assert verdict.settled == []
+
+
+def test_a_settled_entry_is_named_and_the_flapping_is_explained():
+    verdict = review([alert(1, "OTHER", severity="note")], [allowed("CVE-2026-82560")],
+                     today=TODAY, closed=[alert(9, "CVE-2026-82560")])
+    said = verdict.describe()
+
+    assert "CVE-2026-82560" in said
+    assert "not reported" in said.lower() or "no longer" in said.lower()
+
+
+def test_closed_alerts_are_matched_by_source_like_open_ones():
+    """A Snyk entry is not settled by Scout having closed the same CVE: the two
+    scanners disagree about this package routinely, and one going quiet says
+    nothing about the other."""
+    entry = allowed("CVE-2026-82560", source="Snyk Container")
+    verdict = review([alert(1, "OTHER", tool="Snyk Container", severity="note")], [entry],
+                     today=TODAY, closed=[alert(9, "CVE-2026-82560",
+                                                tool="Docker Scout")])
+
+    assert verdict.settled == []
+    assert [e.id for e in verdict.unused] == ["CVE-2026-82560"]
+
+
+def test_a_settled_entry_that_is_also_overdue_still_fails():
+    """Both facts hold, and the date is the one that has to be acted on: an entry
+    nobody reviewed on time does not get a pass because the scanner went quiet."""
+    verdict = review([alert(1, "OTHER", severity="note")],
+                     [allowed("CVE-2026-82560", review_by="2026-01-01")],
+                     today=TODAY, closed=[alert(9, "CVE-2026-82560")])
+
+    assert not verdict.ok
+    assert [e.id for e in verdict.expired] == ["CVE-2026-82560"]
+
+
+def test_an_open_alert_is_never_settled_by_a_closed_twin():
+    """The ordinary case once a finding comes back: open wins, and the entry is
+    doing its job."""
+    verdict = review([alert(1, "CVE-2026-82560")], [allowed("CVE-2026-82560")],
+                     today=TODAY, closed=[alert(9, "CVE-2026-82560")])
+
+    assert verdict.settled == []
+    assert verdict.unused == []
+    assert verdict.ok
+
+
+def test_closed_alerts_are_optional():
+    """The argument is new; a caller that does not pass it keeps the old
+    behaviour, which is what every other test here relies on."""
+    verdict = review([alert(1, "OTHER", severity="note")], [allowed("CVE-1")], today=TODAY)
+
+    assert [e.id for e in verdict.unused] == ["CVE-1"]
+
+
 # ── the file ────────────────────────────────────────────────────────────────
 
 def test_the_file_is_read_with_every_field_required(tmp_path):
