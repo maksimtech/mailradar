@@ -12,6 +12,32 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Docker build no longer races its own publish.** `docker.yml` and
+  `publish.yml` both fire on the tag push, in parallel, and the Dockerfile
+  installs `mailradar==<new version>` from PyPI. A fixed `sleep 60` stood in for
+  the wait.
+
+  mailradar never went red on it, which is exactly why this is here: apkradar had
+  the identical step and lost the race twice — 2026.9.32 on 2026-09-24 and
+  v2026.41 on 2026-09-30 — while mailradar published in the same minutes of the
+  second one and passed on timing alone. The failure reads as
+  `No matching distribution found`, listing versions up to the *previous*
+  release, so it looks like a failed publish when PyPI already holds the files
+  and only the index has not caught up.
+
+  `.github/scripts/wait_for_pypi.sh` now polls with pip itself, which is what the
+  Dockerfile uses and what the index answers for, for up to ten minutes. It runs
+  *after* the version is extracted rather than before, because the tag is
+  `v2026.41` while the distribution is `2026.41` and `==v2026.41` is not a
+  version pip can ever find — where the `sleep` sat, there was nothing to wait
+  for by name. Only on a tag push: the weekly rebuild of `latest` and a manual
+  dispatch both name a version published long ago. Ported from cookieradar, which
+  has polled since 2026-09-24, with its tests — `tests/test_ci_scripts.py` drives
+  the script with a fake pip and pins where the step sits, what version it is
+  given, and that nothing in the workflow waits by sleeping again.
+
 ## [2026.41] - 2026-09-29
 
 ### Fixed
