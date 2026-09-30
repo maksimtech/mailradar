@@ -17,9 +17,10 @@ from mailradar.gpg import GPGResult
 class DMARCResult:
     present: bool = False
     policy: str = "none"
-    # Dominio su cui il record è stato effettivamente trovato (RFC 7489 §6.6.3)
+    # The domain the record was actually found on (RFC 7489 §6.6.3)
     found_at: str = ""
-    # True se il record appartiene a un dominio padre, non a quello richiesto
+    # True when the record belongs to a parent domain rather than the one asked
+    # about
     inherited: bool = False
     sp: str = ""
     pct: int = 100
@@ -153,8 +154,8 @@ def find_domain_variants(domain: str) -> list[str]:
     return found
 
 
-# Suffissi pubblici composti da più label: per questi il dominio
-# organizzativo ha una label in più (example.co.uk, non co.uk).
+# Public suffixes made of more than one label: under these, the organisational
+# domain has one label more (example.co.uk, not co.uk).
 # A pragmatic subset of the Public Suffix List: the suffixes actually met in
 # practice, without taking on an external dependency for them.
 _MULTI_LABEL_PUBLIC_SUFFIXES = frozenset({
@@ -192,7 +193,8 @@ _MULTI_LABEL_PUBLIC_SUFFIXES = frozenset({
 def _labels(domain: str) -> list[str]:
     """A domain as lower-case labels, with no trailing dot."""
     labels = domain.strip(" \t\r\n.").lower().split(".")
-    # Le label vuote (punti doppi) sono rare: la comprehension solo se servono
+    # Empty labels (a double dot) are rare, so the comprehension runs only when
+    # there is one to drop.
     return [label for label in labels if label] if "" in labels else labels
 
 
@@ -241,7 +243,7 @@ def _query_txt(name: str) -> list[str]:
     try:
         answers = dns.resolver.resolve(name, "TXT")
         # Join a record's multiple strings (DKIM keys are split across them)
-        # errors="replace": un TXT non UTF-8 non deve far crashare l'analisi
+        # errors="replace": a TXT record that is not UTF-8 must not end the analysis
         return [b"".join(rdata.strings).decode("utf-8", errors="replace")
                 for rdata in answers]
     except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
@@ -286,7 +288,7 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
 
     pct = _parse_pct(tags.get("pct", "100"))
     if pct is None:
-        # RFC 7489 §6.3: valore non valido → si usa il default (100)
+        # RFC 7489 §6.3: an invalid value means the default applies (100)
         result.issues.append(f"Invalid DMARC pct value: {tags['pct']!r}")
         pct = 100
     result.pct = pct

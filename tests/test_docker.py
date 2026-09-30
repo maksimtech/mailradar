@@ -39,7 +39,7 @@ class TestDockerfile(unittest.TestCase):
             self.assertNotRegex(r, r"\bpip3? install\b")
 
     def test_pip_removed_as_root(self):
-        # La disinstallazione scrive in site-packages: deve precedere USER
+        # Uninstalling writes into site-packages, so it has to come before USER
         uninstall_pos = DOCKERFILE.find("pip uninstall")
         user_pos = DOCKERFILE.find("\nUSER ")
         self.assertNotEqual(uninstall_pos, -1)
@@ -67,7 +67,7 @@ class TestDockerWorkflow(unittest.TestCase):
 
     def test_schedule_builds_without_cache(self):
         # Without this the GHA cache reuses the apt-get upgrade layer
-        # e il rebuild non riceve le patch Debian
+        # and then a rebuild never picks up the Debian patches
         self.assertIn("no-cache: ${{ github.event_name == 'schedule' }}", DOCKER_WORKFLOW)
 
     def test_workflow_does_not_create_tags_or_releases(self):

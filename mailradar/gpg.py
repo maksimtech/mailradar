@@ -31,7 +31,7 @@ def _search_keyserver(keyserver: str, email: str) -> GPGResult:
     """Search for a GPG key on a specific keyserver."""
     result = GPGResult()
 
-    # Forza HTTP/1.1 per evitare problemi con HTTP/2 su alcuni ambienti
+    # HTTP/1.1 on purpose: HTTP/2 misbehaves against some of these environments
     try:
         with httpx.Client(http2=False, timeout=15) as client:
             # Try vks API first (keys.openpgp.org specific) — più affidabile

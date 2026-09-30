@@ -330,7 +330,7 @@ class TestCheckSPF:
 class TestCheckDKIM:
 
     def test_dkim_2048(self):
-        # Chiave RSA 2048-bit reale (troncata per il test)
+        # A real 2048-bit RSA key, truncated for the test
         key = (
             "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwGFMFCN431WpLoJNLzE1qfqj2jjXsKiMps8Nafya4wg3jmchjT2qlejmUW6E"
             "YQRvy+c9jHskfk6+eIFpeLcFnBg/X3AMVbxazFqatYDoRY08/eCOPF5LzpBgcclDac6Nx+kuaFEN8e0oujGWd66H+v9Q8URN2h21cSvx"

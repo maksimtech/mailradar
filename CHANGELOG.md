@@ -14,6 +14,24 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **A test was pinning Rich's output stream for every test that ran after it.**
+  `test_the_console_is_flushed_even_when_the_body_raises` saved `cli.console.file`
+  and assigned it back, which looks like a restore and is not: Rich's `file` is a
+  property that falls back to `sys.stdout` when nothing was set, so writing the
+  current value into it fixes that stream for good. Any later test rendering
+  through this console then wrote to the terminal instead of to the CliRunner's
+  buffer. Measured on apkradar, where the sibling of this test left
+  `tests/test_hash_is_verifiable.py` asserting against an empty `result.output`;
+  the suite passed only because of the order the files happen to be collected in.
+  The test now builds a console of its own and puts it in place of the module's,
+  through monkeypatch.
+
+### Changed
+
+- **The Italian comments are in English** — `Dockerfile`, `docker.yml`,
+  `checker.py`, `cli.py`, `discover.py`, `gpg.py` and three test files. One
+  comment in `docker.yml` had been half translated and ended mid-sentence.
+
 - **The Docker build no longer races its own publish.** `docker.yml` and
   `publish.yml` both fire on the tag push, in parallel, and the Dockerfile
   installs `mailradar==<new version>` from PyPI. A fixed `sleep 60` stood in for

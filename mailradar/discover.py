@@ -21,7 +21,8 @@ class DiscoveryResult:
 
 def _extract_emails_from_text(text: str, domain: str) -> list[str]:
     """Extract email addresses for a specific domain from text."""
-    # Il dominio non deve proseguire: esclude example.community e
+    # The domain must not continue past the name: this excludes
+    # example.community and
     # example.com.evil.org, ma accetta un punto finale di frase ("info@example.com.")
     pattern = (
         rf'[a-zA-Z0-9._%+\-]+@{re.escape(domain)}'
@@ -126,8 +127,8 @@ def _discover_via_dns(domain: str) -> list[str]:
         answers = dns.resolver.resolve(domain, "SOA")
         for r in answers:
             rname = str(r.rname).rstrip(".")
-            # SOA rname usa il primo punto come @
-            # es: hostmaster.tplfvg.it → hostmaster@tplfvg.it
+            # An SOA rname uses its first dot where an address has the @:
+            # hostmaster.tplfvg.it is hostmaster@tplfvg.it
             parts = rname.split(".", 1)
             if len(parts) == 2 and parts[1] == domain:
                 email = f"{parts[0]}@{parts[1]}"
@@ -201,7 +202,7 @@ def _discover_common_contacts(domain: str) -> list[str]:
     except Exception:
         return []
 
-    # Null MX ("0 .") — il dominio dichiara esplicitamente di non ricevere email
+    # Null MX ("0 .") — the domain states outright that it receives no mail
     if all(str(r.exchange) == "." for r in answers):
         return []
 
@@ -234,7 +235,7 @@ def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
     result = DiscoveryResult(domain=domain)
     all_emails = set()
 
-    # crt.sh — scopre sottodomini per ampliare il website scraping
+    # crt.sh — subdomains, which widens what the website scraping can reach
     subdomains = _discover_subdomains_via_crtsh(domain)
     result.sources["crt.sh subdomains"] = subdomains
 

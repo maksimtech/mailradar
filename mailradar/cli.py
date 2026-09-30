@@ -320,7 +320,7 @@ def check(
     """
     from mailradar.checker import domain_exists, find_domain_variants
 
-    # Verifica se il dominio esiste
+    # Does the domain exist at all
     with _status(f"[cyan]Checking if {escape(domain)} exists...[/cyan]"):
         exists = domain_exists(domain)
 
@@ -420,7 +420,7 @@ def batch(
         try:
             report = analyze_domain(domain)
         except Exception as e:
-            # Un dominio problematico non deve interrompere l'intero batch
+            # One difficult domain must not stop the whole batch
             console.print(f"[red]❌ {escape(domain)}: analysis failed — {escape(str(e))}[/red]")
             failed.append(domain)
             continue
