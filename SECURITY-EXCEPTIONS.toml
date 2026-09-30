@@ -146,3 +146,52 @@ One assertion of the same shape, in a benchmark that measures how long a check \
 takes. Same reasoning as tests/test_reporter.py above.
 """
 review_by = "2026-12-31"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arrived on 2026-09-30, after 2026.41 was prepared: two advisories published
+# overnight against the base image, which the gate refused before the tag. That
+# is the gate working — not a defect introduced here — and the two are in
+# different situations, read out of the Debian security tracker with
+# `patchradar debian` rather than from the scanners' one-line summaries.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-84782"
+source = "Docker Scout"
+where = "openssl 3.5.7-1~deb13u2 in the published image; fixed in Debian 3.5.7-1~deb13u3"
+why = """
+An out-of-bounds read in OpenSSL's DTLS retransmission, advisory published \
+2026-09-29. Debian has already fixed it: `patchradar debian CVE-2026-84782` \
+reports it resolved in trixie at openssl 3.5.7-1~deb13u3, so this is not an \
+acceptance — it is a rebuild.
+
+The Dockerfile runs `apt-get update && apt-get upgrade -y`, so the next image \
+built picks the fix up with no change to this repository. Docker Scout reads the \
+image published on Docker Hub, which is why the alert stays open until then. The \
+short date is the check that the publish happened: if this is still here \
+afterwards, either the image was not republished or the upgrade did not take.
+
+Reachability, for what it is worth: the flaw is in DTLS, and nothing here speaks \
+DTLS. mailradar opens TLS sockets over TCP to check certificates, cookieradar \
+drives Chromium over HTTPS, apkradar fetches store listings over HTTPS. None of \
+that is datagram TLS.
+"""
+review_by = "2026-10-31"
+
+[[exception]]
+id = "SNYK-DEBIAN13-GCC14-20335537"
+source = "Snyk Container"
+where = "gcc-14 / libstdc++6 14.2.0-19, python slim-trixie base image"
+why = """
+CVE-2026-102010. Open in trixie for both gcc-12 (12.4.0-5) and gcc-14 \
+(14.2.0-19), with no fixed version in any suite and no Debian bug recorded — \
+checked with `patchradar debian CVE-2026-102010`. So there is nothing to wait for \
+and nothing to ask for: what moves a flaw in this state is evidence on the \
+tracker page, https://security-tracker.debian.org/tracker/CVE-2026-102010.
+
+Nor is it removable. Snyk names the source package `gcc-14`, and what is actually \
+installed is `libstdc++6`, the C++ runtime that a long list of packages in the \
+base image link against. Removing it is not an option the way the full `perl` \
+would have been.
+"""
+review_by = "2026-12-31"
