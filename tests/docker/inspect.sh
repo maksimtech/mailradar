@@ -52,9 +52,17 @@ dpkg-query -W -f '  ${Package} ${Version} essential=${Essential} priority=${Prio
 
 echo
 echo "── the other packages the record names ──"
-for pkg in zlib1g libattr1 libacl1; do
-    dpkg-query -W -f '  ${Package} ${Version} priority=${Priority}\n' "$pkg" 2>/dev/null \
-        || echo "  $pkg not installed"
+# Patterns, not exact names: Debian trixie's 64-bit time_t transition renamed a
+# number of libraries with a `t64` suffix, and an exact name that no longer exists
+# comes back looking like "not installed" rather than "I asked the wrong question".
+# That happened once, on cookieradar's libcups2, on 2026-09-30.
+for pattern in 'zlib1g*' 'libattr1*' 'libacl1*'; do
+    found=$(dpkg-query -W -f '  ${Package} ${Version} priority=${Priority}\n' "$pattern" 2>/dev/null || true)
+    if [ -n "$found" ]; then
+        echo "$found"
+    else
+        echo "  $pattern matched nothing installed"
+    fi
 done
 
 echo
