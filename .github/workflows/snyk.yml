@@ -176,16 +176,23 @@ jobs:
       # every release, so its findings come and go with upstream Debian and
       # blocking a merge on them would block work nobody here can fix.
       # ------------------------------------------------------------------
+      # The tag is fixed and must stay fixed. Snyk Container writes its own
+      # automation id into the SARIF, built from the image reference it scanned,
+      # and it overrides the `category:` given to upload-sarif below. Tagged with
+      # ${GITHUB_SHA} that id changed on every commit, so GitHub minted a
+      # code-scanning configuration per run and never found any of them again —
+      # apkradar reached 32, and its pull requests could no longer be told which
+      # alerts they introduced.
       - name: Build the image for scanning
         id: image
         if: ${{ env.SNYK_ENABLED == 'true' && hashFiles('Dockerfile') != '' }}
-        run: docker build -t "snyk-scan:${GITHUB_SHA}" .
+        run: docker build -t "snyk-scan:ci" .
 
       - name: Snyk Container test
         if: ${{ env.SNYK_ENABLED == 'true' && steps.image.outcome == 'success' }}
         continue-on-error: true
         run: |
-          snyk container test "snyk-scan:${GITHUB_SHA}" \
+          snyk container test "snyk-scan:ci" \
             --file=Dockerfile \
             --severity-threshold=high \
             --sarif-file-output=snyk-container.sarif
