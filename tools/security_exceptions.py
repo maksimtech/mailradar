@@ -30,6 +30,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import pathlib
+import re
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -239,6 +240,184 @@ def review(alerts: list[dict], exceptions: list[Exception_], *,
                    settled=settled)
 
 
+# ─── EPSS, from FIRST, on the CVEs this record already holds ──────────────────
+#
+# Point four of the FIRST work was "EPSS in the other Radar", and EPSS is indexed
+# by CVE. Measured on 2026-10-02: exeradar carries no CVE ids at all, and the other
+# three one incidental mention each — so there was nothing to attach a forecast to,
+# and building a CVE surface to justify one would have been the wrong way round.
+#
+# This record is the surface that already exists, in all five. Docker Scout names
+# its alerts by CVE, so the gate holds CVE ids with a written reason and a review
+# date against each — and the one thing those records lacked was a forecast. "No
+# fix in any suite" accepted until December is comfortable at an EPSS of 0.1% and
+# is something else at 40%. The number decides nothing; it is what a person reads
+# before renewing a date.
+#
+# It is printed and never counted. The gate fails on an unexplained alert and on an
+# overdue entry, and a build that failed on FIRST's model would be failing on
+# somebody else's weather forecast.
+EPSS_URL = "https://api.first.org/data/v1/epss"
+EPSS_TIMEOUT = 10.0
+_CVE_ID = re.compile(r"^CVE-\d{4}-\d{4,}$", re.I)
+
+
+def cve_id(identifier: str | None) -> str | None:
+    """`identifier` as a CVE id, or None if it is not one.
+
+    Scanner ids are not CVEs — SNYK-DEBIAN13-GCC14-20386241 *is* CVE-2026-95619,
+    and its description says so in prose, but reading the id is reading what the
+    scanner stated while reading the description is guessing. A forecast attached
+    to the wrong flaw is worse than none.
+    """
+    if not isinstance(identifier, str):
+        return None
+    text = identifier.strip().upper()
+    return text if _CVE_ID.match(text) else None
+
+
+def cves_of(alerts: list[dict], exceptions: list[Exception_]) -> list[str]:
+    """Every CVE the gate is about to mention, sorted, without repeats.
+
+    Both sides on purpose: an unexplained alert needs a forecast to be triaged,
+    and an accepted one needs it to be re-read.
+    """
+    found = {cve_id(_rule_of(a)) for a in alerts}
+    found |= {cve_id(entry.id) for entry in exceptions}
+    return sorted(c for c in found if c)
+
+
+def forecasts_for(cves: list[str], *, url: str = EPSS_URL) -> dict[str, tuple[float, float] | None]:
+    """{cve: (score, percentile)}, None for a CVE FIRST does not score.
+
+    Returns {} on any failure, which is how this stays out of the verdict: no
+    network in CI, a 503 from FIRST, a changed payload — the gate prints what it
+    always printed and says nothing about probabilities. urllib rather than httpx
+    because this script runs on a bare checkout in a workflow that installs
+    nothing.
+
+    A CVE FIRST does not score maps to None and never to 0.0: the floor of the
+    scale is a real reading that tens of thousands of CVEs sit on.
+    """
+    if not cves:
+        return {}
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    found: dict[str, tuple[float, float] | None] = dict.fromkeys(cves)
+    query = urllib.parse.urlencode({"cve": ",".join(cves), "limit": len(cves)})
+    request = urllib.request.Request(
+        f"{url}?{query}", headers={"User-Agent": "patchradar-security-posture"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=EPSS_TIMEOUT) as response:
+            if response.status != 200:
+                return {}
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return {}
+
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = cve_id(row.get("cve"))
+        if name is None or name not in found:
+            continue
+        try:
+            score = float(row["epss"])
+            percentile = float(row["percentile"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 0.0 <= score <= 1.0 and 0.0 <= percentile <= 1.0:
+            found[name] = (score, percentile)
+    return found
+
+
+def _forecast_phrase(forecast: tuple[float, float] | None) -> str:
+    """One parenthesis for a reader, or the absence said out loud.
+
+    ">99.9%" rather than "100.0%" at the top of the scale, and a floored
+    percentile: the top 1% is p99 and there is no p100 to be in.
+    """
+    if forecast is None:
+        return " (EPSS: not scored by FIRST)"
+    score, percentile = forecast
+    shown = ">99.9%" if score > 0.9995 else f"{score * 100:.1f}%"
+    if score < 0.001:
+        shown = f"{score * 100:.2f}%"
+    return f" (EPSS {shown}, p{int(percentile * 100)})"
+
+
+def annotate(text: str, forecasts: dict[str, tuple[float, float] | None]) -> str:
+    """The report with a forecast added to every line that names a CVE it has.
+
+    Done on the rendered text rather than inside `describe` so that the verdict's
+    own wording stays the one thing it was before: this adds a clause to a line and
+    cannot change what the line says.
+    """
+    if not forecasts:
+        return text
+    lines = []
+    for line in text.splitlines():
+        for name, forecast in forecasts.items():
+            if name in line.upper():
+                line = f"{line}{_forecast_phrase(forecast)}"
+                break
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def accepted_block(
+    accepted: list[str], forecasts: dict[str, tuple[float, float] | None]
+) -> str:
+    """The forecast on each CVE this record accepts, worst first.
+
+    A passing verdict is one line, "ok", so without this the number that matters
+    most has nowhere to appear: the one on a flaw accepted until December. It is
+    printed on a passing run on purpose — this is where a person decides whether to
+    renew a date, and the decision is not prompted by anything else.
+
+    Worst first because that is the order a reader needs; unscored last, because
+    "FIRST does not score it" is not a low probability.
+    """
+    rows = [(name, forecasts[name]) for name in accepted if name in forecasts]
+    if not rows:
+        return ""
+    rows.sort(key=lambda row: (row[1] is None, -(row[1][0] if row[1] else 0.0), row[0]))
+    lines = [f"{len(rows)} accepted finding(s), with FIRST's forecast:"]
+    lines += [f"  {name}  {_forecast_phrase(forecast).strip()}" for name, forecast in rows]
+    lines.append("  A forecast changes no verdict here. It is what to read before "
+                 "renewing a review date.")
+    return "\n".join(lines)
+
+
+def report(
+    verdict: Verdict,
+    forecasts: dict[str, tuple[float, float] | None] | None = None,
+    accepted: list[str] | None = None,
+) -> None:
+    """Print the verdict, with the forecasts where they belong."""
+    forecasts = forecasts or {}
+    print(annotate(verdict.describe(), forecasts))
+    block = accepted_block(accepted or [], forecasts)
+    if block:
+        print()
+        print(block)
+
+
+def exit_code(verdict: Verdict, forecasts: dict[str, tuple[float, float] | None] | None = None) -> int:
+    """1 when the record is wrong, 0 otherwise — and never anything else.
+
+    `forecasts` is accepted and ignored, which is the point: the signature says
+    the forecast was available and did not enter the decision.
+    """
+    return 0 if verdict.ok else 1
+
+
 def _read_alerts(path: str) -> list[dict]:
     alerts = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     if not isinstance(alerts, list):
@@ -262,11 +441,16 @@ def main(argv: list[str]) -> int:
         return 2
     record = next((a for a in argv[2:] if not a.endswith(".json")), DEFAULT_FILE)
 
-    verdict = review(alerts, load_exceptions(record), closed=closed)
+    exceptions = load_exceptions(record)
+    verdict = review(alerts, exceptions, closed=closed)
     print(f"{len(alerts)} open alert(s), {len(blocking(alerts))} of them blocking"
           f"{f', {len(closed)} closed' if closed else ''}\n")
-    print(verdict.describe())
-    return 0 if verdict.ok else 1
+    # Asked after the verdict is decided, so that nothing about the forecast can
+    # reach it. An unreachable FIRST gives {} and the report is the one this
+    # script printed before EPSS existed.
+    forecasts = forecasts_for(cves_of(alerts, exceptions))
+    report(verdict, forecasts, accepted=cves_of([], exceptions))
+    return exit_code(verdict)
 
 
 if __name__ == "__main__":

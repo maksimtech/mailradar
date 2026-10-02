@@ -12,6 +12,33 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+
+### Added
+
+- **The gate reads FIRST's forecast on the CVEs it already holds.** EPSS is indexed
+  by CVE, and `SECURITY-EXCEPTIONS.toml` is the one surface in this repository that
+  holds CVE ids: Docker Scout names its alerts by CVE, so every accepted finding
+  already has an id, a written reason and a review date. The forecast is what those
+  records lacked — "no fix in any suite" accepted until December is comfortable at
+  an EPSS of 0.1% and is something else at 40%.
+
+  The forecast changes no verdict. The gate fails on a blocking alert with no entry
+  and on an entry past its date, and on nothing else: `exit_code` takes the
+  forecasts and ignores them, so the signature says they were available and did not
+  decide anything. Only ids that *are* CVE ids are looked up —
+  `SNYK-DEBIAN13-GCC14-20386241` is CVE-2026-95619 and says so in its description,
+  and reading prose is guessing. A CVE FIRST does not score prints "not scored by
+  FIRST" rather than 0.0%, which is a real reading at the floor of the scale; FIRST
+  unreachable prints nothing and the report is the one this script produced before.
+
+  The accepted findings are listed on a **passing** run, worst first, because that
+  is where somebody decides whether to renew a review date and nothing else prompts
+  it.
+
+  Ported from patchradar with its nineteen tests; `tools/security_exceptions.py` is
+  shared by copy across the five, and all four copies were byte-identical before
+  this.
+
 ### Fixed
 
 - **A test was pinning Rich's output stream for every test that ran after it.**
