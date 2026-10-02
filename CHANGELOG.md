@@ -41,6 +41,19 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **The image Snyk scans has a fixed tag, so code scanning keeps one
+  configuration for it.** It was built as `snyk-scan:${GITHUB_SHA}`, and Snyk
+  Container writes its own automation id into the SARIF from the image reference it
+  scanned — overriding the `category:` given to `upload-sarif`. So every commit
+  minted a new code-scanning configuration that nothing could ever find again, and a
+  pull request was told *"configurations present on refs/heads/main were not
+  found"* and could no longer be shown which alerts it had introduced.
+
+  Measured on 2026-10-02 in apkradar, which had reached **32** of them and whose
+  pull request #16 could not be diffed. This repository shows one, because its image
+  does not carry the extra target Snyk names the image in. The tag is the same in
+  all five, so the fix is too: the defect is there whether or not it has surfaced.
+
 - **A test was pinning Rich's output stream for every test that ran after it.**
   `test_the_console_is_flushed_even_when_the_body_raises` saved `cli.console.file`
   and assigned it back, which looks like a restore and is not: Rich's `file` is a
