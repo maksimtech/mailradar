@@ -10,7 +10,7 @@ permissions:
 jobs:
   mutmut:
     name: mutmut
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # mutmut refuses to run on Windows and points at WSL, so ubuntu is not a
     # preference here — it is the only host that works.
     timeout-minutes: 350
