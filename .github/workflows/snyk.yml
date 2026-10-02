@@ -12,7 +12,7 @@ permissions:
 jobs:
   snyk:
     name: Snyk
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       # Both are what github/codeql-action/upload-sarif needs to publish into
