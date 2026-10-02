@@ -55,6 +55,33 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **The CI runners are pinned to `ubuntu-26.04`, and the benchmarks job is pinned
+  to `ubuntu-24.04` because CodSpeed cannot run on 26.04.** `ubuntu-latest` was
+  Ubuntu 24.04 — read off a live run on 2026-10-02, image `ubuntu24/20260927.320` —
+  and GitHub moves that label on its own schedule, so the choice was between finding
+  out what breaks on a branch or finding out later on `main` at a moment nobody
+  picked.
+
+  Something did break, which is the whole value of having asked: `CodSpeedHQ/action`
+  v5 fails on 26.04 with `##[error]Unsupported system`. `mode: simulation` was
+  already set and the action was pinned, so it is the image and nothing else. Every
+  one of the five Radar runs CodSpeed, so every one of them would have broken the
+  same way the day the label moved by itself.
+
+  That job is pinned to **24.04 rather than left on `ubuntu-latest`**: left there it
+  keeps working right up to the day the label moves and then fails on `main`. 24.04
+  is supported until April 2029, and a comment beside it says to try 26.04 again now
+  and then, because nothing here will notice when CodSpeed adds support.
+
+  The risk surface was measured before anything changed — no `apt-get` and no `sudo`
+  in any workflow, Python from `actions/setup-python` at explicit versions, no
+  `container:` or `services:` jobs — and the Docker path was checked on its own by
+  dispatching `docker-build-check.yml` against the branch, which succeeded on image
+  `ubuntu26/20260927.149`.
+
+  What pinning costs: nothing bumps it for you. Dependabot updates action versions,
+  not `runs-on`.
+
 - **ruff now lints `tools/` as well, because it never did.** Every one of the five
   Radar lints its package and its tests and stops there, which left
   `tools/security_exceptions.py` outside the check — the script that refuses a build

@@ -15,7 +15,19 @@ permissions:
 jobs:
   benchmarks:
     name: Run benchmarks
-    runs-on: ubuntu-latest
+    # The one job left behind when the rest moved to ubuntu-26.04 on 2026-10-02,
+    # and pinned rather than left on `ubuntu-latest` on purpose. CodSpeedHQ/action
+    # v5 fails on 26.04 with `##[error]Unsupported system` — measured on
+    # patchradar, run 37063015887, with `mode: simulation` already set and the
+    # action pinned, so it is the image and nothing else.
+    #
+    # `ubuntu-latest` is 24.04 today, so leaving it there would work right up to
+    # the day GitHub moves that label, and then break on main at a moment nobody
+    # picked. 24.04 is supported until April 2029.
+    #
+    # Move it to 26.04 once CodSpeed supports it; nothing here will notice when
+    # that happens, so it is worth trying on a branch now and then.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
