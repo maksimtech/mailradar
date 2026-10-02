@@ -23,7 +23,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"  # NOSONAR - trusted internal project, no external setup scripts
+      # `tools/` is in here because it was not, and that is where
+      # security_exceptions.py lives: the script that refuses a build over an
+      # unexplained alert had never been seen by the linter that gates the build.
+      # Found on 2026-10-02 by running ruff over the whole tree by hand.
       - name: Lint (ruff)
-        run: ruff check mailradar tests
+        run: ruff check mailradar tests tools
       - name: Type check (mypy)
         run: mypy mailradar

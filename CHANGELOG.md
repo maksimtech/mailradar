@@ -55,6 +55,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **ruff now lints `tools/` as well, because it never did.** Every one of the five
+  Radar lints its package and its tests and stops there, which left
+  `tools/security_exceptions.py` outside the check — the script that refuses a build
+  over an unexplained alert had never been seen by the linter that gates the build.
+  Found on 2026-10-02 by running ruff over the whole tree by hand while working on
+  something else, which is not a way of finding things that scales.
+
 - **The Italian comments are in English** — `Dockerfile`, `docker.yml`,
   `checker.py`, `cli.py`, `discover.py`, `gpg.py` and three test files. One
   comment in `docker.yml` had been half translated and ended mid-sentence.
