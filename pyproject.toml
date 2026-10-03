@@ -112,7 +112,18 @@ ignore_errors = true
 
 [tool.mutmut]
 source_paths = ["mailradar"]
-pytest_add_cli_args_test_selection = ["tests/"]
+# The benchmarks are left out, and the reason stands on its own: a benchmark
+# measures speed and asserts nothing, so it can kill no mutant, and running one
+# against every mutant is pure cost.
+#
+# It is also what broke this run on 2026-10-03. The benchmark runner is installed
+# by codspeed.yml alone and is deliberately not a project dependency, so under
+# mutmut the fixture was missing and the stats phase died before a single mutant
+# was tried. `tests/test_benchmark_contract.py` is where that arrangement is
+# written down — including the rule that the runner is not named in this file.
+#
+# Read only by the stats and warm-up runs; per-mutant runs get explicit test ids.
+pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/benchmarks"]
 # What the contract tests reach for outside the mutated source. mutmut copies
 # `source_paths` into `mutants/` and runs the suite from there, adding only
 # `tests/`, `test/`, `setup.cfg`, `pyproject.toml` and `uv.lock` of its own
