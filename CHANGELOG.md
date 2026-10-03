@@ -41,6 +41,26 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **Mutation testing runs again: `also_copy` in `[tool.mutmut]`.** The Saturday
+  run died in all five Radar on 2026-10-03, before a single mutant was tried, and
+  the cause was the same one each time with a different victim — here, `tests/test_docker.py` could not read `Dockerfile`.
+
+  mutmut copies `source_paths` into `mutants/` and runs the suite from there,
+  adding only `tests/`, `test/`, `setup.cfg`, `pyproject.toml` and `uv.lock` of its
+  own accord. So every test that imports from `tools/` or `scripts/`, or reads a
+  file at the repository root, found nothing — and since the stats phase runs the
+  suite rather than merely collecting it, one such test killed the whole run.
+
+  The list was verified rather than guessed. mutmut 3.8 refuses to run on Windows,
+  so the `mutants/` tree was rebuilt by hand from mutmut's own copy rules —
+  `configuration.py:184` and `utils/file_utils.py:66` — and the suite run inside it
+  until it passed: **435 passed, 4 skipped**.
+
+  This is *not* the previous day's move to `ubuntu-26.04`: the failures are
+  Python-level, inside a copied tree, and patchradar's instance dates from
+  2026-09-26. The weekly cron is only what surfaced them all at once — the first
+  firing since the tests that trip it were written.
+
 - **The image Snyk scans has a fixed tag, so code scanning keeps one
   configuration for it.** It was built as `snyk-scan:${GITHUB_SHA}`, and Snyk
   Container writes its own automation id into the SARIF from the image reference it
