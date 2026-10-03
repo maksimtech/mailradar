@@ -113,6 +113,29 @@ ignore_errors = true
 [tool.mutmut]
 source_paths = ["mailradar"]
 pytest_add_cli_args_test_selection = ["tests/"]
+# What the contract tests reach for outside the mutated source. mutmut copies
+# `source_paths` into `mutants/` and runs the suite from there, adding only
+# `tests/`, `test/`, `setup.cfg`, `pyproject.toml` and `uv.lock` of its own
+# accord — so a test that imports from `tools/` or reads a file at the
+# repository root finds nothing, and the whole run dies in the stats phase
+# before a single mutant is tried. That is what happened to all five Radar on
+# 2026-10-03.
+#
+# Verified rather than guessed: mutmut refuses to run on Windows, so the
+# `mutants/` tree was rebuilt from mutmut's own copy rules and the suite run
+# inside it until it passed. Add to this list when a test starts reading
+# something new from the root; the Saturday run is otherwise where you find out.
+also_copy = [
+    "tools",
+    "Dockerfile",
+    ".github",
+    "sonar-project.properties",
+    "SECURITY-EXCEPTIONS.toml",
+    "CHANGELOG.md",
+    "README.md",
+    "SECURITY.md",
+    "release.sh",
+]
 # mutmut 3.8 refuses to run on Windows and points at WSL, so this is a CI-only
 # configuration: the scheduled workflow runs it on ubuntu.
 do_not_mutate = ["mailradar/__init__.py"]
