@@ -32,6 +32,20 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   cookieradar and patchradar are one word from that (`_SOURCE=local`); apkradar and
   mailradar would need the build argument added. That is the follow-up.
 
+  Three cases hold the margin, and they were needed twice over. The two cases that
+  already drove this script pass the retry interval as zero so they stay fast, and the
+  new default made every success wait 45 seconds past their timeout — so the suite was
+  red in all four repositories until those two were told to ask for no grace. Telling
+  them that alone would have left the margin itself unmeasured, which is the shape of
+  defect this script was written to fix in the first place. So: one case times a
+  two-second grace and checks the log says why it waited, one checks that no grace
+  waits for nothing and claims nothing, and one measures the *default* without the
+  suite paying 45 seconds for it — started with no grace argument, the script must
+  still be running three seconds after the index answered. All four ways of undoing
+  the margin were checked against them: the default set to zero, the wait removed
+  while the log still claims it, the log removed while the wait still happens, and the
+  guard removed so zero waits anyway.
+
 ### Changed
 
 - **`release.sh` runs the suite after the bump, and refuses before committing.**
