@@ -14,6 +14,25 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **Two defences in `release.sh` that the tests did not actually measure.** Found by
+  mutating the script rather than by reading it.
+
+  Replacing the existing-tag check's `fail` with an `echo` of the same words left every
+  case green: the script carried on, bumped, **committed**, and only then did `git tag`
+  refuse the tag that already existed. The release was still refused — one commit too
+  late, which is the opposite of what the script promises, that a refusal leaves the
+  version file modified and nothing else. The cases now check that it did not commit on
+  its way to refusing.
+
+  And `git push --atomic` was not measured at all; two separate pushes passed. With two
+  pushes `main` arrives and the tag does not, so the repository carries a version bump
+  that no release and no published artifact corresponds to — and the tag that would
+  produce them cannot be pushed afterwards either, because the version it would be
+  given is by then "already the current version". A `pre-receive` hook on the test
+  remote now refuses tags, which is the way to make the second half fail on demand.
+
+  Both mutations fail now, along with the three that already did.
+
 - **The PyPI wait allows a margin once the index answers.** apkradar's Docker build
   failed on 2026-10-03 with `No matching distribution found` **fifteen seconds after**
   the wait had reported the version available — 16:31:21 against 16:31:36. The poll is

@@ -92,16 +92,37 @@ def test_release_bumps_version_and_pushes_commit_and_tag(repo):
     assert _git(remote, "cat-file", "-t", "v2026.42") == "tag"  # annotated
 
 
-def _assert_refused(proc, remote, message):
+def _assert_refused(proc, remote, message, work=None):
+    """Refused, and nothing committed on the way to refusing.
+
+    The local half was added after mutating the script: replacing the existing-tag
+    check's `fail` with an `echo` of the same words left every one of these green,
+    because the script carried on, bumped, committed, and only then did `git tag`
+    refuse the tag that already existed. The release was still refused — after a
+    commit, which is the opposite of what this script promises. A refusal may leave
+    the version file modified, and nothing else.
+
+    The commit is what is checked, not the local tags: the script runs
+    `git fetch --tags`, so in the case where the tag exists only on the remote it
+    arrives locally even when everything works.
+    """
     assert proc.returncode != 0
     assert message in proc.stdout + proc.stderr
     assert _remote_tags(remote) == []
     assert _git(remote, "log", "-1", "--format=%s", "main") == "initial"
 
+    if work is not None:
+        # Its own commit, recognised by the message it writes, rather than "the local
+        # branch is where it started": one case below puts an extra local commit there
+        # on purpose, to make main and origin/main disagree.
+        assert not _git(work, "log", "-1", "--format=%s", "main").startswith(
+            "chore: bump version to"
+        ), "it committed on its way to refusing"
+
 
 def test_release_requires_argument(repo):
     work, remote = repo
-    _assert_refused(_release(work), remote, "Usage:")
+    _assert_refused(_release(work), remote, "Usage:", work)
 
 
 @pytest.mark.parametrize(
@@ -118,7 +139,7 @@ def test_release_requires_argument(repo):
 )
 def test_release_rejects_invalid_version(repo, version):
     work, remote = repo
-    _assert_refused(_release(work, version), remote, "Invalid version")
+    _assert_refused(_release(work, version), remote, "Invalid version", work)
 
 
 @pytest.mark.parametrize("version", ["2026.9.5", "2026.12.3", "2026.1.1"])
@@ -132,26 +153,26 @@ def test_release_rejects_a_middle_segment_that_reads_as_a_month(repo, version):
     between fixing the version and arguing with the regex.
     """
     work, remote = repo
-    _assert_refused(_release(work, version), remote, "Ambiguous version")
+    _assert_refused(_release(work, version), remote, "Ambiguous version", work)
 
 
 def test_release_rejects_current_version(repo):
     work, remote = repo
-    _assert_refused(_release(work, CURRENT), remote, "is already the current version")
+    _assert_refused(_release(work, CURRENT), remote, "is already the current version", work)
 
 
 def test_release_requires_main_branch(repo):
     work, remote = repo
     _git(work, "checkout", "-q", "-b", "feature")
 
-    _assert_refused(_release(work, "2026.42"), remote, "Not on main")
+    _assert_refused(_release(work, "2026.42"), remote, "Not on main", work)
 
 
 def test_release_requires_clean_tree(repo):
     work, remote = repo
     (work / "notes.txt").write_text("wip", encoding="utf-8")
 
-    _assert_refused(_release(work, "2026.42"), remote, "Working tree not clean")
+    _assert_refused(_release(work, "2026.42"), remote, "Working tree not clean", work)
 
 
 def test_release_refuses_when_behind_origin(repo, tmp_path):
@@ -176,7 +197,7 @@ def test_release_refuses_unpushed_commits(repo):
     _git(work, "add", ".")
     _git(work, "commit", "-q", "-m", "local only")
 
-    _assert_refused(_release(work, "2026.42"), remote, "is not aligned with origin/main")
+    _assert_refused(_release(work, "2026.42"), remote, "is not aligned with origin/main", work)
 
 
 def test_release_refuses_tag_existing_only_on_remote(repo, tmp_path):
@@ -188,6 +209,14 @@ def test_release_refuses_tag_existing_only_on_remote(repo, tmp_path):
     assert proc.returncode != 0
     assert "already exists" in proc.stdout + proc.stderr
     assert _git(remote, "log", "-1", "--format=%s", "main") == "initial"
+    # Not routed through _assert_refused: the tag on the remote is this case's own
+    # setup, so "no remote tags" cannot hold here. What has to hold is that it
+    # refused *before committing* — replacing this check's `fail` with an `echo` of
+    # the same words left every case in this file green, because `git tag` then
+    # refused the tag that already existed by itself, one commit too late.
+    assert not _git(work, "log", "-1", "--format=%s", "main").startswith(
+        "chore: bump version to"
+    ), "it committed on its way to refusing"
 
 
 def _current_version() -> str:
@@ -333,3 +362,41 @@ def test_a_repository_with_no_tests_is_not_held_up(repo):
 
     assert _release(work, "2026.42").returncode == 0
     assert _remote_tags(remote) == ["v2026.42"]
+
+
+def test_the_push_is_atomic_so_a_refused_tag_leaves_main_alone(repo):
+    """Half a release is worse than none, and this is the half that happens.
+
+    Not measured until the script was mutated: replacing `git push --atomic origin
+    main "$TAG"` with two separate pushes left every case here green. With two pushes
+    main arrives and the tag does not, so the repository carries a version bump that
+    no release and no published artifact corresponds to — and the tag that would
+    produce them cannot be pushed by this script afterwards either, because the
+    version it would be given is now "already the current version".
+
+    The remote refuses tags through a pre-receive hook, which is the way to make the
+    second half fail on demand.
+    """
+    work, remote = repo
+
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text(
+        "#!/bin/sh\n"
+        "while read -r _ _ ref; do\n"
+        '  case "$ref" in refs/tags/*) echo "tags refused here" >&2; exit 1;; esac\n'
+        "done\n"
+        "exit 0\n",
+        encoding="utf-8",
+        # CRLF here and the shebang never runs, so the hook is never
+        # consulted and the push it was written to refuse succeeds.
+        newline="\n",
+    )
+    hook.chmod(0o755)
+
+    proc = _release(work, "2026.42")
+
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert _remote_tags(remote) == []
+    assert _git(remote, "log", "-1", "--format=%s", "main") == "initial", (
+        "main moved although the tag was refused: the push was not atomic"
+    )
