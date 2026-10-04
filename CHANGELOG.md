@@ -12,6 +12,28 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Added
+
+- **The files the build is told to include are checked to be there.** apkradar lost its
+  `LICENSE` out of the working tree on 2026-10-04 and the loss reached `main`: pyproject
+  names the file, so `python -m build` failed with `License file does not exist: LICENSE`,
+  and the PyPI publish and the image went down with it. cookieradar lost its own a few
+  hours later, during a run of the suite. Neither suite noticed, because neither looked.
+
+  What removes them is still not known, and these cases do not explain it. They stop it
+  reaching a commit, which is the part that can be fixed without knowing.
+
+  The expectation is read out of the declarations rather than written down as `LICENSE`,
+  because the five Radar do not declare it the same way: patchradar states its licence as
+  text and only its Dockerfile names the file, the other four name it in pyproject, and of
+  those apkradar and mailradar do not copy it into the image. So two cases — every file
+  pyproject names, and every path the Dockerfile copies — and between them each repository
+  is covered, three of them twice.
+
+  Checked by moving the file aside in all five: it fails where it should and passes where
+  the declaration genuinely does not name it, and pointing pyproject at a file that is not
+  there fails too.
+
 ### Fixed
 
 - **Two defences in `release.sh` that the tests did not actually measure.** Found by
