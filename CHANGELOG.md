@@ -13,6 +13,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 ## [Unreleased]
 
 
+## [2026.42] - 2026-10-04
+
 ### Added
 
 - **The gate reads FIRST's forecast on the CVEs it already holds.** EPSS is indexed
