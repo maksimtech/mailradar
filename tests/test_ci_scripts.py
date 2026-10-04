@@ -147,14 +147,29 @@ def test_it_allows_the_index_a_grace_once_the_version_is_there(fake_pip):
 
 def test_no_grace_waits_for_nothing_and_claims_nothing(fake_pip):
     """Zero has to mean zero, including in the log: a release that did not need the
-    margin should not read as though it used one."""
+    margin should not read as though it used one.
+
+    Timed as a difference rather than against the clock. An absolute upper bound here
+    read `< 2` and saw 21.4 seconds the first time five suites ran on one machine at
+    once — measuring what the machine was doing rather than what the script was doing.
+    The gap between a run that is given a grace and one that is not is the grace,
+    whatever else is happening.
+    """
     start = time.monotonic()
-    proc, calls = fake_pip(1, PACKAGE, "2026.41", "5", "0", "0")
-    elapsed = time.monotonic() - start
+    proc, _ = fake_pip(1, PACKAGE, "2026.41", "5", "0", "0")
+    without = time.monotonic() - start
+
+    start = time.monotonic()
+    waited, _ = fake_pip(1, PACKAGE, "2026.41", "5", "0", "3")
+    with_grace = time.monotonic() - start
 
     assert proc.returncode == 0, proc.stderr
-    assert elapsed < 2, f"it waited {elapsed:.1f}s after being told not to"
+    assert waited.returncode == 0, waited.stderr
     assert "agree with itself" not in proc.stdout
+    assert with_grace - without >= 2, (
+        f"no grace took {without:.1f}s and a three second grace took "
+        f"{with_grace:.1f}s, so the grace was not waited for"
+    )
 
 
 def test_the_default_grace_is_a_wait_and_not_zero(fake_pip):
