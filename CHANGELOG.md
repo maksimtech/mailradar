@@ -12,6 +12,45 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The PyPI wait allows a margin once the index answers.** apkradar's Docker build
+  failed on 2026-10-03 with `No matching distribution found` **fifteen seconds after**
+  the wait had reported the version available — 16:31:21 against 16:31:36. The poll is
+  not wrong and not enough: it establishes that the file is reachable from the runner,
+  while the build container, multi-platform through buildx, resolves the index again
+  and can reach an edge still serving the old one.
+
+  This is not the `sleep 60` that stood in that step before polling and lost the race
+  twice. That was a guess about how long publishing takes, made before knowing
+  anything; this waits for the fact first and then allows a bounded margin for it to
+  propagate, and says so in the log when it uses one.
+
+  It narrows the window; it does not close it. What closes it is not asking the index
+  during the build at all — which is what exeradar's Dockerfile already does, with
+  `pip install /app/src`, and why exeradar has no wait script and did not hit this.
+  cookieradar and patchradar are one word from that (`_SOURCE=local`); apkradar and
+  mailradar would need the build argument added. That is the follow-up.
+
+### Changed
+
+- **`release.sh` runs the suite after the bump, and refuses before committing.**
+  The version is written as the script's first act, so a suite run *before* a
+  release cannot see what the bump breaks. Twice — apkradar 2026.42 on 2026-10-03
+  and 2026.43 on 2026-10-04 — `test_the_readme_states_the_version_it_was_captured_with`
+  failed in CI, on `main`, with the tag already pushed, and was fixed by hand after
+  the fact.
+
+  The gate sits between writing the version and committing it, not after: a refusal
+  then leaves the version file modified and nothing else touched, which is what
+  somebody needs to see, and `git checkout` undoes it. A gate after the commit would
+  have to undo a commit, and undoing is worse than not doing. A repository with no
+  `tests/` is not held up by a suite it does not have.
+
+  Three cases hold it, and the first was checked against the script without the gate:
+  a failing suite stops the release with nothing committed, tagged or pushed; a
+  passing one lets it through; and no `tests/` is not a failure.
+
 
 ## [2026.42] - 2026-10-04
 

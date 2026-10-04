@@ -258,3 +258,78 @@ def test_a_tag_that_cannot_be_made_leaves_the_remote_untouched(repo, tmp_path):
     assert _git(remote, "log", "-1", "--format=%s", "main") == "initial", (
         "the bump reached the remote without its tag"
     )
+
+
+@pytest.fixture
+def python3_with_pytest(tmp_path, monkeypatch):
+    """A `python3` on PATH that is this interpreter, because the gate runs
+    `python3 -m pytest` and the machine's own python3 — a shim to the system
+    install on Windows — has no pytest. What these cases are about is the gate, not
+    the toolchain, and faking the interpreter is closer to the script's behaviour
+    than giving the script a knob.
+    """
+    import os
+    import sys
+
+    folder = tmp_path / "bin"
+    folder.mkdir(exist_ok=True)
+    (folder / "python3").write_text(
+        f'#!/bin/sh\nexec "{pathlib.PurePath(sys.executable).as_posix()}" "$@"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PATH", f"{folder}{os.pathsep}{os.environ['PATH']}")
+
+
+def _add_suite(work, body: str) -> None:
+    """A tests/ directory in the throwaway repository, committed and pushed.
+
+    Every other case here runs against a repository with no tests at all, which is
+    why the script must not treat their absence as a failure — and why these three
+    have to put one there to say anything about the gate.
+    """
+    (work / "tests").mkdir(exist_ok=True)
+    (work / "tests" / "test_sandbox.py").write_text(body, encoding="utf-8")
+    _git(work, "add", ".")
+    _git(work, "commit", "-q", "-m", "a suite")
+    _git(work, "push", "-q", "origin", "main")
+
+
+def test_a_failing_suite_stops_the_release(repo, python3_with_pytest):
+    """The gap this closes. The version is written first, so a suite run before the
+    release cannot see what the bump breaks: on 2026-10-03 and again on 2026-10-04
+    the README's stated version failed in CI, on main, with the tag already pushed.
+
+    Nothing may be committed, tagged or pushed. The modified version file is left
+    where it is, because that is the evidence of what was attempted.
+    """
+    work, remote = repo
+    _add_suite(work, "def test_no():\n    assert False, 'the suite says no'\n")
+    head_before = _git(work, "rev-parse", "HEAD")
+
+    proc = _release(work, "2026.42")
+
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    said = proc.stdout + proc.stderr
+    assert "suite" in said.lower() or "test" in said.lower()
+    assert _remote_tags(remote) == []
+    assert _git(work, "rev-parse", "HEAD") == head_before, "it committed anyway"
+    assert _git(remote, "log", "-1", "--format=%s", "main") == "a suite"
+
+
+def test_a_passing_suite_lets_it_through(repo, python3_with_pytest):
+    work, remote = repo
+    _add_suite(work, "def test_yes():\n    assert True\n")
+
+    proc = _release(work, "2026.42")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert _remote_tags(remote) == ["v2026.42"]
+
+
+def test_a_repository_with_no_tests_is_not_held_up(repo):
+    """Which is every other case in this file, and the reason the gate asks whether
+    there is a suite before insisting on one."""
+    work, remote = repo
+
+    assert _release(work, "2026.42").returncode == 0
+    assert _remote_tags(remote) == ["v2026.42"]

@@ -74,6 +74,26 @@ assert count == 1, "__version__ not found"
 open(path, "w").write(new)
 EOF
 
+# The suite, after the bump and before the commit. The version is written above,
+# so a run before the release cannot see what the bump breaks: twice — apkradar
+# 2026.42 and 2026.43 — the README's stated version failed in CI, on main, with
+# the tag already pushed.
+#
+# Before the commit on purpose. A refusal here leaves the version file modified
+# and nothing else touched, which is what somebody needs to see; a gate after the
+# commit would have to undo one, and undoing is worse than not doing.
+if [ -d tests ]; then
+    echo "🧪 Suite, with the new version in place..."
+    python3 -m pytest -q || {
+        echo
+        fail "the suite fails with ${VERSION} in place — nothing was committed, \
+tagged or pushed. ${INIT_FILE} is left modified so you can see what broke; \
+\`git checkout ${INIT_FILE}\` undoes the bump."
+    }
+else
+    echo "🧪 No tests/ directory — nothing to run"
+fi
+
 git add "$INIT_FILE"
 git commit -m "chore: bump version to ${VERSION}"
 git tag -a "$TAG" -m "MailRadar ${VERSION}"
