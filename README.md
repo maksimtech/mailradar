@@ -377,6 +377,15 @@ history.
 
 ---
 
+## How this is built
+
+Developed with [Claude Code](https://claude.com/claude-code), reviewed and released by
+[maksimtech](https://github.com/maksimtech). The suite is the contract: the release
+script runs it with the new version already written and refuses to commit if it fails,
+so nothing ships that it has not passed.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
