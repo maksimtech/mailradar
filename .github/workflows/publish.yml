@@ -41,3 +41,33 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           verify-metadata: false
+
+      # That the file on PyPI can be installed used to be proved by accident, by
+      # docker.yml installing it to build the image. The image now builds from this
+      # tag's source and never asks the index, so the check is made here, on purpose,
+      # and after the upload — where a slow index delays a check instead of failing a
+      # build that had nothing to do with it.
+      #
+      # No margin: the grace in that script is for two resolvers, the runner and the
+      # buildx container. There is only the runner in this job.
+      - name: Extract version
+        id: version
+        env:
+          RAW: ${{ github.ref_name }}
+        run: |
+          STRIPPED="${RAW#v}"
+          NORMALIZED=$(python3 -c "parts='${STRIPPED}'.split('.'); print('.'.join(str(int(p)) for p in parts))")
+          echo "VERSION=${NORMALIZED}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the index to catch up
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: bash .github/scripts/wait_for_pypi.sh mailradar "$VERSION" 30 20 0
+
+      - name: Check the published wheel installs and runs
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          python -m venv "${RUNNER_TEMP}/verify"
+          "${RUNNER_TEMP}/verify/bin/pip" install --no-cache-dir "mailradar==${VERSION}"
+          "${RUNNER_TEMP}/verify/bin/mailradar" --version

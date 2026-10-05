@@ -36,6 +36,10 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **The OCI licence label is the key the standard names.** It read
+  `org.opencontainers.image.license`, singular, which nothing reads — so a tool asking the
+  image what it is licensed under got no answer, while the label looked right in the file.
+
 - **Two defences in `release.sh` that the tests did not actually measure.** Found by
   mutating the script rather than by reading it.
 
@@ -88,6 +92,54 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   guard removed so zero waits anyway.
 
 ### Changed
+
+- **The race with PyPI is closed rather than narrowed: the released image no longer asks
+  the index.** `docker.yml` installed `mailradar==<the new version>` from PyPI and polled
+  the index first to make that work. The poll runs on the runner; the multi-platform build
+  resolves the index again, per platform, from whichever edge answers. apkradar lost that
+  race on 2026-10-03 **fifteen seconds after** its poll had succeeded; this repository
+  passed on timing alone, which is not the same as being safe. Nothing that waits can close
+  it. Not asking does, so the image is built from the source the tag points at.
+
+  The Dockerfile could not do that — it only knew how to install from the index — so it
+  gained the `local`/`pypi` switch the other Radar have, with `local` as the default and the
+  source copied in. `ARG MAILRADAR_VERSION=2026.9.2` went with it: that default stood while
+  this project was at 2026.42, so `docker build .` rebuilt September and nothing about it
+  looked wrong.
+
+  **The build now stands on the tag it resolved, and that is a step rather than a `ref:` on
+  the checkout.** The tag arrives in a different place on each of the three triggers: in the
+  ref on a tag push, in the input on a dispatch, and nowhere at all on the weekly schedule,
+  where the version step finds it with `git tag --list --sort=-v:refname`. A `ref:` cannot
+  express the third case, because the tag is not known until the tags have been fetched.
+
+  It matters most on the schedule. `latest` is rebuilt weekly to pick up Debian's patches,
+  and built from the checkout without this it would be rebuilt from whatever `main` holds —
+  which is how `latest` ends up carrying unreleased code under a released version's name.
+  Nothing between the build and the push would catch it: unlike exeradar and cookieradar,
+  this workflow has no smoke test there.
+
+  Wheels are still asked for first on both branches, and both still retry without
+  `--only-binary :all:` if that fails. The retry is older than this change and was kept as
+  it was: why it is needed is not recorded, and removing it would make this build stricter
+  than it has ever been for a reason that cannot be checked without a Docker daemon. The new
+  case says *asked for*, which is what is true, rather than claiming a guarantee.
+
+  The image is built on every push and pull request now. `docker-build-check.yml` could not
+  run on its own before — the Dockerfile needed a published version handed to it — so the
+  only thing that built this image automatically was the workflow that publishes it. Given a
+  version it still reproduces that one from the index, which keeps `latest_pypi_version.py`
+  in use rather than orphaned.
+
+  And that the file on PyPI can be installed, which the old arrangement proved by accident,
+  is now checked on purpose in `publish.yml` after the upload — with no margin, because
+  there is a single resolver there.
+
+  Eleven mutations hold all of it, and all eleven fail: the image back on the index, the
+  build off the resolved tag, that step no longer given the version, a shallow checkout, the
+  published file unchecked, a margin where there is one resolver, the build check no longer
+  running on pull requests, the Dockerfile defaulting to `pypi`, a stale version default
+  restored, the local branch not asking for wheels, and the licence label back to singular.
 
 - **`release.sh` runs the suite after the bump, and refuses before committing.**
   The version is written as the script's first act, so a suite run *before* a

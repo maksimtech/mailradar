@@ -209,39 +209,105 @@ def _wait_step():
     return next(s for s in _docker_steps() if "wait_for_pypi.sh" in s.get("run", ""))
 
 
-def test_the_wait_runs_after_the_version_is_known_and_before_the_build():
-    steps = _docker_steps()
-    names = [s.get("name", s.get("uses", "")) for s in steps]
+def _publish_steps():
+    return _workflow("publish.yml")["jobs"]["build-and-publish"]["steps"]
 
+
+def test_the_release_image_is_built_from_the_tag_and_not_from_the_index():
+    """What closes the race instead of narrowing it.
+
+    The image installed `mailradar==<the new version>` from PyPI while publish.yml was
+    still uploading it, and polled the index first to make that work. The poll runs on
+    the runner; the multi-platform build resolves the index again, per platform, from
+    whichever edge answers. apkradar lost that race on 2026-10-03 fifteen seconds after
+    its poll had succeeded; this repository passed on timing alone. Nothing that waits
+    can close it. Not asking does.
+    """
+    steps = _docker_steps()
+    build = next(s for s in steps if "build-push-action" in s.get("uses", ""))
+    args = build["with"]["build-args"]
+
+    assert "MAILRADAR_SOURCE=local" in args
+    assert "MAILRADAR_VERSION=" not in args, (
+        "built from the checkout, there is no version to hand the image"
+    )
+    assert not [s for s in steps if "wait_for_pypi.sh" in s.get("run", "")], (
+        "nothing here needs the index now, so nothing here should wait for it"
+    )
+
+
+def test_the_build_stands_on_the_tag_it_resolved():
+    """Why this is a step and not a `ref:` on the checkout.
+
+    Three triggers arrive here with the tag in three different places: a tag push has
+    it in the ref, a dispatch in its input, and the weekly rebuild has it nowhere —
+    the version step finds it with `git tag --list --sort=-v:refname`. A `ref:` on the
+    checkout cannot express that, because the tag is not known until after the
+    checkout has fetched the tags.
+
+    So the job stands on the resolved tag afterwards. It matters most on the schedule:
+    `latest` is rebuilt to pick up Debian's patches, and without this it would be
+    rebuilt from whatever `main` holds — which is how `latest` ends up carrying
+    unreleased code under a released version's name. There is no smoke test between
+    the build and the push here to catch that.
+    """
+    steps = _docker_steps()
     version = next(i for i, s in enumerate(steps) if s.get("id") == "version")
-    wait = next(i for i, s in enumerate(steps) if "wait_for_pypi.sh" in s.get("run", ""))
+    stand = next(i for i, s in enumerate(steps) if "git checkout" in s.get("run", ""))
     build = next(i for i, s in enumerate(steps) if "build-push-action" in s.get("uses", ""))
 
-    assert version < wait < build, names
+    assert version < stand < build, [s.get("name", "") for s in steps]
+    assert "VERSION" in steps[stand].get("env", {}), (
+        "it has to be given the tag the version step resolved"
+    )
 
 
-def test_the_wait_is_given_the_pip_version_and_not_the_tag():
-    """The part that would have made the fix useless.
+def test_the_checkout_fetches_the_tags_it_will_need():
+    """The scheduled rebuild finds the newest tag with `git tag --list`, which needs
+    the tags to be there. A shallow checkout has none of them, and the failure would
+    be an empty version rather than a missing tag."""
+    checkout = next(s for s in _docker_steps() if "actions/checkout" in s.get("uses", ""))
 
-    The tag is v2026.41 and the distribution is 2026.41. Waiting for the tag
-    would poll for a version that cannot exist, for ten minutes, and then fail
-    with the same message the race produced — the fix would have looked like the
-    bug.
+    assert checkout.get("with", {}).get("fetch-depth") == 0
+
+
+def test_the_image_is_built_before_a_release_and_not_only_during_one():
+    """Otherwise the first attempt at building the image is the one that publishes it.
+
+    docker.yml pushes to Docker Hub, `:latest` included. docker-build-check.yml exists
+    to build without publishing and was reachable by hand only — and had to be,
+    because the Dockerfile could not build anything without a published version handed
+    to it.
     """
-    wait = _wait_step()
+    triggers = _workflow("docker-build-check.yml")["on"]
 
-    assert wait["env"]["VERSION"] == f"${{{{ steps.version.outputs.{PIP_VERSION_OUTPUT} }}}}"
-    assert '"$VERSION"' in wait["run"]        # through the environment, not interpolated
+    assert "pull_request" in triggers, "a change that breaks the image should say so in its PR"
+    assert "push" in triggers, "and on main, because that is what the next release builds"
 
 
-def test_only_a_tag_push_waits():
-    """The scheduled rebuild and a manual dispatch name a version published long
-    ago. Waiting for it would only move the failure of a wrong input earlier,
-    and the weekly rebuild of `latest` has nothing to race with."""
-    triggers = _workflow("docker.yml")["on"]
+def test_the_published_file_is_still_checked_where_it_was_published():
+    """Taking the image off the index loses the one thing that arrangement proved by
+    accident: that what lands on PyPI can be installed. publish.yml says it on purpose
+    now, after the upload, where a slow index delays a check instead of failing a
+    build."""
+    steps = _publish_steps()
+    names = [s.get("name", s.get("uses", "")) for s in steps]
 
-    assert set(triggers) == {"push", "schedule", "workflow_dispatch"}
-    assert _wait_step()["if"] == "github.event_name == 'push'"
+    upload = next(i for i, s in enumerate(steps) if "gh-action-pypi-publish" in s.get("uses", ""))
+    wait = next(i for i, s in enumerate(steps) if "wait_for_pypi.sh" in s.get("run", ""))
+    verify = next(i for i, s in enumerate(steps) if "--version" in s.get("run", ""))
+
+    assert upload < wait < verify, names
+    assert "mailradar==" in steps[verify]["run"], "it has to be the version just uploaded"
+
+
+def test_the_check_asks_for_no_margin_because_there_is_one_resolver():
+    """The grace exists for two resolvers, the runner and the buildx container. In
+    publish.yml there is only the runner, which has just had `pip download` answer."""
+    wait = next(s for s in _publish_steps() if "wait_for_pypi.sh" in s.get("run", ""))
+    arguments = wait["run"].split("wait_for_pypi.sh", 1)[1].split()
+
+    assert arguments[-1] == "0", wait["run"]
 
 
 def test_nothing_in_the_docker_workflow_waits_by_sleeping():
