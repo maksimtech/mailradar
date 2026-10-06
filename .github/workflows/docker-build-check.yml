@@ -6,11 +6,23 @@ name: Docker Build Check
 # The Dockerfile installs mailradar from PyPI rather than from this checkout, so
 # the build needs a published version. It is resolved here rather than taken
 # from the Dockerfile's MAILRADAR_VERSION default, which lags many releases behind.
+# On every push and pull request, because the only other thing that builds this image
+# is docker.yml, which publishes as it builds — so until this ran on its own, the first
+# attempt at a build was the one that released. It could not run on its own before: the
+# Dockerfile only knew how to install from the index, so it had to be handed a published
+# version to build anything at all.
+#
+# Given a version it still builds that one from the index, which is how an older image
+# is reproduced. Given nothing it builds this checkout.
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Published version to build (default: the latest on PyPI)'
+        description: 'Published version to reproduce (default: build this checkout)'
         required: false
 permissions:
   contents: read
@@ -27,10 +39,13 @@ jobs:
           REQUESTED: ${{ inputs.version }}
         run: |
           if [ -n "$REQUESTED" ]; then
+            SOURCE=pypi
             VERSION="${REQUESTED#v}"
           else
-            VERSION=$(python3 .github/scripts/latest_pypi_version.py mailradar)
+            SOURCE=local
+            VERSION=$(python3 -c "import mailradar; print(mailradar.__version__)")
           fi
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building mailradar $VERSION"
 
@@ -45,6 +60,7 @@ jobs:
           push: false
           tags: mailradar:build-check
           build-args: |
+            MAILRADAR_SOURCE=${{ steps.ver.outputs.source }}
             MAILRADAR_VERSION=${{ steps.ver.outputs.version }}
 
       - name: Smoke test (the CLI runs as the container user)

@@ -47,25 +47,21 @@ jobs:
           STRIPPED="${RAW#v}"
           NORMALIZED=$(python3 -c "parts='${STRIPPED}'.split('.'); print('.'.join(str(int(p)) for p in parts))")
           echo "PIP_VERSION=${NORMALIZED}" >> $GITHUB_OUTPUT
-      # publish.yml runs in parallel on the same tag push, so this job can reach
-      # `pip install mailradar==<new version>` before the version exists at all.
-      # A fixed `sleep 60` stood here; apkradar had the same one and lost the race
-      # twice, on 2026-09-24 and 2026-09-30, both times reported as "No matching
-      # distribution found" — which reads like a failed publish while PyPI already
-      # had the files. mailradar passed on timing alone. Polling asks the question
-      # the Dockerfile asks, with pip, until the index answers it.
+      # Stand on the tag that was just resolved. The image is built from this
+      # checkout now, and the tag arrives in a different place on each of the three
+      # triggers — in the ref on a tag push, in the input on a dispatch, and nowhere at
+      # all on the schedule, where the step above finds it with `git tag --list`. A
+      # `ref:` on the checkout cannot express the third case, because the tag is not
+      # known until the tags have been fetched.
       #
-      # After the version step, not before it: the wait needs the pip version,
-      # because `mailradar==v2026.41` is not a version pip can ever find.
-      #
-      # Only on a tag push. A scheduled rebuild and a manual dispatch both name a
-      # version that was published long ago, and waiting for it would only move
-      # the failure of a wrong input from the build to here.
-      - name: Wait for mailradar on PyPI
-        if: github.event_name == 'push'
+      # It matters most on the schedule: `latest` is rebuilt weekly for Debian's
+      # patches, and without this it would be rebuilt from whatever main holds, which
+      # is how `latest` ends up carrying unreleased code under a released version's
+      # name. Nothing between the build and the push would catch that.
+      - name: Stand on the tag being built
         env:
-          VERSION: ${{ steps.version.outputs.PIP_VERSION }}
-        run: bash .github/scripts/wait_for_pypi.sh mailradar "$VERSION"
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: git checkout --detach "refs/tags/${VERSION}"
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -78,7 +74,7 @@ jobs:
             maksimtech/mailradar:latest
             ${{ github.event_name != 'schedule' && format('maksimtech/mailradar:{0}', steps.version.outputs.VERSION) || '' }}
           build-args: |
-            MAILRADAR_VERSION=${{ steps.version.outputs.PIP_VERSION }}
+            MAILRADAR_SOURCE=local
           pull: true
           # The weekly rebuild exists to pick up Debian's patches, and a cached
           # `apt-get upgrade` layer is exactly what would stop it doing that.
