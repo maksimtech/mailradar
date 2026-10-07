@@ -1,0 +1,23 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "dns.resolver.resolve of the name",
+  "queried": [
+   "default._bimi.cnn.com. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.cnn.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.cnn.com. 1800 IN TXT \"v=BIMI1; l=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

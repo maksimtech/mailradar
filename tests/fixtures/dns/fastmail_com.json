@@ -1,0 +1,47 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "check_spf(\"fastmail.com\") and check_mta_sts(\"fastmail.com\")",
+  "queried": [
+   "fastmail.com. TXT",
+   "spf.messagingengine.com. TXT",
+   "_mta-sts.fastmail.com. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "fastmail.com. IN TXT",
+   ";ANSWER",
+   "fastmail.com. 3600 IN TXT \"v=spf1 include:spf.messagingengine.com ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "spf.messagingengine.com. IN TXT",
+   ";ANSWER",
+   "spf.messagingengine.com. 86400 IN TXT \"v=spf1 ip4:103.168.172.128/27 ip4:202.12.124.128/27 ip4:204.75.18.128/27 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.fastmail.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.fastmail.com. 3600 IN TXT \"v=STSv1; id=20260728T132000\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

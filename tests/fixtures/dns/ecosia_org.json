@@ -1,0 +1,23 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "check_mta_sts(\"ecosia.org\")",
+  "queried": [
+   "_mta-sts.ecosia.org. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.ecosia.org. IN TXT",
+   ";ANSWER",
+   "_mta-sts.ecosia.org. 120 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

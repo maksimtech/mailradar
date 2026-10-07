@@ -1,0 +1,18 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "httpx 0.28.1 straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+  "by": "check_mta_sts(\"ecosia.org\")",
+  "requested": [
+   "GET https://mta-sts.ecosia.org/.well-known/mta-sts.txt"
+  ]
+ },
+ "responses": [
+  {
+   "request": "GET https://mta-sts.ecosia.org/.well-known/mta-sts.txt",
+   "status": 404,
+   "headers": {},
+   "body": ""
+  }
+ ]
+}

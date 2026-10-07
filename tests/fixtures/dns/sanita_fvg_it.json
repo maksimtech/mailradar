@@ -1,0 +1,35 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "check_dmarc(\"asufc.sanita.fvg.it\")",
+  "queried": [
+   "_dmarc.asufc.sanita.fvg.it. TXT",
+   "_dmarc.sanita.fvg.it. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_dmarc.asufc.sanita.fvg.it. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "sanita.fvg.it. 86400 IN SOA dns.regione.fvg.it. postmaster.sanita.fvg.it. 2026090800 86400 7200 604800 86400",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_dmarc.sanita.fvg.it. IN TXT",
+   ";ANSWER",
+   "_dmarc.sanita.fvg.it. 289 IN TXT \"v=DMARC1; p=none; rua=mailto:antispam@insiel.it; ruf=mailto:antispam@insiel.it; fo=1;\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

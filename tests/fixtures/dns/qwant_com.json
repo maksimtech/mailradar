@@ -1,0 +1,51 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "check_spf(\"qwant.com\")",
+  "queried": [
+   "qwant.com. TXT",
+   "_spf.google.com. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "qwant.com. IN TXT",
+   ";ANSWER",
+   "qwant.com. 3600 IN TXT \"Dv9-b7p-47M\"",
+   "qwant.com. 3600 IN TXT \"MS=ms90901364\"",
+   "qwant.com. 3600 IN TXT \"apple-domain-verification=p4IYUqjmTB4BXLwx\"",
+   "qwant.com. 3600 IN TXT \"cursor-domain-verification-df0kan=HoA0KzastxtEwLsdXTG1cfjVn\"",
+   "qwant.com. 3600 IN TXT \"anthropic-domain-verification-9wce9m=fzme6T4a4Jr0NAcjWYy2vuifu\"",
+   "qwant.com. 3600 IN TXT \"anthropic-domain-verification-sb48p5=DTJFtjrCCoU9U17L2db6j5T47\"",
+   "qwant.com. 3600 IN TXT \"slack-domain-verification=dGJ6Osn5PVcN9TkhenEXKcr47ZqlcW8RVuxRcjkJ\"",
+   "qwant.com. 3600 IN TXT \"google-site-verification=NcOr9SlS_5_ozLbftZgGKfMjASv7Ob2a7m02z7AtrFA\"",
+   "qwant.com. 3600 IN TXT \"google-site-verification=Z7u9u7Y5i6rXSLYbg8vnl2VtEdeYDsLlBBPwOETbejI\"",
+   "qwant.com. 3600 IN TXT \"google-site-verification=cJ0ILi3TKzkP23HzzS1Y9StYqpduBFLGoPKzfNihisg\"",
+   "qwant.com. 3600 IN TXT \"google-site-verification=erMLYVscQmYoBGeH9zMDdXlMTi0B8HoxdQGv1Mk1zb8\"",
+   "qwant.com. 3600 IN TXT \"google-site-verification=fNsOxqy4iwCayCWTalHcZzGt2knNDL6EU5dbkd5iCXk\"",
+   "qwant.com. 3600 IN TXT \"google-site-verification=mHRzapUOfSYsw5EQJyoEnpzt2j6IEzAuFoS9jNd6lSM\"",
+   "qwant.com. 3600 IN TXT \"mistral-domain-verification=0b41d06c88051780d0a380e2b6b6f26d4196305f\"",
+   "qwant.com. 3600 IN TXT \"notion-domain-verification=C2QSoe44VMe08G4F4unNGERKrDu4qXVvuhK8dLHYLAc\"",
+   "qwant.com. 3600 IN TXT \"riot-domain-verification=f44e72e1a8a86c56da96b1b2e486ac5c8944a8360d45b4fa8c9e8ca7723a\"",
+   "qwant.com. 3600 IN TXT \"v=spf1 ip4:194.187.168.35 ip4:194.187.168.37 ip4:194.187.168.38 ip4:94.23.181.132 ip4:52.28.158.135 ip4:52.29.12.146 include:_spf.google.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.google.com. IN TXT",
+   ";ANSWER",
+   "_spf.google.com. 57 IN TXT \"v=spf1 ip4:74.125.0.0/16 ip4:209.85.128.0/17 ip6:2001:4860:4864::/56 ip6:2404:6800:4864::/56 ip6:2607:f8b0:4864::/56 ip6:2800:3f0:4864::/56 ip6:2a00:1450:4864::/56 ip6:2c0f:fb50:4864::/56 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "dns.resolver.resolve of each name",
+  "queried": [
+   "spf-all.example.net. TXT",
+   "_spf.example.net. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "spf-all.example.net. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "example.net. 1800 IN SOA betty.ns.cloudflare.com. dns.cloudflare.com. 2416374413 10000 2400 604800 1800",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.example.net. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "example.net. 1800 IN SOA betty.ns.cloudflare.com. dns.cloudflare.com. 2416374413 10000 2400 604800 1800",
+   ";ADDITIONAL"
+  ]
+ ]
+}
