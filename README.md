@@ -93,7 +93,7 @@ Real output:
 ```
 ╭──────────────────────────── 📡 MailRadar Report ─────────────────────────────╮
 │ Domain: example.com                                                          │
-│ Score: 68/100 — 🟡 MODERATE                                                  │
+│ Score: 65/100 — 🟡 MODERATE                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭──────────┬─────┬─────────────────────────────────────────────────────┬───────╮
 │ Check    │ St… │ Details                                             │ Score │
@@ -101,7 +101,7 @@ Real output:
 │ DMARC    │ ✅  │ p=reject | pct=100 | adkim=s | aspf=s | rua=✗ |     │    45 │
 │          │     │ ruf=✗                                               │       │
 │ SPF      │ ✅  │ v=spf1 -all                                         │    20 │
-│ DKIM     │ ✅  │ selector: default | 512-bit RSA                     │     3 │
+│ DKIM     │ ❌  │ selector: default | key revoked                     │     0 │
 │ BIMI/VMC │ ❌  │ Not configured                                      │     0 │
 │ MTA-STS  │ ❌  │ Not configured                                      │     0 │
 │ TLS-RPT  │ ❌  │ Not configured                                      │     0 │
@@ -112,7 +112,8 @@ Real output:
 ⚠️  Issues found:
   • No rua configured — aggregate reports disabled
   • No ruf configured — forensic reports disabled
-  • DKIM key is weak — upgrade to 2048-bit immediately
+  • DKIM key revoked (empty p=) on selector default and 16 more — no active key
+found
   • No BIMI record configured
   • No MTA-STS configured
   • No TLS-RPT configured
@@ -305,7 +306,9 @@ DKIM signs outgoing mail with a key published at
 `<selector>._domainkey.<domain>`. The selector is not public, so MailRadar
 tries a list of common ones (`default`, `google`, `selector1`, `selector2`,
 `k1`, `mail` and others) and measures the RSA key size of the first one found.
-An Ed25519 key (`k=ed25519`, RFC 8463) scores like a 2048-bit RSA key.
+An Ed25519 key (`k=ed25519`, RFC 8463) scores like a 2048-bit RSA key. An empty
+`p=` is a revoked key (RFC 6376 §3.6.1): MailRadar moves on to the next
+selector, and reports the revocation if no active key is found.
 
 | Key size | Points |
 |----------|--------|
@@ -323,7 +326,7 @@ organization's logo. MailRadar checks that the SVG logo is reachable (2
 points) and whether a Verified Mark Certificate is referenced (8 points, or 3
 without a VMC). The logo is downloaded only from an `https://` URL that does
 not name a private or loopback address, since the URL comes from the analysed
-domain's DNS. BIMI is a trust and branding feature, not a protection
+domain's DNS. `v=BIMI1; l=; a=;` declines BIMI and scores 0. BIMI is a trust and branding feature, not a protection
 against spoofing by itself.
 
 ### MTA-STS (up to 5 points)
@@ -351,8 +354,6 @@ found is the one `send` uses for encryption.
 ## Known limitations
 
 - DKIM detection depends on the list of common selectors (see above).
-- An empty DKIM key (`p=`, which revokes the key) is reported as a weak
-  512-bit key, as in the `example.com` output above.
 - A DNS lookup that fails (timeout, SERVFAIL) leaves that check "not
   verified": it scores 0 but is not reported as missing, and `report` and
   `send` refuse to produce a report from an incomplete analysis.

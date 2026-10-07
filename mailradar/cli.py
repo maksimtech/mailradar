@@ -205,6 +205,9 @@ def _print_report(report: DomainReport) -> None:
         dkim_detail = f"selector: {escape(k.selector)} | {key}"
     elif k.error:
         dkim_detail = _UNVERIFIED
+    elif k.selector:
+        # Found, but revoked (empty p=): there is no key to sign with
+        dkim_detail = f"[red]selector: {escape(k.selector)} | key revoked[/red]"
     else:
         dkim_detail = "[red]Not found (tried common selectors)[/red]"
     dkim_icon = "✅" if k.present else ("⚠️ " if k.error else "❌")
@@ -425,13 +428,13 @@ def batch(
     try:
         domains = _read_list(file)
     except FileNotFoundError:
-        console.print(f"[red]File not found: {file}[/red]")
+        console.print(f"[red]File not found: {escape(file)}[/red]")
         raise typer.Exit(1) from None
     except UnicodeDecodeError:
-        console.print(f"[red]Cannot read {file}: not valid UTF-8[/red]")
+        console.print(f"[red]Cannot read {escape(file)}: not valid UTF-8[/red]")
         raise typer.Exit(1) from None
     except OSError as e:
-        console.print(f"[red]Cannot read {file}: {e.strerror or e}[/red]")
+        console.print(f"[red]Cannot read {escape(file)}: {escape(str(e.strerror or e))}[/red]")
         raise typer.Exit(1) from None
 
     results = []
@@ -471,10 +474,6 @@ def batch(
 
 def main():
     app()
-
-
-if __name__ == "__main__":
-    main()
 
 
 def _refuse_unverified(analysis: DomainReport) -> None:
@@ -681,3 +680,9 @@ def discover(
         console.print("[dim]No GPG public keys found for any address.[/dim]")
 
     console.print()
+
+
+# Last, after every command: placed above `report`, it ran the app before
+# report, send and discover were registered
+if __name__ == "__main__":
+    main()

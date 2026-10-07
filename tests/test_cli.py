@@ -218,6 +218,12 @@ class TestBatchCommand(unittest.TestCase):
         finally:
             os.unlink(tmp)
 
+    def test_batch_missing_file_with_square_brackets_in_name(self):
+        """The file name is escaped for Rich: '[/x]' in the path must not crash with a MarkupError."""
+        result = self.runner.invoke(app, ["batch", "[/x]missing-file.txt"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIsInstance(result.exception, SystemExit, repr(result.exception))
+
 
 class TestReportCommand(unittest.TestCase):
 
@@ -593,6 +599,16 @@ class TestReportTableRows(unittest.TestCase):
         for lang in ("en", "it"):
             self.assertNotIn("256-bit RSA", generate_report(report, lang=lang))
 
+    def test_dkim_revoked_on_every_selector_is_said_briefly_and_honestly(self):
+        """example.com publishes an empty p= under every selector: no list of 17 names, and not 'Not found'."""
+        report = _dkim_report("v=DKIM1; p=")
+        issue = next(i for i in report.dkim.issues if "revoked" in i)
+        self.assertNotIn("mailchimp", issue)
+        self.assertIn("more", issue)
+        row = next(line for line in _table_lines(report) if line.startswith("│ DKIM"))
+        self.assertNotIn("Not found", row)
+        self.assertIn("revoked", row)
+
 
 class TestIncompleteAnalysis(unittest.TestCase):
     """A report goes to the domain's owner: it must not state what could not be verified."""
@@ -613,3 +629,19 @@ class TestIncompleteAnalysis(unittest.TestCase):
         result = self.runner.invoke(app, ["send", "example.com"])
         self.assertEqual(result.exit_code, 1)
         mock_send.assert_not_called()
+
+
+class TestModuleEntryPoint(unittest.TestCase):
+
+    def test_python_m_mailradar_cli_registers_every_command(self):
+        """`python -m mailradar.cli` used to call main() before report, send and discover were defined."""
+        import subprocess
+        import sys
+        from pathlib import Path
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "COLUMNS": "200", "NO_COLOR": "1"}
+        proc = subprocess.run([sys.executable, "-m", "mailradar.cli", "--help"],
+                              cwd=Path(__file__).resolve().parent.parent,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env=env, timeout=60)
+        for command in ("check", "batch", "report", "send", "discover"):
+            self.assertIn(command, proc.stdout, f"command {command!r} missing from python -m mailradar.cli")

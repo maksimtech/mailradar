@@ -100,7 +100,7 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 - **SPF is read term by term, as RFC 7208 defines it, not searched for substrings.**
   `v=spf1 mx all` — `all` with no qualifier, which is `+all` and lets every server pass —
   scored like a correct record and showed ✅. `include:spf-all.example.net ~all` was read
-  as `-all`, and `-ALL` as no `all` at all. Also
+  as `-all`, `-ALL` as no `all` at all, and `+all` raised the `+a or +mx` warning. Also
   now: a record without `all` follows its `redirect=` (gmail.com's form), and with
   neither it is reported as neutral; two SPF records, a `redirect=` to a name with none,
   and more than 10 DNS lookups once `include:` and `redirect=` are followed (an include
@@ -110,7 +110,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 - **DMARC: values are case-insensitive, and two records are no policy.** `p=REJECT;
   adkim=S` was scored as `p=none` and the report told the owner no protection was
   active. Two records on `_dmarc.<domain>` end policy discovery (RFC 7489 §6.6.3); the
-  first one was used instead.
+  first one was used instead. `v = DMARC1` is a valid record, and an empty `rua=` or
+  `ruf=` no longer counts as reports configured.
 
 - **A DNS lookup that fails is no longer reported as a missing record.** A resolver
   timeout or SERVFAIL was read as "no record", so the report sent to the owner could say
@@ -120,15 +121,18 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   produce a report from an incomplete analysis. A DKIM selector that fails no longer
   hides the next one.
 
-- **DKIM: Ed25519 keys are strong.** A `k=ed25519` key (RFC 8463, 32 raw bytes) failed
-  to parse as DER and was scored as weak 512-bit RSA, and the law check cited GDPR over
-  it.
+- **DKIM: Ed25519 keys are strong and an empty `p=` is a revoked key.** A `k=ed25519` key
+  (RFC 8463, 32 raw bytes) failed to parse as DER and was scored as weak 512-bit RSA, and
+  the law check cited GDPR over it. An empty `p=` revokes the key (RFC 6376 §3.6.1): it
+  was shown as "512-bit RSA" too — the `example.com` output in the README was exactly
+  that. The next selector is now tried, and the revocation is reported if no active key
+  is found.
 
 - **BIMI downloads the logo only from a public `https://` URL.** `l=` comes from the
   analysed domain's DNS, that is from a third party, and any URL in it was fetched:
   `l=http://127.0.0.1:8080/admin` reached the network MailRadar runs on. Plain http and
   IP literals that are not global are now refused; a host name is still not checked for
-  what it resolves to.
+  what it resolves to. `v=BIMI1; l=; a=;` declines BIMI and no longer earns 3 points.
 
 - **The organizational domain comes from the Public Suffix List.** The embedded subset of
   two-label suffixes lacked `co.at` and hundreds more, so `_dmarc.co.at` was queried as
@@ -141,8 +145,16 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   `_dmarc.fvg.it`. In DNS that is where the record actually is: on 2026-10-07
   `_dmarc.sanita.fvg.it` answered and `_dmarc.fvg.it` was NXDOMAIN.
 
-- **MTA-STS: what the report says matches what was found.** The report for the owner
-  said "Current: Not configured" for a policy in testing mode.
+- **MTA-STS: what the report says matches what was found.** A policy file answering 404
+  raised no issue at all, and the report for the owner said "Current: Not configured" for
+  a policy in testing mode.
+
+- **Smaller fixes.** `check example.com.` treated the trailing dot as a missing domain,
+  and `analyze_domain` now normalises the name once, so GPG and MTA-STS no longer see
+  `Example.COM.`. RDAP addresses are matched on the domain, not as a substring
+  (`admin@example.com.evil.org`). `python -m mailradar.cli` ran the app before `report`,
+  `send` and `discover` were defined. `batch` crashed with a Rich `MarkupError` on a file
+  name containing `[`.
 
 ### Changed
 

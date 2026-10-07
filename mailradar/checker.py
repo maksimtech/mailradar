@@ -124,6 +124,9 @@ def domain_exists(domain: str) -> bool:
     Check if a domain exists in DNS.
     A valid domain must have at least one dot (e.g. apple.com not just apple).
     """
+    # A fully qualified name ends in a dot: example.com. is example.com
+    domain = domain.removesuffix(".")
+
     # At least one dot: without a TLD it is not a domain
     if "." not in domain:
         return False
@@ -360,8 +363,9 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
     result.pct = pct
     result.adkim = tags.get("adkim", "r").lower()
     result.aspf = tags.get("aspf", "r").lower()
-    result.rua = "rua" in tags
-    result.ruf = "ruf" in tags
+    # An empty rua= or ruf= names nobody to send reports to (RFC 7489 §6.4)
+    result.rua = bool(tags.get("rua"))
+    result.ruf = bool(tags.get("ruf"))
 
     # Scoring
     if result.policy == "reject":
@@ -399,8 +403,9 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
 
 
 def _is_dmarc(record: str) -> bool:
-    """RFC 7489 §6.4: the first tag is v=DMARC1."""
-    return record.startswith("v=DMARC1")
+    """RFC 7489 §6.4: the first tag is v=DMARC1, spaces allowed around '='."""
+    key, _, value = record.split(";", 1)[0].partition("=")
+    return key.strip().lower() == "v" and value.strip() == "DMARC1"
 
 
 def _dmarc_records(name: str) -> list[str]:
@@ -600,7 +605,7 @@ def check_spf(domain: str) -> SPFResult:
         result.issues.append("SPF has no all mechanism — the default result is neutral, no enforcement")
 
     # Check for overly permissive mechanisms
-    if "+a" in records[0] or "+mx" in records[0]:
+    if any(qualifier == "+" and name in ("a", "mx") for qualifier, name, _ in terms):
         result.permissive = True
         result.issues.append("SPF contains +a or +mx — too permissive")
 
@@ -634,6 +639,7 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
 
     selectors_to_try = selectors or default_selectors
     failed: DNSLookupError | None = None
+    revoked: list[str] = []
 
     for selector in selectors_to_try:
         try:
@@ -646,6 +652,13 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
             if "v=DKIM1" in record or "p=" in record:
                 tags = _parse_tags(record)
                 key_part = "".join(tags.get("p", "").split())
+                if "p" in tags and not key_part:
+                    # RFC 6376 §3.6.1: an empty p= revokes the key; after a
+                    # rotation the active one is on another selector
+                    revoked.append(selector)
+                    result.selector = result.selector or selector
+                    continue
+
                 result.present = True
                 result.selector = selector
                 result.raw = record
@@ -693,7 +706,14 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
 
     if not result.present and failed:
         raise failed
-    if not result.present:
+    if not result.present and revoked:
+        # Some domains revoke every name at once (example.com answers p= for
+        # all of them): the first is enough to say it
+        more = f" and {len(revoked) - 1} more" if len(revoked) > 1 else ""
+        result.issues.append(
+            f"DKIM key revoked (empty p=) on selector {revoked[0]}{more} — no active key found"
+        )
+    elif not result.present:
         result.issues.append("No DKIM record found with common selectors")
 
     return result
@@ -731,6 +751,11 @@ def check_bimi(domain: str) -> BIMIResult:
             result.svg_url = tags.get("l", "")
             result.vmc_url = tags.get("a", "")
             result.vmc_present = bool(result.vmc_url and result.vmc_url != "")
+
+            # `v=BIMI1; l=; a=;` is how a domain says it does not take part
+            if not result.svg_url and not result.vmc_url:
+                result.issues.append("BIMI declined by the domain (empty l= and a=)")
+                break
 
             # Validate SVG
             if result.svg_url and not _fetchable(result.svg_url):
@@ -786,6 +811,9 @@ def check_mta_sts(domain: str) -> MTASTSResult:
                         result.issues.append("MTA-STS in testing mode — upgrade to enforce")
                     else:
                         result.issues.append(f"MTA-STS mode unknown: {result.mode}")
+                else:
+                    # The TXT record alone does nothing: senders need the policy
+                    result.issues.append(f"MTA-STS policy file not accessible: HTTP {resp.status_code}")
             except Exception:
                 result.issues.append("MTA-STS policy file not accessible")
             break
@@ -831,6 +859,9 @@ MAX_RAW_SCORE = sum(MAX_SCORES.values())
 
 def analyze_domain(domain: str) -> DomainReport:
     """Run full email security analysis on a domain."""
+    # Once, here: `Example.COM.` otherwise reached the keyservers as
+    # security@Example.COM. and MTA-STS as https://mta-sts.Example.COM./
+    domain = ".".join(_labels(domain))
     report = DomainReport(domain=domain)
 
     report.dmarc = check_dmarc(domain)

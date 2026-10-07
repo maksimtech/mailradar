@@ -105,6 +105,21 @@ class TestCheckDMARC:
         assert result.score == 0
         assert any("multiple" in issue.lower() for issue in result.issues)
 
+    def test_dmarc_version_tag_allows_spaces_around_equals(self):
+        """RFC 7489 §6.4: dmarc-version = "v" *WSP "=" *WSP "DMARC1", so 'v = DMARC1' is valid."""
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer(["v = DMARC1; p=reject"])):
+            result = check_dmarc("example.com")
+        assert result.present is True
+        assert result.policy == "reject"
+
+    def test_empty_rua_does_not_count_as_reports_configured(self):
+        """RFC 7489 §6.4: rua needs at least one URI; an empty 'rua=' turns no aggregate reports on."""
+        txt = "v=DMARC1; p=reject; rua=; ruf= "
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
+            result = check_dmarc("example.com")
+        assert result.rua is False
+        assert result.ruf is False
+
 
 # ─── DMARC tree walk — RFC 7489 §6.6.3 ──────────────────────────────────────
 
@@ -446,6 +461,11 @@ class TestCheckSPF:
         assert result.permerror is True
         assert result.score == 0
 
+    def test_plus_all_does_not_raise_the_plus_a_or_plus_mx_warning(self):
+        """'+all' holds the substring '+a': it must not raise the '+a or +mx' warning."""
+        result = check_spf_in({"example.com": ["v=spf1 ip4:192.0.2.1 +all"]})
+        assert not any("+a or +mx" in issue for issue in result.issues)
+
 
 def check_spf_in(zone: dict[str, list[str]]):
     """check_spf("example.com") against a DNS where only the names in `zone` answer."""
@@ -517,6 +537,21 @@ class TestCheckDKIM:
         assert result.score < 15
         assert result.issues
 
+    def test_empty_p_is_a_revoked_key_not_a_weak_one(self):
+        """RFC 6376 §3.6.1: an empty 'p=' means the key is revoked (it was a known limitation in the README)."""
+        result = check_dkim_record("v=DKIM1; k=rsa; p=")
+        assert not any("weak" in issue.lower() for issue in result.issues)
+        assert any("revok" in issue.lower() for issue in result.issues)
+
+    def test_revoked_selector_does_not_hide_the_active_key(self):
+        """Rotation: the old, revoked selector does not count when another one has the active key."""
+        zone = {"s1._domainkey.example.com": ["v=DKIM1; p="],
+                "s2._domainkey.example.com": [f"v=DKIM1; k=ed25519; p={ED25519_KEY}"]}
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=make_zone_resolver(zone)):
+            result = check_dkim("example.com", selectors=["s1", "s2"])
+        assert result.selector == "s2"
+        assert not any("revok" in issue.lower() for issue in result.issues)
+
 
 # A valid Ed25519 public key as DKIM publishes it (RFC 8463): 32 raw bytes, base64
 ED25519_KEY = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
@@ -584,6 +619,12 @@ class TestCheckBIMI:
             get.assert_not_called()
             assert result.svg_valid is False, url
 
+    def test_bimi_declination_record_scores_nothing(self):
+        """BIMI: 'v=BIMI1; l=; a=;' declines explicitly, it is not a 3-point BIMI without a VMC."""
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer(["v=BIMI1; l=; a=;"])):
+            result = check_bimi("example.com")
+        assert result.score == 0
+
 
 # ─── MTA-STS ────────────────────────────────────────────────────────────────
 
@@ -607,6 +648,13 @@ class TestCheckMTASTS:
             result = check_mta_sts("example.com")
         assert result.present is False
         assert result.score == 0
+
+    def test_mta_sts_unreachable_policy_raises_an_issue(self):
+        """_mta-sts record present but the policy answers HTTP 404: MTA-STS does not work, and is said."""
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer(["v=STSv1; id=20260101"])), \
+             patch('mailradar.checker.httpx.get', return_value=MagicMock(status_code=404, text="")):
+            result = check_mta_sts("example.com")
+        assert result.issues, "no issue raised with the policy file answering 404"
 
 
 # ─── TLS-RPT ────────────────────────────────────────────────────────────────
@@ -686,6 +734,11 @@ class TestDomainExists:
             result = domain_exists("thisdoesnotexist12345.com")
         assert result is False
 
+    def test_fqdn_with_trailing_dot_exists(self):
+        """'example.com.' is a valid FQDN: with a positive DNS answer the domain exists."""
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=[MagicMock()]):
+            assert domain_exists("example.com.") is True
+
 
 # ─── Full analysis ───────────────────────────────────────────────────────────
 
@@ -748,6 +801,18 @@ class TestAnalyzeDomain:
 
         assert report.total_score == 0
         assert report.grade == "CRITICAL"
+
+    def test_domain_is_normalized_once_for_every_check(self):
+        """'Example.COM.' is analysed as 'example.com' by every check, GPG and the MTA-STS URL included."""
+        from mailradar.gpg import GPGResult
+        zone = {"_mta-sts.example.com": ["v=STSv1; id=1"]}
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=make_zone_resolver(zone)), \
+             patch('mailradar.checker.httpx.get', return_value=MagicMock(status_code=404)) as get, \
+             patch('mailradar.gpg.lookup_gpg', return_value=GPGResult()) as gpg:
+            report = analyze_domain("Example.COM.")
+        assert report.domain == "example.com"
+        gpg.assert_called_once_with("example.com")
+        assert get.call_args.args[0] == "https://mta-sts.example.com/.well-known/mta-sts.txt"
 
     def test_scoring_boundaries(self):
         """Test score boundary conditions."""

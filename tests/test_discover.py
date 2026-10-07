@@ -176,6 +176,17 @@ class TestDiscoverViaWhois:
             result = _discover_via_whois("example.com")
             assert result == []
 
+    def test_does_not_accept_addresses_of_other_domains(self):
+        """'admin@example.com.evil.org' is not an address of example.com (as the text extractor already knows)."""
+        import json
+        data = {"entities": [{"vcardArray": ["vcard", [
+            ["email", {}, "text", "admin@example.com.evil.org"],
+        ]]}]}
+        mock_resp = MagicMock(status_code=200, text=json.dumps(data))
+        with patch("mailradar.discover.httpx.get", return_value=mock_resp):
+            emails = _discover_via_whois("example.com")
+        assert "admin@example.com.evil.org" not in emails
+
 
 def _mx(*exchanges):
     return [MagicMock(exchange=e) for e in exchanges]

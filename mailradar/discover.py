@@ -174,7 +174,8 @@ def _discover_via_whois(domain: str) -> list[str]:
                     for vcard in vcards[1]:
                         if vcard[0] == "email":
                             email = vcard[3]
-                            if f"@{domain}" in email.lower():
+                            # endswith, not `in`: admin@example.com.evil.org is not ours
+                            if email.lower().endswith(f"@{domain.lower()}"):
                                 emails.append(email.lower())
                 for sub in entity.get("entities", []):
                     extract_from_entity(sub)
