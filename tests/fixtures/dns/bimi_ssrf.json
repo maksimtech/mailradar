@@ -1,0 +1,63 @@
+{
+ "_derived": {
+  "from": "dns/cnn_com.json, default._bimi.cnn.com. TXT (recorded 2026-10-07): \"v=BIMI1; l=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+  "changed": "published under default._bimi.<case>.example.com, one name per case, with l= replaced by a URL into the internal network: http-loopback http://127.0.0.1:8080/admin, https-loopback https://127.0.0.1/logo.svg, https-ipv6-loopback https://[::1]/logo.svg, https-private https://10.0.0.5/l.svg, https-link-local https://169.254.169.254/latest/meta-data/"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.http-loopback.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.http-loopback.example.com. 1800 IN TXT \"v=BIMI1; l=http://127.0.0.1:8080/admin; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.https-loopback.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.https-loopback.example.com. 1800 IN TXT \"v=BIMI1; l=https://127.0.0.1/logo.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.https-ipv6-loopback.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.https-ipv6-loopback.example.com. 1800 IN TXT \"v=BIMI1; l=https://[::1]/logo.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.https-private.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.https-private.example.com. 1800 IN TXT \"v=BIMI1; l=https://10.0.0.5/l.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.https-link-local.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.https-link-local.example.com. 1800 IN TXT \"v=BIMI1; l=https://169.254.169.254/latest/meta-data/; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/archlinux_org.json, dkim-ed25519._domainkey.archlinux.org. TXT (recorded 2026-10-07): \"v=DKIM1; k=ed25519; p=XOHB7b7V1puX+FryNIhsjXHYIFqk+q6JRu4XQ7Jc8MQ=\"",
+  "changed": "the same record moved to s2._domainkey.example.com, the active key next to the revoked s1._domainkey.example.com that dns/example_com.json recorded"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "s2._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "s2._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=ed25519; p=XOHB7b7V1puX+FryNIhsjXHYIFqk+q6JRu4XQ7Jc8MQ=\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

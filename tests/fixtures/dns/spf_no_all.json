@@ -1,0 +1,20 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "SPF record replaced by \"v=spf1 mx\" (neither all nor redirect=)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 48 IN TXT \"_k2n1y4vw3qtb4skdx9e7dxt97qrmmq9\"",
+   "example.com. 48 IN TXT \"v=spf1 mx\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

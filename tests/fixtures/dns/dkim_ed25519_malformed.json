@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/archlinux_org.json, dkim-ed25519._domainkey.archlinux.org. TXT (recorded 2026-10-07): \"v=DKIM1; k=ed25519; p=XOHB7b7V1puX+FryNIhsjXHYIFqk+q6JRu4XQ7Jc8MQ=\"",
+  "changed": "p= replaced by \"AAAA\", three bytes that are no Ed25519 key"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "dkim-ed25519._domainkey.archlinux.org. IN TXT",
+   ";ANSWER",
+   "dkim-ed25519._domainkey.archlinux.org. 3600 IN TXT \"v=DKIM1; k=ed25519; p=AAAA\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

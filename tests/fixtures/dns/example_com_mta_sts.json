@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/ecosia_org.json, _mta-sts.ecosia.org. TXT (recorded 2026-10-07)",
+  "changed": "the same record published as _mta-sts.example.com (example.com publishes none)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.example.com. 120 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

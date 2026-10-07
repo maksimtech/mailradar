@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, _dmarc.example.com. TXT (recorded 2026-10-07): \"v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s\"",
+  "changed": "spaces around the '=' of the version tag, as the RFC 7489 §6.4 ABNF allows"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_dmarc.example.com. IN TXT",
+   ";ANSWER",
+   "_dmarc.example.com. 300 IN TXT \"v = DMARC1;p=reject;sp=reject;adkim=s;aspf=s\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
