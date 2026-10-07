@@ -575,6 +575,16 @@ def _unverified_dmarc_report() -> DomainReport:
     return report
 
 
+def _timed_out(check: str, result_type, name: str):
+    """The result `check` returns when the TXT lookup of `name` times out.
+
+    Derived, not captured: the strings are the ones checker._unless_dns_fails
+    builds from the DNSLookupError that _query_txt raises on a Timeout.
+    """
+    error = f"DNS lookup for {name} failed: Timeout"
+    return result_type(error=error, issues=[f"{check} not verified — {error}"])
+
+
 class TestReportTableRows(unittest.TestCase):
     """The table must not claim more than the checks found."""
 
@@ -588,6 +598,22 @@ class TestReportTableRows(unittest.TestCase):
     def test_unverified_dmarc_is_not_shown_as_not_configured(self):
         row = next(line for line in _table_lines(_unverified_dmarc_report()) if "DMARC" in line and "│" in line)
         self.assertNotIn("Not configured", row)
+        self.assertIn("not verified", row.lower())
+
+    def test_unverified_dkim_is_not_shown_as_not_found(self):
+        report = DomainReport(domain="example.com")
+        report.dkim = _timed_out("DKIM", DKIMResult, "default._domainkey.example.com")
+        row = next(line for line in _table_lines(report) if line.startswith("│ DKIM"))
+        self.assertNotIn("Not found", row)
+        self.assertNotIn("✅", row)
+        self.assertIn("not verified", row.lower())
+
+    def test_unverified_bimi_is_not_shown_as_not_configured(self):
+        report = DomainReport(domain="example.com")
+        report.bimi = _timed_out("BIMI", BIMIResult, "default._bimi.example.com")
+        row = next(line for line in _table_lines(report) if line.startswith("│ BIMI"))
+        self.assertNotIn("Not configured", row)
+        self.assertNotIn("✅", row)
         self.assertIn("not verified", row.lower())
 
     def test_ed25519_dkim_key_is_not_described_as_rsa(self):
@@ -645,3 +671,26 @@ class TestModuleEntryPoint(unittest.TestCase):
                               env=env, timeout=60)
         for command in ("check", "batch", "report", "send", "discover"):
             self.assertIn(command, proc.stdout, f"command {command!r} missing from python -m mailradar.cli")
+
+    def test_main_block_in_process_registers_every_command(self):
+        """The same check in-process, so coverage sees the `__main__` block run: the subprocess is invisible to it."""
+        import contextlib
+        import io
+        import runpy
+        import sys
+        import warnings
+        saved_argv = sys.argv
+        out = io.StringIO()
+        sys.argv = ["mailradar", "--help"]
+        try:
+            with warnings.catch_warnings(), contextlib.redirect_stdout(out):
+                # This file already imported the module; runpy warns about it,
+                # and running it afresh as __main__ is exactly the point.
+                warnings.filterwarnings("ignore", message=".*found in sys.modules", category=RuntimeWarning)
+                with self.assertRaises(SystemExit) as cm:
+                    runpy.run_module("mailradar.cli", run_name="__main__")
+        finally:
+            sys.argv = saved_argv
+        self.assertIn(cm.exception.code, (0, None))
+        for command in ("check", "batch", "report", "send", "discover"):
+            self.assertIn(command, out.getvalue(), f"command {command!r} missing from the __main__ block's app")

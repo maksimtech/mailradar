@@ -584,6 +584,16 @@ def check_spf(domain: str) -> SPFResult:
         redirected = _spf_terms(record)
         result.all_mechanism = _spf_all(redirected)
 
+    _apply_spf_verdict(result, terms)
+    return result
+
+
+def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]]) -> None:
+    """
+    Score and annotate `result` from its `all` mechanism and the record's
+    `terms`. No DNS: the lookups, which may change `all_mechanism` through
+    redirect=, are check_spf's and have already been made.
+    """
     if result.all_mechanism == "-all":
         result.permissive = False
         result.score += 20
@@ -608,8 +618,6 @@ def check_spf(domain: str) -> SPFResult:
     if any(qualifier == "+" and name in ("a", "mx") for qualifier, name, _ in terms):
         result.permissive = True
         result.issues.append("SPF contains +a or +mx — too permissive")
-
-    return result
 
 
 def _ed25519_bits(key: str) -> int:

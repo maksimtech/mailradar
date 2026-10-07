@@ -10,6 +10,10 @@ import pytest
 
 from mailradar.checker import (
     DMARCResult,
+    SPFResult,
+    _apply_spf_verdict,
+    _spf_all,
+    _spf_terms,
     analyze_domain,
     check_bimi,
     check_dkim,
@@ -465,6 +469,21 @@ class TestCheckSPF:
         """'+all' holds the substring '+a': it must not raise the '+a or +mx' warning."""
         result = check_spf_in({"example.com": ["v=spf1 ip4:192.0.2.1 +all"]})
         assert not any("+a or +mx" in issue for issue in result.issues)
+
+    def test_question_mark_all_is_neutral_and_reported(self):
+        """RFC 7208 §8.2: '?all' is neutral, no enforcement — 5 points, not the 10 of '~all'.
+
+        No DNS and no stand-in for it: ip4: and all cost no lookup (§4.6.4) and the
+        record has no redirect=, so check_spf would hand this text to the verdict as is.
+        """
+        record = "v=spf1 ip4:192.0.2.0/24 ?all"
+        terms = _spf_terms(record)
+        result = SPFResult(present=True, raw=record, all_mechanism=_spf_all(terms))
+        _apply_spf_verdict(result, terms)
+        assert result.all_mechanism == "?all"
+        assert result.permissive is True
+        assert result.score == 5
+        assert result.issues == ["SPF uses ?all (neutral) — no enforcement"]
 
 
 def check_spf_in(zone: dict[str, list[str]]):
