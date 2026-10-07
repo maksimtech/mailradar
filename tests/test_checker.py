@@ -656,6 +656,17 @@ class TestCheckMTASTS:
             result = check_mta_sts("example.com")
         assert result.issues, "no issue raised with the policy file answering 404"
 
+    def test_mta_sts_mode_none_is_not_an_unknown_mode(self):
+        """RFC 8461 §5: 'none' is a valid mode (the policy withdrawn), not 'mode unknown'."""
+        policy = MagicMock(status_code=200, text="version: STSv1\nmode: none\nmax_age: 86400\n")
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer(["v=STSv1; id=20260101"])), \
+             patch('mailradar.checker.httpx.get', return_value=policy):
+            result = check_mta_sts("example.com")
+        assert result.mode == "none"
+        assert result.score == 0
+        assert not any("unknown" in issue for issue in result.issues)
+        assert any("none" in issue for issue in result.issues)
+
 
 # ─── TLS-RPT ────────────────────────────────────────────────────────────────
 

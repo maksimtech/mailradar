@@ -70,10 +70,12 @@ RUN useradd -m -u 1000 mailradar && \
     chown -R mailradar:mailradar /home/mailradar
 
 USER mailradar
-WORKDIR /home/mailradar
 
-# Volume per report generati
+# Volume per report generati, and the working directory for that reason:
+# `report --save` writes where it is run, and from /home/mailradar the report
+# landed outside the volume and went with the container (`docker run --rm`).
 VOLUME ["/home/mailradar/.mailradar"]
+WORKDIR /home/mailradar/.mailradar
 
 # Entrypoint CLI
 ENTRYPOINT ["mailradar"]

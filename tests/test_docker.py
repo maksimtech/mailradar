@@ -1,4 +1,6 @@
 """Tests for Docker image build configuration and security policy."""
+import json
+import posixpath
 import re
 import unittest
 from datetime import date
@@ -45,6 +47,20 @@ class TestDockerfile(unittest.TestCase):
         self.assertNotEqual(uninstall_pos, -1)
         self.assertNotEqual(user_pos, -1)
         self.assertLess(uninstall_pos, user_pos)
+
+    def test_report_save_writes_inside_the_volume(self):
+        # `report --save` writes to the current directory: it has to be the
+        # VOLUME, or with `docker run --rm` the file goes with the container
+        workdir, volumes = "/", []
+        for line in DOCKERFILE.splitlines():
+            if line.startswith("WORKDIR "):
+                workdir = posixpath.join(workdir, line.split(None, 1)[1].strip())
+            elif line.startswith("VOLUME "):
+                volumes += json.loads(line.split(None, 1)[1])
+        self.assertTrue(
+            any(workdir == v or workdir.startswith(v.rstrip("/") + "/") for v in volumes),
+            (workdir, volumes),
+        )
 
 
 class TestDockerWorkflow(unittest.TestCase):

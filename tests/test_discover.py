@@ -143,6 +143,24 @@ class TestDiscoverViaDns:
             result = _discover_via_dns("example.com")
             assert result == []
 
+    @staticmethod
+    def _discover(soa_rname: str, txts: list[bytes]) -> list[str]:
+        """_discover_via_dns with this SOA contact and these TXT records."""
+        def resolve(name, rdtype="A", *args, **kwargs):
+            if rdtype == "SOA":
+                return [MagicMock(rname=soa_rname)]
+            return [MagicMock(strings=[t]) for t in txts]
+        with patch("dns.resolver.resolve", side_effect=resolve):
+            return _discover_via_dns("example.com")
+
+    def test_soa_rname_in_mixed_case(self):
+        """DNS names are case-insensitive: Hostmaster.Example.COM. is hostmaster@example.com."""
+        assert "hostmaster@example.com" in self._discover("Hostmaster.Example.COM.", [])
+
+    def test_a_txt_record_that_is_not_utf8_does_not_cost_the_others(self):
+        emails = self._discover("ns.example.org.", [b"\xff\xfe junk", b"contact: security@example.com"])
+        assert "security@example.com" in emails
+
 
 class TestDiscoverViaWhois:
 

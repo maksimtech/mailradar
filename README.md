@@ -56,6 +56,10 @@ mailradar --version
 docker run --rm maksimtech/mailradar check example.com
 ```
 
+In the image, `report --save` writes to `/home/mailradar/.mailradar`, the
+image's volume: mount it (`-v mailradar:/home/mailradar/.mailradar`) to keep
+the file after the container exits.
+
 **From source**
 
 ```bash

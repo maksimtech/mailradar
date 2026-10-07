@@ -146,15 +146,23 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   `_dmarc.sanita.fvg.it` answered and `_dmarc.fvg.it` was NXDOMAIN.
 
 - **MTA-STS: what the report says matches what was found.** A policy file answering 404
-  raised no issue at all, and the report for the owner said "Current: Not configured" for
-  a policy in testing mode.
+  raised no issue at all, `mode: none` (valid, RFC 8461) was "mode unknown", and the report
+  for the owner said "Current: Not configured" for a policy in testing mode.
 
 - **Smaller fixes.** `check example.com.` treated the trailing dot as a missing domain,
   and `analyze_domain` now normalises the name once, so GPG and MTA-STS no longer see
   `Example.COM.`. RDAP addresses are matched on the domain, not as a substring
-  (`admin@example.com.evil.org`). `python -m mailradar.cli` ran the app before `report`,
-  `send` and `discover` were defined. `batch` crashed with a Rich `MarkupError` on a file
-  name containing `[`.
+  (`admin@example.com.evil.org`); the SOA contact is matched case-insensitively and a TXT
+  record that is not UTF-8 no longer hides the others. `python -m mailradar.cli` ran the
+  app before `report`, `send` and `discover` were defined. `batch` crashed with a Rich
+  `MarkupError` on a file name containing `[`.
+
+- **Repository.** `.gitattributes` checks the `.sh` scripts out with LF, without which
+  `core.autocrlf=true` broke `release.sh` on `set -o pipefail`. A bare `pytest` no
+  longer collects the benchmarks, whose runner the dev extra does not install. The
+  Changelog URL in `pyproject.toml` answered 404, Python 3.14 is listed among the
+  classifiers, and in the image the working directory is the volume, so `report --save`
+  no longer writes its file where `docker run --rm` throws it away.
 
 ### Changed
 

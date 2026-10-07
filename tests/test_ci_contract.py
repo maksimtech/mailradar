@@ -152,6 +152,16 @@ def test_the_benchmarks_are_not_run_without_their_plugin(workflow):
     )
 
 
+def test_a_bare_pytest_does_not_collect_the_benchmarks():
+    """The same reason, on a developer's machine: the dev extra does not install
+    pytest-codspeed, so a `pytest` with no arguments must not collect its tests."""
+    import tomllib
+
+    declared = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    addopts = declared["tool"]["pytest"]["ini_options"].get("addopts", "")
+    assert "--ignore=tests/benchmarks" in addopts.split()
+
+
 def test_the_mutation_run_skips_the_benchmarks() -> None:
     """A benchmark asserts nothing, so it can kill no mutant — and the runner it
     needs is installed by codspeed.yml alone and is deliberately not a project

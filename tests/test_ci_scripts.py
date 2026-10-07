@@ -318,3 +318,12 @@ def test_nothing_in_the_docker_workflow_waits_by_sleeping():
     """
     for step in _docker_steps():
         assert "sleep" not in step.get("run", ""), step.get("name")
+
+
+# ── line endings ────────────────────────────────────────────────────────────
+
+
+def test_the_shell_scripts_are_checked_out_with_lf():
+    """With core.autocrlf=true the .sh scripts arrive in CRLF, and bash dies on `set -o pipefail\\r`."""
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    assert "*.sh text eol=lf" in [line.strip() for line in attributes]

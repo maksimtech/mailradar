@@ -24,6 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
     "Topic :: Internet :: Name Service (DNS)",
     "Topic :: Communications :: Email",
@@ -61,7 +62,7 @@ mailradar = "mailradar.cli:app"
 Homepage = "https://github.com/maksimtech/mailradar"
 Repository = "https://github.com/maksimtech/mailradar"
 Issues = "https://github.com/maksimtech/mailradar/issues"
-Changelog = "https://github.com/maksimtech/mailradar/CHANGELOG.md"
+Changelog = "https://github.com/maksimtech/mailradar/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "mailradar/__init__.py"
@@ -70,6 +71,10 @@ path = "mailradar/__init__.py"
 # The one pytest setting mailradar was missing. asyncio_mode is deliberately
 # absent: unlike the other four Radar, mailradar has no async tests at all.
 testpaths = ["tests"]
+# What the workflows already pass: the benchmark runner is installed by
+# codspeed.yml alone, not by the dev extra, so a bare `pytest` ended in four
+# fixture errors. An explicit `pytest tests/benchmarks/` still collects them.
+addopts = "--ignore=tests/benchmarks"
 
 [tool.ruff]
 line-length = 120
@@ -146,6 +151,7 @@ also_copy = [
     "README.md",
     "SECURITY.md",
     "release.sh",
+    ".gitattributes",
 ]
 # mutmut 3.8 refuses to run on Windows and points at WSL, so this is a CI-only
 # configuration: the scheduled workflow runs it on ubuntu.

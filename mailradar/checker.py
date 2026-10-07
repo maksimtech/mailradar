@@ -809,6 +809,9 @@ def check_mta_sts(domain: str) -> MTASTSResult:
                     elif result.mode == "testing":
                         result.score += 2
                         result.issues.append("MTA-STS in testing mode — upgrade to enforce")
+                    elif result.mode == "none":
+                        # RFC 8461 §5: a valid mode, the one that withdraws the policy
+                        result.issues.append("MTA-STS mode none — policy disabled, upgrade to enforce")
                     else:
                         result.issues.append(f"MTA-STS mode unknown: {result.mode}")
                 else:
