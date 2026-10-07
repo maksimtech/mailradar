@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from mailradar.checker import (
@@ -544,10 +545,6 @@ class TestDiscoverCandidatesOutput(unittest.TestCase):
         self.assertNotIn("Found 1 email", result.output)
 
 
-# A valid Ed25519 DKIM record (RFC 8463): the key is 32 raw bytes, not DER
-ED25519_DKIM = "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
-
-
 def _table_lines(report: DomainReport) -> list[str]:
     """What the results table prints for `report`, line by line."""
     from mailradar import cli
@@ -556,14 +553,11 @@ def _table_lines(report: DomainReport) -> list[str]:
     return capture.get().splitlines()
 
 
-def _dkim_report(record: str, selectors=None) -> DomainReport:
-    """A report whose DKIM result is check_dkim's, with every selector answering `record`."""
+def _dkim_report(domain: str, selectors=None) -> DomainReport:
+    """A report whose DKIM result is check_dkim's on `domain`, from the DNS the test replays."""
     from mailradar.checker import check_dkim
-    answer = [MagicMock(strings=[record.encode()])]
-    with patch("mailradar.checker.dns.resolver.resolve", return_value=answer):
-        dkim = check_dkim("example.com", selectors=selectors)
-    report = DomainReport(domain="example.com")
-    report.dkim = dkim
+    report = DomainReport(domain=domain)
+    report.dkim = check_dkim(domain, selectors=selectors)
     return report
 
 
@@ -587,6 +581,10 @@ def _timed_out(check: str, result_type, name: str):
 
 class TestReportTableRows(unittest.TestCase):
     """The table must not claim more than the checks found."""
+
+    @pytest.fixture(autouse=True)
+    def _dns(self, dns_replay):
+        self.dns_replay = dns_replay
 
     def test_spf_permerror_is_not_shown_as_ok(self):
         """A record in permerror protects nothing: the table must not show ✅."""
@@ -618,7 +616,9 @@ class TestReportTableRows(unittest.TestCase):
 
     def test_ed25519_dkim_key_is_not_described_as_rsa(self):
         from mailradar.reporter import generate_report
-        report = _dkim_report(ED25519_DKIM, selectors=["default"])
+        # archlinux.org signs with an Ed25519 key, under dkim-ed25519 (recorded)
+        self.dns_replay("archlinux_org")
+        report = _dkim_report("archlinux.org", selectors=["dkim-ed25519"])
         row = next(line for line in _table_lines(report) if "DKIM" in line and "selector" in line)
         self.assertIn("Ed25519", row)
         self.assertNotIn("RSA", row)
@@ -627,7 +627,8 @@ class TestReportTableRows(unittest.TestCase):
 
     def test_dkim_revoked_on_every_selector_is_said_briefly_and_honestly(self):
         """example.com publishes an empty p= under every selector: no list of 17 names, and not 'Not found'."""
-        report = _dkim_report("v=DKIM1; p=")
+        self.dns_replay("example_com")
+        report = _dkim_report("example.com")
         issue = next(i for i in report.dkim.issues if "revoked" in i)
         self.assertNotIn("mailchimp", issue)
         self.assertIn("more", issue)
@@ -639,22 +640,31 @@ class TestReportTableRows(unittest.TestCase):
 class TestIncompleteAnalysis(unittest.TestCase):
     """A report goes to the domain's owner: it must not state what could not be verified."""
 
+    @pytest.fixture(autouse=True)
+    def _network(self, dns_replay, http_replay, smtp_server, trusted_ca):
+        # example.com as recorded, DNS and keyservers, except that
+        # _dmarc.example.com never answers: the DMARC lookup times out
+        dns_replay("example_com", silent=["_dmarc.example.com TXT"])
+        http_replay("example_com")
+        self.smtp = smtp_server("tls", trusted_ca.server_context("127.0.0.1"))
+
     def setUp(self):
         self.runner = CliRunner()
 
-    @patch("mailradar.reporter.generate_report")
-    @patch("mailradar.checker.analyze_domain", return_value=_unverified_dmarc_report())
-    def test_report_is_not_generated_from_an_incomplete_analysis(self, mock_checker, mock_generate):
+    def test_report_is_not_generated_from_an_incomplete_analysis(self):
         result = self.runner.invoke(app, ["report", "example.com"])
         self.assertEqual(result.exit_code, 1)
-        mock_generate.assert_not_called()
+        self.assertIn("Report not generated", result.output)
+        self.assertNotIn("Generating email report", result.output)
 
-    @patch("mailradar.sender.send_report")
-    @patch("mailradar.checker.analyze_domain", return_value=_unverified_dmarc_report())
-    def test_send_does_not_send_a_report_from_an_incomplete_analysis(self, mock_checker, mock_send):
-        result = self.runner.invoke(app, ["send", "example.com"])
+    def test_send_does_not_send_a_report_from_an_incomplete_analysis(self):
+        result = self.runner.invoke(app, [
+            "send", "example.com", "--smtp-host", "127.0.0.1", "--smtp-port", str(self.smtp.port),
+            "--smtp-user", "security@example.org", "--smtp-pass", "secret", "--from", "security@example.org",
+        ])
         self.assertEqual(result.exit_code, 1)
-        mock_send.assert_not_called()
+        self.assertIn("Report not generated", result.output)
+        self.assertEqual(self.smtp.connections, 0, "the SMTP server was contacted")
 
 
 class TestModuleEntryPoint(unittest.TestCase):
