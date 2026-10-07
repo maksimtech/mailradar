@@ -86,6 +86,25 @@ class TestCheckDMARC:
         assert any("adkim" in issue for issue in result.issues)
         assert any("aspf" in issue for issue in result.issues)
 
+    def test_dmarc_tag_values_are_case_insensitive(self):
+        """RFC 7489 §6.4 (ABNF): "reject" is a case-insensitive literal, p=REJECT is p=reject."""
+        txt = (
+            "v=DMARC1; p=REJECT; pct=100; adkim=S; aspf=S; "
+            "rua=mailto:a@example.com; ruf=mailto:b@example.com"
+        )
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
+            result = check_dmarc("example.com")
+        assert result.policy.lower() == "reject"
+        assert result.score == 50
+
+    def test_multiple_dmarc_records_apply_no_policy(self):
+        """RFC 7489 §6.6.3: with more than one DMARC record, policy discovery ends with no policy."""
+        txts = ["v=DMARC1; p=reject", "v=DMARC1; p=none"]
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer(txts)):
+            result = check_dmarc("example.com")
+        assert result.score == 0
+        assert any("multiple" in issue.lower() for issue in result.issues)
+
 
 # ─── DMARC tree walk — RFC 7489 §6.6.3 ──────────────────────────────────────
 
@@ -104,9 +123,11 @@ def make_zone_resolver(zone: dict[str, list[str]], queried: list[str] = None):
 
 class TestOrganizationalDomain:
 
+    # fvg.it is itself a public suffix (ICANN section of the PSL), so the
+    # registrable name below it is the organizational domain
     @pytest.mark.parametrize("domain,expected", [
-        ("asufc.sanita.fvg.it", "fvg.it"),
-        ("sanita.fvg.it", "fvg.it"),
+        ("asufc.sanita.fvg.it", "sanita.fvg.it"),
+        ("sanita.fvg.it", "sanita.fvg.it"),
         ("sub.domain.com", "domain.com"),
         ("domain.com", "domain.com"),
         ("mail.example.co.uk", "example.co.uk"),
@@ -122,6 +143,21 @@ class TestOrganizationalDomain:
     def test_single_label_is_returned_as_is(self):
         assert organizational_domain("localhost") == "localhost"
 
+    def test_follows_the_psl_wildcard_and_exception_rules(self):
+        """PSL: '*.kawasaki.jp' makes every name under kawasaki.jp public, '!city.kawasaki.jp' does not."""
+        assert organizational_domain("a.b.example.kawasaki.jp") == "b.example.kawasaki.jp"
+        assert organizational_domain("www.city.kawasaki.jp") == "city.kawasaki.jp"
+        assert organizational_domain("mail.example.co.at") == "example.co.at"
+
+    def test_follows_the_private_section_of_the_psl(self):
+        """github.io is in the private section: each site under it is a domain of its own, not GitHub's."""
+        assert organizational_domain("mail.project.github.io") == "project.github.io"
+
+    def test_idn_suffix_in_punycode(self):
+        """The PSL lists '公司.cn' in Unicode; the same suffix can arrive as xn--55qx5d.cn."""
+        assert organizational_domain("mail.example.xn--55qx5d.cn") == "example.xn--55qx5d.cn"
+        assert organizational_domain("mail.example.公司.cn") == "example.公司.cn"
+
 
 class TestDMARCLookupChain:
 
@@ -129,7 +165,6 @@ class TestDMARCLookupChain:
         assert dmarc_lookup_chain("asufc.sanita.fvg.it") == [
             "asufc.sanita.fvg.it",
             "sanita.fvg.it",
-            "fvg.it",
         ]
 
     def test_chain_multi_label_public_suffix(self):
@@ -149,6 +184,7 @@ class TestDMARCLookupChain:
 
     @pytest.mark.parametrize("domain,forbidden", [
         ("asufc.sanita.fvg.it", "it"),
+        ("asufc.sanita.fvg.it", "fvg.it"),
         ("mail.example.co.uk", "co.uk"),
         ("mail.example.co.uk", "uk"),
         ("sub.domain.com", "com"),
@@ -156,26 +192,32 @@ class TestDMARCLookupChain:
     def test_chain_never_reaches_the_public_suffix(self, domain, forbidden):
         assert forbidden not in dmarc_lookup_chain(domain)
 
+    def test_chain_never_queries_a_suffix_outside_the_old_subset(self):
+        """README: "The public suffix itself is never queried". co.at is a public suffix (PSL)."""
+        chain = dmarc_lookup_chain("mail.example.co.at")
+        assert "co.at" not in chain
+        assert chain[-1] == "example.co.at"
+
 
 class TestCheckDMARCTreeWalk:
 
     def test_climbs_to_organizational_domain(self):
-        """asufc.sanita.fvg.it with no record of its own -> policy from fvg.it."""
-        zone = {"_dmarc.fvg.it": ["v=DMARC1; p=reject; rua=mailto:r@fvg.it"]}
+        """asufc.sanita.fvg.it with no record of its own -> policy from sanita.fvg.it,
+        where the real one is published (_dmarc.fvg.it is NXDOMAIN, checked 2026-10-07)."""
+        zone = {"_dmarc.sanita.fvg.it": ["v=DMARC1; p=reject; rua=mailto:r@sanita.fvg.it"]}
         queried = []
         with patch('mailradar.checker.dns.resolver.resolve',
                    side_effect=make_zone_resolver(zone, queried)):
             result = check_dmarc("asufc.sanita.fvg.it")
         assert result.present is True
         assert result.policy == "reject"
-        assert result.found_at == "fvg.it"
+        assert result.found_at == "sanita.fvg.it"
         assert result.inherited is True
         assert queried == [
             "_dmarc.asufc.sanita.fvg.it",
             "_dmarc.sanita.fvg.it",
-            "_dmarc.fvg.it",
         ]
-        assert any("fvg.it" in issue for issue in result.issues)
+        assert any("sanita.fvg.it" in issue for issue in result.issues)
 
     def test_stops_at_the_first_parent_that_answers(self):
         zone = {
@@ -282,11 +324,18 @@ class TestCheckDMARCTreeWalk:
 
 # ─── SPF ────────────────────────────────────────────────────────────────────
 
+# What `include:spf.example.com` finds at that name
+SPF_INCLUDED = "v=spf1 ip4:192.0.2.0/24 -all"
+
+
 class TestCheckSPF:
 
     def test_spf_hardfail(self):
         txt = "v=spf1 include:spf.example.com -all"
-        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
+        # Only the names asked about answer: a mock giving every name this record
+        # makes the include include itself, a loop that is a permerror (RFC 7208 §4.6.4)
+        zone = {"example.com": [txt], "spf.example.com": [SPF_INCLUDED]}
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=make_zone_resolver(zone)):
             result = check_spf("example.com")
         assert result.present is True
         assert result.all_mechanism == "-all"
@@ -296,7 +345,10 @@ class TestCheckSPF:
 
     def test_spf_softfail(self):
         txt = "v=spf1 include:spf.example.com ~all"
-        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
+        # Only the names asked about answer: a mock giving every name this record
+        # makes the include include itself, a loop that is a permerror (RFC 7208 §4.6.4)
+        zone = {"example.com": [txt], "spf.example.com": [SPF_INCLUDED]}
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=make_zone_resolver(zone)):
             result = check_spf("example.com")
         assert result.all_mechanism == "~all"
         assert result.permissive is True
@@ -335,6 +387,64 @@ class TestCheckSPF:
         result = check_spf_in({"example.com": ["v=spf1 include:spf-all.example.net ~all"]})
         assert result.all_mechanism == "~all"
         assert result.score == 10
+
+    def test_mechanism_names_are_case_insensitive(self):
+        """RFC 7208 §4.6.1: mechanism names are case-insensitive, '-ALL' is a hardfail."""
+        result = check_spf_in({"example.com": ["v=spf1 mx -ALL"]})
+        assert result.all_mechanism == "-all"
+        assert result.score == 20
+
+    def test_redirect_follows_the_target_record(self):
+        """RFC 7208 §6.1: with redirect= the target's record decides (gmail.com uses redirect alone)."""
+        result = check_spf_in({
+            "example.com": ["v=spf1 redirect=_spf.example.net"],
+            "_spf.example.net": ["v=spf1 ip4:192.0.2.0/24 -all"],
+        })
+        assert result.all_mechanism == "-all"
+        assert result.score == 20
+
+    def test_redirect_to_a_name_without_spf_is_a_permerror(self):
+        """RFC 7208 §6.1: if the redirect= domain has no SPF record, the result is a permerror."""
+        result = check_spf_in({"example.com": ["v=spf1 redirect=_spf.example.net"]})
+        assert result.permerror is True
+        assert result.score == 0
+
+    def test_no_all_and_no_redirect_is_neutral_and_reported(self):
+        """RFC 7208 §4.7: with neither 'all' nor 'redirect=' the default result is neutral, and is said."""
+        result = check_spf_in({"example.com": ["v=spf1 mx"]})
+        assert result.permissive is True
+        assert any("neutral" in issue.lower() for issue in result.issues)
+
+    def test_multiple_spf_records_are_a_permerror(self):
+        """RFC 7208 §4.5: more than one v=spf1 record on the same name is a permerror, no full score."""
+        result = check_spf_in({"example.com": ["v=spf1 -all", "v=spf1 include:x.example.net -all"]})
+        assert result.score == 0
+        assert any("multiple" in issue.lower() or "permerror" in issue.lower() for issue in result.issues)
+
+    def test_more_than_10_dns_lookups_is_a_permerror(self):
+        """RFC 7208 §4.6.4: more than 10 mechanisms that need a DNS lookup is a permerror."""
+        includes = " ".join(f"include:i{n}.example.net" for n in range(1, 12))
+        zone = {"example.com": [f"v=spf1 {includes} -all"]}
+        zone.update({f"i{n}.example.net": ["v=spf1 ip4:192.0.2.1 -all"] for n in range(1, 12)})
+        result = check_spf_in(zone)
+        assert result.score < 20
+        assert any("lookup" in issue.lower() for issue in result.issues)
+
+    def test_exactly_10_dns_lookups_is_still_valid(self):
+        """The RFC 7208 §4.6.4 boundary: the limit is "more than 10", 10 lookups (nested ones included) pass."""
+        includes = " ".join(f"include:i{n}.example.net" for n in range(1, 9))
+        zone = {"example.com": [f"v=spf1 mx {includes} -all"],
+                "i8.example.net": ["v=spf1 a -all"]}
+        zone.update({f"i{n}.example.net": ["v=spf1 ip4:192.0.2.1 -all"] for n in range(1, 8)})
+        result = check_spf_in(zone)
+        assert result.permerror is False
+        assert result.score == 20
+
+    def test_include_loop_is_a_permerror(self):
+        """An include that comes back to itself runs out of lookups: a permerror, not a 20-point hardfail."""
+        result = check_spf_in({"example.com": ["v=spf1 include:example.com -all"]})
+        assert result.permerror is True
+        assert result.score == 0
 
 
 def check_spf_in(zone: dict[str, list[str]]):
@@ -395,6 +505,29 @@ class TestCheckDKIM:
         assert result.present is False
         assert result.score == 0
 
+    def test_ed25519_key_is_not_weak(self):
+        """RFC 8463: an Ed25519 key (32 raw bytes) is strong, not a 512-bit RSA key."""
+        result = check_dkim_record(f"v=DKIM1; k=ed25519; p={ED25519_KEY}")
+        assert result.present is True
+        assert not any("weak" in issue.lower() for issue in result.issues)
+        assert result.score == 15
+
+    def test_malformed_ed25519_key_does_not_get_the_full_score(self):
+        result = check_dkim_record("v=DKIM1; k=ed25519; p=AAAA")
+        assert result.score < 15
+        assert result.issues
+
+
+# A valid Ed25519 public key as DKIM publishes it (RFC 8463): 32 raw bytes, base64
+ED25519_KEY = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+
+
+def check_dkim_record(record: str):
+    """check_dkim on example.com with `record` published under the selector `default`."""
+    zone = {"default._domainkey.example.com": [record]}
+    with patch('mailradar.checker.dns.resolver.resolve', side_effect=make_zone_resolver(zone)):
+        return check_dkim("example.com", selectors=["default"])
+
 
 # ─── BIMI ───────────────────────────────────────────────────────────────────
 
@@ -430,6 +563,26 @@ class TestCheckBIMI:
             result = check_bimi("example.com")
         assert result.present is False
         assert result.score == 0
+
+    def test_bimi_does_not_fetch_a_url_that_is_not_https(self):
+        """BIMI requires https for l=; an http URL into the internal network must not be fetched (SSRF)."""
+        txt = "v=BIMI1; l=http://127.0.0.1:8080/admin; a="
+        with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])), \
+             patch('mailradar.checker.httpx.get', return_value=MagicMock(status_code=200)) as get:
+            result = check_bimi("example.com")
+        get.assert_not_called()
+        assert result.svg_valid is False
+
+    def test_bimi_does_not_fetch_https_from_an_internal_ip_literal(self):
+        """Even over https, a loopback, private or link-local IP literal is not contacted."""
+        for url in ("https://127.0.0.1/logo.svg", "https://[::1]/logo.svg", "https://10.0.0.5/l.svg",
+                    "https://169.254.169.254/latest/meta-data/"):
+            txt = f"v=BIMI1; l={url}; a="
+            with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])), \
+                 patch('mailradar.checker.httpx.get', return_value=MagicMock(status_code=200)) as get:
+                result = check_bimi("example.com")
+            get.assert_not_called()
+            assert result.svg_valid is False, url
 
 
 # ─── MTA-STS ────────────────────────────────────────────────────────────────
@@ -472,6 +625,46 @@ class TestCheckTLSRPT:
             result = check_tls_rpt("example.com")
         assert result.present is False
         assert result.score == 0
+
+
+# ─── DNS lookup failures ────────────────────────────────────────────────────
+
+class TestDNSLookupFailure:
+    """A lookup that got no answer (timeout, SERVFAIL) is not a record that is missing."""
+
+    def test_dmarc_timeout_does_not_call_the_domain_spoofable(self):
+        """A DNS timeout is not an NXDOMAIN: 'No DMARC record — spoofable' cannot be concluded from it."""
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=dns.exception.Timeout()):
+            result = check_dmarc("example.com")
+        assert not any("spoofable" in issue for issue in result.issues)
+
+    def test_spf_servfail_does_not_report_spf_missing(self):
+        """SERVFAIL (NoNameservers) is not "no SPF record": the check stays not verified."""
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=dns.resolver.NoNameservers()):
+            result = check_spf("example.com")
+        assert result.error
+        assert not any("No SPF record" in issue for issue in result.issues)
+
+    def test_dkim_timeout_on_one_selector_does_not_stop_the_others(self):
+        """A selector that times out does not hide the key published under the next one."""
+        answer = make_zone_resolver({"s2._domainkey.example.com": [f"v=DKIM1; k=ed25519; p={ED25519_KEY}"]})
+
+        def resolve(name, rdtype="TXT", *args, **kwargs):
+            if str(name).startswith("s1."):
+                raise dns.exception.Timeout()
+            return answer(name, rdtype)
+
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=resolve):
+            result = check_dkim("example.com", selectors=["s1", "s2"])
+        assert result.present is True
+        assert result.selector == "s2"
+        assert not result.error
+
+    def test_dkim_timeout_on_every_selector_does_not_report_dkim_missing(self):
+        with patch('mailradar.checker.dns.resolver.resolve', side_effect=dns.exception.Timeout()):
+            result = check_dkim("example.com", selectors=["s1", "s2"])
+        assert result.error
+        assert not any("No DKIM record" in issue for issue in result.issues)
 
 
 # ─── Domain existence ────────────────────────────────────────────────────────
@@ -518,6 +711,9 @@ class TestAnalyzeDomain:
                 return make_txt_answer([dkim_txt])
             elif "_mta-sts" in name or "_smtp._tls" in name or "default._bimi" in name:
                 raise dns.resolver.NXDOMAIN
+            elif name == "spf.example.com":
+                # The included record, not spf_txt again: that would be an include loop
+                return make_txt_answer([SPF_INCLUDED])
             else:
                 return make_txt_answer([spf_txt])
 

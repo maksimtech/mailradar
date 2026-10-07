@@ -36,8 +36,15 @@ def test_bench_dmarc(benchmark):
 
 @pytest.mark.codspeed
 def test_bench_spf(benchmark):
-    with patch('mailradar.checker.dns.resolver.resolve',
-               return_value=make_txt_answer([SPF_TXT])):
+    # Only example.com answers: given to every name, SPF_TXT would include
+    # itself, and the benchmark would time an include loop up to the
+    # 10-lookup limit instead of one record
+    def mock_resolve(name, rtype):
+        if name == "example.com":
+            return make_txt_answer([SPF_TXT])
+        raise dns.resolver.NXDOMAIN
+
+    with patch('mailradar.checker.dns.resolver.resolve', side_effect=mock_resolve):
         benchmark(check_spf, "example.com")
 
 

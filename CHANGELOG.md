@@ -100,7 +100,49 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 - **SPF is read term by term, as RFC 7208 defines it, not searched for substrings.**
   `v=spf1 mx all` — `all` with no qualifier, which is `+all` and lets every server pass —
   scored like a correct record and showed ✅. `include:spf-all.example.net ~all` was read
-  as `-all`.
+  as `-all`, and `-ALL` as no `all` at all. Also
+  now: a record without `all` follows its `redirect=` (gmail.com's form), and with
+  neither it is reported as neutral; two SPF records, a `redirect=` to a name with none,
+  and more than 10 DNS lookups once `include:` and `redirect=` are followed (an include
+  loop included) are a permerror, scored 0 and never shown as ✅. `SPFResult` gains
+  `permerror`, and the law check counts it as weak SPF.
+
+- **DMARC: values are case-insensitive, and two records are no policy.** `p=REJECT;
+  adkim=S` was scored as `p=none` and the report told the owner no protection was
+  active. Two records on `_dmarc.<domain>` end policy discovery (RFC 7489 §6.6.3); the
+  first one was used instead.
+
+- **A DNS lookup that fails is no longer reported as a missing record.** A resolver
+  timeout or SERVFAIL was read as "no record", so the report sent to the owner could say
+  "No DMARC record found — domain is spoofable" about a domain nobody had managed to ask.
+  The check is now marked not verified (`error` on each result): no claim either way, a
+  ⚠️ in the table, nothing for the law check to cite, and `report` and `send` refuse to
+  produce a report from an incomplete analysis. A DKIM selector that fails no longer
+  hides the next one.
+
+- **DKIM: Ed25519 keys are strong.** A `k=ed25519` key (RFC 8463, 32 raw bytes) failed
+  to parse as DER and was scored as weak 512-bit RSA, and the law check cited GDPR over
+  it.
+
+- **BIMI downloads the logo only from a public `https://` URL.** `l=` comes from the
+  analysed domain's DNS, that is from a third party, and any URL in it was fetched:
+  `l=http://127.0.0.1:8080/admin` reached the network MailRadar runs on. Plain http and
+  IP literals that are not global are now refused; a host name is still not checked for
+  what it resolves to.
+
+- **The organizational domain comes from the Public Suffix List.** The embedded subset of
+  two-label suffixes lacked `co.at` and hundreds more, so `_dmarc.co.at` was queried as
+  the parent of `example.co.at` — against the README's promise that the public suffix is
+  never queried. The full list now ships with the package (`public_suffix_list.dat`, no
+  new dependency, read offline). It is Mozilla's and stays under MPL-2.0: the file keeps
+  its licence header, the README's License section credits it, and the comment where it
+  is loaded says how to refresh it. This changes one documented case: `fvg.it` is on the list,
+  so for `asufc.sanita.fvg.it` the walk stops at `sanita.fvg.it` and no longer asks
+  `_dmarc.fvg.it`. In DNS that is where the record actually is: on 2026-10-07
+  `_dmarc.sanita.fvg.it` answered and `_dmarc.fvg.it` was NXDOMAIN.
+
+- **MTA-STS: what the report says matches what was found.** The report for the owner
+  said "Current: Not configured" for a policy in testing mode.
 
 ### Changed
 

@@ -268,10 +268,13 @@ only for `p=reject`.
 
 Multi-level domains are resolved the way RFC 7489 §6.6.3 prescribes: if
 `_dmarc.<domain>` has no record, one label is removed at a time up to the
-organizational domain. For `asufc.sanita.fvg.it` that means
-`_dmarc.asufc.sanita.fvg.it`, then `_dmarc.sanita.fvg.it`, then
-`_dmarc.fvg.it`. The public suffix itself is never queried — a record on `it`
-or `co.uk` is not the domain's policy. An inherited record is marked
+organizational domain, which comes from the [Public Suffix
+List](https://publicsuffix.org/) shipped with the package. For
+`asufc.sanita.fvg.it` that means `_dmarc.asufc.sanita.fvg.it`, then
+`_dmarc.sanita.fvg.it`: `fvg.it` is itself on the list, like `it`, `co.uk` or
+`co.at`. The public suffix itself is never queried — a record on it is not the
+domain's policy. Two DMARC records on the same name are reported as such:
+receivers then apply no DMARC policy at all. An inherited record is marked
 `via <parent domain>` in the table and listed under Issues found, since the
 subdomain has no policy of its own; where the parent publishes `sp=`, that is
 the policy scored for the subdomain.
@@ -289,8 +292,12 @@ the domain. What matters most is how it ends:
 | `+all` | 0 | Any server may send as the domain. Critical |
 
 The record is read term by term, as RFC 7208 defines it: `all` with no
-qualifier is `+all`. MailRadar also flags `+a` and `+mx` mechanisms as too
-permissive.
+qualifier is `+all`, names are case-insensitive (`-ALL` is `-all`), and a
+record without `all` follows its `redirect=`; with neither, the result is
+neutral. Two SPF records on the domain, or more than 10 DNS lookups once
+`include:` and `redirect=` are followed, are a permerror: receivers apply no
+SPF, and the check scores 0. MailRadar also flags `+a` and `+mx` mechanisms as
+too permissive.
 
 ### DKIM (up to 15 points)
 
@@ -298,6 +305,7 @@ DKIM signs outgoing mail with a key published at
 `<selector>._domainkey.<domain>`. The selector is not public, so MailRadar
 tries a list of common ones (`default`, `google`, `selector1`, `selector2`,
 `k1`, `mail` and others) and measures the RSA key size of the first one found.
+An Ed25519 key (`k=ed25519`, RFC 8463) scores like a 2048-bit RSA key.
 
 | Key size | Points |
 |----------|--------|
@@ -313,7 +321,9 @@ selector outside the list.
 BIMI (`default._bimi.<domain>`) lets supporting mail clients show the
 organization's logo. MailRadar checks that the SVG logo is reachable (2
 points) and whether a Verified Mark Certificate is referenced (8 points, or 3
-without a VMC). BIMI is a trust and branding feature, not a protection
+without a VMC). The logo is downloaded only from an `https://` URL that does
+not name a private or loopback address, since the URL comes from the analysed
+domain's DNS. BIMI is a trust and branding feature, not a protection
 against spoofing by itself.
 
 ### MTA-STS (up to 5 points)
@@ -343,6 +353,14 @@ found is the one `send` uses for encryption.
 - DKIM detection depends on the list of common selectors (see above).
 - An empty DKIM key (`p=`, which revokes the key) is reported as a weak
   512-bit key, as in the `example.com` output above.
+- A DNS lookup that fails (timeout, SERVFAIL) leaves that check "not
+  verified": it scores 0 but is not reported as missing, and `report` and
+  `send` refuse to produce a report from an incomplete analysis.
+- SPF macros (`%{d}` and the like) are not expanded, so an `include:` or
+  `redirect=` that uses one is counted but not followed, and the limit of two
+  void lookups is not checked.
+- The BIMI logo host name is not checked for resolving to a private address,
+  and the VMC is not downloaded or validated: "VMC" means that `a=` names one.
 - The GPG check confirms that a key is published for the address, not that
   the address's owner controls it: keyserver.ubuntu.com and pgp.mit.edu do
   not verify email addresses. Check the key before relying on it for
@@ -391,6 +409,11 @@ so nothing ships that it has not passed.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+One file in the package is not MIT and not ours: `mailradar/public_suffix_list.dat`
+is the [Public Suffix List](https://publicsuffix.org) maintained by Mozilla, shipped
+unmodified and distributed under the Mozilla Public License 2.0
+([MPL-2.0](https://mozilla.org/MPL/2.0/)), as its header states.
 
 ---
 

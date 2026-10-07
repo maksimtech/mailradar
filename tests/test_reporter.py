@@ -70,3 +70,28 @@ class TestGenerateReport:
         text = generate_report(report, lang="xx")
         assert "example.com" in text
         assert "DMARC" in text
+
+
+def _section(text: str, start: str) -> str:
+    """The paragraph of `text` that begins with `start`."""
+    tail = text.split(start, 1)[1]
+    return tail.split("\n\n", 1)[0]
+
+
+def _mta_sts_in_testing() -> DomainReport:
+    report = make_report()
+    report.mta_sts = MTASTSResult(present=True, mode="testing", score=2,
+                                  issues=["MTA-STS in testing mode — upgrade to enforce"])
+    return report
+
+
+class TestMTASTSSection:
+    """The report sent to the owner must not say 'Not configured' for a policy in testing mode."""
+
+    def test_english_report_does_not_say_not_configured(self):
+        text = generate_report(_mta_sts_in_testing(), lang="en")
+        assert "Not configured" not in _section(text, "MTA-STS —")
+
+    def test_italian_report_does_not_say_not_configured(self):
+        text = generate_report(_mta_sts_in_testing(), lang="it")
+        assert "Non configurato" not in _section(text, "MTA-STS —")

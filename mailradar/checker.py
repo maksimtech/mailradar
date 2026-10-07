@@ -2,8 +2,15 @@
 MailRadar — DNS record checker for email security posture analysis.
 """
 
+import contextlib
+import functools
+import ipaddress
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TypeVar
+from urllib.parse import urlsplit
 
 import dns.exception
 import dns.resolver
@@ -31,6 +38,8 @@ class DMARCResult:
     ruf: bool = False
     raw: str = ""
     score: int = 0
+    # Set when a DNS lookup failed: the check then says nothing either way
+    error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
@@ -39,8 +48,12 @@ class SPFResult:
     present: bool = False
     all_mechanism: str = ""
     permissive: bool = False
+    # RFC 7208 §2.6.7: the record cannot be evaluated, receivers apply no SPF
+    permerror: bool = False
     raw: str = ""
     score: int = 0
+    # Set when a DNS lookup failed: the check then says nothing either way
+    error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
@@ -49,8 +62,12 @@ class DKIMResult:
     present: bool = False
     selector: str = ""
     key_bits: int = 0
+    # The k= tag: "rsa" (the default) or "ed25519" (RFC 8463)
+    key_type: str = "rsa"
     raw: str = ""
     score: int = 0
+    # Set when a DNS lookup failed: the check then says nothing either way
+    error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
@@ -63,6 +80,8 @@ class BIMIResult:
     vmc_present: bool = False
     raw: str = ""
     score: int = 0
+    # Set when a DNS lookup failed: the check then says nothing either way
+    error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
@@ -71,6 +90,8 @@ class MTASTSResult:
     present: bool = False
     mode: str = ""
     score: int = 0
+    # Set when a DNS lookup failed: the check then says nothing either way
+    error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
@@ -79,6 +100,8 @@ class TLSRPTResult:
     present: bool = False
     rua: str = ""
     score: int = 0
+    # Set when a DNS lookup failed: the check then says nothing either way
+    error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
@@ -155,40 +178,59 @@ def find_domain_variants(domain: str) -> list[str]:
     return found
 
 
-# Public suffixes made of more than one label: under these, the organisational
-# domain has one label more (example.co.uk, not co.uk).
-# A pragmatic subset of the Public Suffix List: the suffixes actually met in
-# practice, without taking on an external dependency for them.
-_MULTI_LABEL_PUBLIC_SUFFIXES = frozenset({
-    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "sch.uk",
-    "ltd.uk", "plc.uk",
-    "gov.it", "edu.it",
-    "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ed.jp", "gr.jp", "lg.jp",
-    "com.au", "net.au", "org.au", "edu.au", "gov.au", "asn.au", "id.au",
-    "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz", "school.nz",
-    "co.za", "org.za", "web.za", "gov.za", "ac.za",
-    "com.br", "net.br", "org.br", "gov.br", "edu.br",
-    "com.ar", "gob.ar", "org.ar", "edu.ar",
-    "com.mx", "gob.mx", "org.mx", "edu.mx",
-    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn",
-    "com.tr", "gov.tr", "org.tr", "edu.tr",
-    "co.in", "net.in", "org.in", "gov.in", "ac.in", "edu.in",
-    "com.pl", "net.pl", "org.pl", "gov.pl", "edu.pl",
-    "com.sg", "net.sg", "org.sg", "gov.sg", "edu.sg",
-    "co.kr", "or.kr", "ne.kr", "go.kr", "re.kr", "ac.kr",
-    "com.hk", "org.hk", "gov.hk", "edu.hk",
-    "co.il", "org.il", "gov.il", "ac.il",
-    "com.es", "org.es", "gob.es", "edu.es", "nom.es",
-    "com.pt", "gov.pt", "org.pt", "edu.pt",
-    "com.ua", "gov.ua", "org.ua", "edu.ua",
-    "com.ru", "net.ru", "org.ru", "gov.ru", "edu.ru",
-    "co.id", "or.id", "go.id", "ac.id", "web.id",
-    "com.my", "net.my", "org.my", "gov.my", "edu.my",
-    "com.ph", "gov.ph", "org.ph", "edu.ph",
-    "com.vn", "gov.vn", "org.vn", "edu.vn",
-    "com.co", "gov.co", "org.co", "edu.co",
-    "co.th", "in.th", "go.th", "ac.th",
-})
+# The Public Suffix List, both sections, as published at
+# https://publicsuffix.org/list/public_suffix_list.dat (the VERSION line in the
+# file says which). The list is Mozilla's, under MPL-2.0, and its header says
+# so: keep it. It replaced a hand-picked subset of two-label suffixes that
+# lacked co.at and hundreds of others, and so queried them as though they were
+# a domain's parent. Suffixes are added every few weeks, so refresh the copy
+# periodically, before a release at the latest: download
+# https://publicsuffix.org/list/public_suffix_list.dat over this file, as it
+# is, and run the suite.
+_PUBLIC_SUFFIX_LIST = Path(__file__).parent / "public_suffix_list.dat"
+
+
+@functools.cache
+def _public_suffix_rules() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """The PSL as (rules, wildcard rules without `*.`, exceptions without `!`)."""
+    rules: set[str] = set()
+    wildcards: set[str] = set()
+    exceptions: set[str] = set()
+    for line in _PUBLIC_SUFFIX_LIST.read_text(encoding="utf-8").splitlines():
+        rule = line.strip().lower()
+        if not rule or rule.startswith("//"):
+            continue
+        if not rule.isascii():
+            # Listed in Unicode, met in DNS as punycode: 公司.cn is xn--55qx5d.cn
+            with contextlib.suppress(UnicodeError):
+                _add_rule(rule.encode("idna").decode("ascii"), rules, wildcards, exceptions)
+        _add_rule(rule, rules, wildcards, exceptions)
+    return frozenset(rules), frozenset(wildcards), frozenset(exceptions)
+
+
+def _add_rule(rule: str, rules: set[str], wildcards: set[str], exceptions: set[str]) -> None:
+    """File one PSL rule under its kind."""
+    if rule.startswith("!"):
+        exceptions.add(rule[1:])
+    elif rule.startswith("*."):
+        wildcards.add(rule[2:])
+    else:
+        rules.add(rule)
+
+
+def _public_suffix_depth(labels: list[str]) -> int:
+    """Quante label finali di `labels` sono il suffisso pubblico (algoritmo PSL)."""
+    rules, wildcards, exceptions = _public_suffix_rules()
+    # From the longest candidate down: the first rule that matches is the
+    # longest, and an exception beats the wildcard it carves out of
+    for i in range(len(labels)):
+        name = ".".join(labels[i:])
+        if name in exceptions:
+            return len(labels) - i - 1
+        if name in rules or ".".join(labels[i + 1:]) in wildcards:
+            return len(labels) - i
+    # The implicit rule `*`: an unlisted TLD is a public suffix
+    return 1
 
 
 def _labels(domain: str) -> list[str]:
@@ -201,11 +243,7 @@ def _labels(domain: str) -> list[str]:
 
 def _org_depth(labels: list[str]) -> int:
     """Quante label compongono il dominio organizzativo di `labels`."""
-    if len(labels) < 3:
-        return len(labels)
-    if f"{labels[-2]}.{labels[-1]}" in _MULTI_LABEL_PUBLIC_SUFFIXES:
-        return 3
-    return 2
+    return min(len(labels), _public_suffix_depth(labels) + 1)
 
 
 def organizational_domain(domain: str) -> str:
@@ -213,7 +251,7 @@ def organizational_domain(domain: str) -> str:
     RFC 7489 §3.2 — dominio organizzativo: il nome registrabile
     immediatamente sotto il suffisso pubblico.
 
-    asufc.sanita.fvg.it -> fvg.it
+    asufc.sanita.fvg.it -> sanita.fvg.it   (fvg.it is on the PSL)
     mail.example.co.uk  -> example.co.uk
     sub.domain.com      -> domain.com
     """
@@ -228,7 +266,7 @@ def dmarc_lookup_chain(domain: str) -> list[str]:
     organizational domain. The public suffix itself is never queried:
     un record pubblicato su `it` o `co.uk` non è la policy del dominio.
 
-    asufc.sanita.fvg.it -> [asufc.sanita.fvg.it, sanita.fvg.it, fvg.it]
+    asufc.sanita.fvg.it -> [asufc.sanita.fvg.it, sanita.fvg.it]
     """
     labels = _labels(domain)
     if not labels:
@@ -239,6 +277,10 @@ def dmarc_lookup_chain(domain: str) -> list[str]:
     return chain
 
 
+class DNSLookupError(Exception):
+    """A lookup that got no answer (timeout, SERVFAIL): not the same as no record."""
+
+
 def _query_txt(name: str) -> list[str]:
     """Query TXT records for a given name."""
     try:
@@ -247,9 +289,30 @@ def _query_txt(name: str) -> list[str]:
         # errors="replace": a TXT record that is not UTF-8 must not end the analysis
         return [b"".join(rdata.strings).decode("utf-8", errors="replace")
                 for rdata in answers]
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
-            dns.exception.DNSException):
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
         return []
+    except dns.exception.DNSException as e:
+        # Read as "no record", a resolver timeout put "No DMARC record found —
+        # domain is spoofable" into the report sent to the domain's owner
+        raise DNSLookupError(f"DNS lookup for {name} failed: {type(e).__name__}") from e
+
+
+_Result = TypeVar("_Result")
+
+
+def _unless_dns_fails(
+    check: str, result_type: Callable[..., _Result]
+) -> Callable[[Callable[..., _Result]], Callable[..., _Result]]:
+    """A check_* whose DNS lookup fails returns a result marked as not verified."""
+    def decorate(run: Callable[..., _Result]) -> Callable[..., _Result]:
+        @functools.wraps(run)
+        def wrapper(*args, **kwargs) -> _Result:
+            try:
+                return run(*args, **kwargs)
+            except DNSLookupError as e:
+                return result_type(error=str(e), issues=[f"{check} not verified — {e}"])
+        return wrapper
+    return decorate
 
 
 def _parse_tags(record: str) -> dict[str, str]:
@@ -276,10 +339,12 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
     result.present = True
     result.raw = record
 
-    tags = _parse_tags(record)
+    # RFC 7489 §6.4: tag names and these values are case-insensitive literals,
+    # p=REJECT is p=reject
+    tags = {key.lower(): value for key, value in _parse_tags(record).items()}
 
-    result.policy = tags.get("p", "none")
-    result.sp = tags.get("sp", "")
+    result.policy = tags.get("p", "none").lower()
+    result.sp = tags.get("sp", "").lower()
     # RFC 7489 §6.3: per un sottodominio vale `sp`, se presente sul padre
     if result.inherited and result.sp:
         result.policy = result.sp
@@ -293,8 +358,8 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
         result.issues.append(f"Invalid DMARC pct value: {tags['pct']!r}")
         pct = 100
     result.pct = pct
-    result.adkim = tags.get("adkim", "r")
-    result.aspf = tags.get("aspf", "r")
+    result.adkim = tags.get("adkim", "r").lower()
+    result.aspf = tags.get("aspf", "r").lower()
     result.rua = "rua" in tags
     result.ruf = "ruf" in tags
 
@@ -333,14 +398,17 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
         result.issues.append("No ruf configured — forensic reports disabled")
 
 
-def _first_dmarc_record(name: str) -> str | None:
-    """Primo record TXT di `name` che è un record DMARC, se c'è."""
-    for record in _query_txt(name):
-        if record.startswith("v=DMARC1"):
-            return record
-    return None
+def _is_dmarc(record: str) -> bool:
+    """RFC 7489 §6.4: the first tag is v=DMARC1."""
+    return record.startswith("v=DMARC1")
 
 
+def _dmarc_records(name: str) -> list[str]:
+    """I record TXT di `name` che sono record DMARC."""
+    return [record for record in _query_txt(name) if _is_dmarc(record)]
+
+
+@_unless_dns_fails("DMARC", DMARCResult)
 def check_dmarc(domain: str) -> DMARCResult:
     """
     Cerca il record DMARC risalendo la gerarchia del dominio (RFC 7489
@@ -352,10 +420,21 @@ def check_dmarc(domain: str) -> DMARCResult:
     requested = chain[0] if chain else ""
 
     for candidate in chain:
-        record = _first_dmarc_record(f"_dmarc.{candidate}")
-        if record is None:
+        records = _dmarc_records(f"_dmarc.{candidate}")
+        if not records:
             continue
 
+        # RFC 7489 §6.6.3: more than one record ends policy discovery and no
+        # DMARC is applied, neither of them nor a parent's
+        if len(records) > 1:
+            result.found_at = candidate
+            result.issues.append(
+                f"Multiple DMARC records ({len(records)}) on _dmarc.{candidate} — "
+                "receivers apply no DMARC policy"
+            )
+            return result
+
+        record = records[0]
         result.found_at = candidate
         result.inherited = candidate != requested
         if result.inherited:
@@ -377,17 +456,23 @@ def check_dmarc(domain: str) -> DMARCResult:
 _SPF_TERM = re.compile(r"([+\-~?]?)([a-z][a-z0-9_.-]*)(.*)", re.IGNORECASE)
 
 
+def _is_spf(record: str) -> bool:
+    """RFC 7208 §4.5: `v=spf1` alone or followed by a space, in any case."""
+    return record.lower().split()[:1] == ["v=spf1"]
+
+
 def _spf_terms(record: str) -> list[tuple[str, str, str]]:
     """
     The terms after `v=spf1`, as (qualifier, name, rest). Whole terms, not
-    substrings: `include:spf-all.example.net` holds no `-all`.
+    substrings: `include:spf-all.example.net` holds no `-all`, and `+all` no
+    `+a`. Names are lower-cased, RFC 7208 §4.6.1 makes them case-insensitive.
     """
     terms = []
     for term in record.split()[1:]:
         match = _SPF_TERM.fullmatch(term)
         if match:
             qualifier, name, rest = match.groups()
-            terms.append((qualifier, name, rest))
+            terms.append((qualifier, name.lower(), rest))
     return terms
 
 
@@ -401,45 +486,141 @@ def _spf_all(terms: list[tuple[str, str, str]]) -> str:
     return ""
 
 
+# RFC 7208 §4.6.4: the terms that cost a DNS query, and how many of them one
+# evaluation may make, nested include: and redirect= counted in
+_SPF_LOOKUP_TERMS = frozenset({"include", "a", "mx", "ptr", "exists", "redirect"})
+SPF_MAX_LOOKUPS = 10
+
+
+def _spf_domain(rest: str) -> str:
+    """The domain after `include:` or `redirect=`; "" if it holds a macro."""
+    target = rest[1:].split("/")[0]
+    return "" if "%" in target else target
+
+
+def _spf_redirect(terms: list[tuple[str, str, str]]) -> str:
+    """The target of `redirect=`, ignored when the record has `all` (§6.1)."""
+    if _spf_all(terms):
+        return ""
+    for _, name, rest in terms:
+        if name == "redirect" and rest.startswith("="):
+            return _spf_domain(rest)
+    return ""
+
+
+def _spf_record_of(name: str) -> str | None:
+    """The one SPF record of `name`; None if it has none, or more than one."""
+    records = [record for record in _query_txt(name) if _is_spf(record)]
+    return records[0] if len(records) == 1 else None
+
+
+def _spf_lookups(record: str, count: int = 0) -> int:
+    """
+    DNS lookups the evaluation of `record` needs, including those of the
+    records it pulls in. It stops as soon as the limit is passed, which is
+    also what ends an include loop.
+    """
+    terms = _spf_terms(record)
+    redirect = _spf_redirect(terms)
+    for _, name, rest in terms:
+        if name not in _SPF_LOOKUP_TERMS or (name == "redirect" and not redirect):
+            continue
+        count += 1
+        if count > SPF_MAX_LOOKUPS:
+            return count
+        target = _spf_domain(rest) if name in ("include", "redirect") else ""
+        nested = _spf_record_of(target) if target else None
+        if nested:
+            count = _spf_lookups(nested, count)
+            if count > SPF_MAX_LOOKUPS:
+                return count
+    return count
+
+
+@_unless_dns_fails("SPF", SPFResult)
 def check_spf(domain: str) -> SPFResult:
     result = SPFResult()
-    records = _query_txt(domain)
+    records = [record for record in _query_txt(domain) if _is_spf(record)]
 
-    for record in records:
-        if record.startswith("v=spf1"):
-            result.present = True
-            result.raw = record
-            result.all_mechanism = _spf_all(_spf_terms(record))
-
-            if result.all_mechanism == "-all":
-                result.permissive = False
-                result.score += 20
-            elif result.all_mechanism == "~all":
-                result.permissive = True
-                result.issues.append("SPF uses ~all (softfail) — consider -all (hardfail)")
-                result.score += 10
-            elif result.all_mechanism == "+all":
-                result.permissive = True
-                result.issues.append("SPF uses +all — any server can send as this domain!")
-                result.score += 0
-            elif result.all_mechanism == "?all":
-                result.permissive = True
-                result.issues.append("SPF uses ?all (neutral) — no enforcement")
-                result.score += 5
-
-            # Check for overly permissive mechanisms
-            if "+a" in record or "+mx" in record:
-                result.permissive = True
-                result.issues.append("SPF contains +a or +mx — too permissive")
-
-            break
-
-    if not result.present:
+    if not records:
         result.issues.append("No SPF record found")
+        return result
+
+    result.present = True
+    result.raw = records[0]
+
+    # RFC 7208 §4.5: more than one record is a permerror, not "the first one"
+    if len(records) > 1:
+        result.permerror = True
+        result.issues.append(
+            f"Multiple SPF records ({len(records)}) — permerror, receivers apply no SPF"
+        )
+        return result
+
+    terms = _spf_terms(records[0])
+    result.all_mechanism = _spf_all(terms)
+
+    if _spf_lookups(records[0]) > SPF_MAX_LOOKUPS:
+        result.permerror = True
+        result.issues.append(
+            f"SPF needs more than {SPF_MAX_LOOKUPS} DNS lookups — permerror, receivers apply no SPF"
+        )
+        return result
+
+    # RFC 7208 §6.1: with no `all`, redirect= hands the verdict to another
+    # record. The chain is finite: a loop would have failed the count above.
+    redirected = terms
+    while not result.all_mechanism and (target := _spf_redirect(redirected)):
+        record = _spf_record_of(target)
+        if record is None:
+            result.permerror = True
+            result.issues.append(f"SPF redirect={target} has no single SPF record — permerror")
+            return result
+        redirected = _spf_terms(record)
+        result.all_mechanism = _spf_all(redirected)
+
+    if result.all_mechanism == "-all":
+        result.permissive = False
+        result.score += 20
+    elif result.all_mechanism == "~all":
+        result.permissive = True
+        result.issues.append("SPF uses ~all (softfail) — consider -all (hardfail)")
+        result.score += 10
+    elif result.all_mechanism == "+all":
+        result.permissive = True
+        result.issues.append("SPF uses +all — any server can send as this domain!")
+        result.score += 0
+    elif result.all_mechanism == "?all":
+        result.permissive = True
+        result.issues.append("SPF uses ?all (neutral) — no enforcement")
+        result.score += 5
+    else:
+        # RFC 7208 §4.7: no `all` and no redirect= ends in neutral
+        result.permissive = True
+        result.issues.append("SPF has no all mechanism — the default result is neutral, no enforcement")
+
+    # Check for overly permissive mechanisms
+    if "+a" in records[0] or "+mx" in records[0]:
+        result.permissive = True
+        result.issues.append("SPF contains +a or +mx — too permissive")
 
     return result
 
 
+def _ed25519_bits(key: str) -> int:
+    """256 for a valid Ed25519 public key (32 raw bytes, not DER), 0 otherwise."""
+    import base64
+    import binascii
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    try:
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(key, validate=True))
+    except (ValueError, binascii.Error):
+        return 0
+    return 256
+
+
+@_unless_dns_fails("DKIM", DKIMResult)
 def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
     result = DKIMResult()
 
@@ -452,18 +633,28 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
     ]
 
     selectors_to_try = selectors or default_selectors
+    failed: DNSLookupError | None = None
 
     for selector in selectors_to_try:
-        records = _query_txt(f"{selector}._domainkey.{domain}")
+        try:
+            records = _query_txt(f"{selector}._domainkey.{domain}")
+        except DNSLookupError as e:
+            # One selector that fails says nothing about the next one
+            failed = failed or e
+            continue
         for record in records:
             if "v=DKIM1" in record or "p=" in record:
+                tags = _parse_tags(record)
+                key_part = "".join(tags.get("p", "").split())
                 result.present = True
                 result.selector = selector
                 result.raw = record
 
+                if tags.get("k", "rsa").lower() == "ed25519":
+                    result.key_type = "ed25519"
+                    result.key_bits = _ed25519_bits(key_part)
                 # Extract key bits using cryptography
-                if "p=" in record:
-                    key_part = record.split("p=")[-1].split(";")[0].strip()
+                elif "p" in tags:
                     try:
                         import base64
 
@@ -483,7 +674,13 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
                         else:
                             result.key_bits = 512
 
-                if result.key_bits >= 2048:
+                if result.key_type == "ed25519":
+                    # RFC 8463: 256 bits of elliptic curve, stronger than RSA 2048
+                    if result.key_bits:
+                        result.score += 15
+                    else:
+                        result.issues.append("DKIM Ed25519 key is malformed — signatures cannot be verified")
+                elif result.key_bits >= 2048:
                     result.score += 15
                 elif result.key_bits >= 1024:
                     result.score += 10
@@ -494,12 +691,32 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
 
                 return result
 
+    if not result.present and failed:
+        raise failed
     if not result.present:
         result.issues.append("No DKIM record found with common selectors")
 
     return result
 
 
+def _fetchable(url: str) -> bool:
+    """
+    An https URL that does not name a private, loopback or link-local address.
+    BIMI requires https, and l= comes from the analysed domain's DNS, so from a
+    third party: fetching anything it says would let it point this tool at
+    http://127.0.0.1:8080/admin on the network it runs from.
+    """
+    parts = urlsplit(url)
+    if parts.scheme.lower() != "https" or not parts.hostname:
+        return False
+    try:
+        return ipaddress.ip_address(parts.hostname).is_global
+    except ValueError:
+        # A host name. What it resolves to is not checked here.
+        return True
+
+
+@_unless_dns_fails("BIMI", BIMIResult)
 def check_bimi(domain: str) -> BIMIResult:
     result = BIMIResult()
     records = _query_txt(f"default._bimi.{domain}")
@@ -516,7 +733,9 @@ def check_bimi(domain: str) -> BIMIResult:
             result.vmc_present = bool(result.vmc_url and result.vmc_url != "")
 
             # Validate SVG
-            if result.svg_url:
+            if result.svg_url and not _fetchable(result.svg_url):
+                result.issues.append("BIMI logo URL is not a public https:// URL — not fetched")
+            elif result.svg_url:
                 try:
                     resp = httpx.get(result.svg_url, timeout=5)
                     result.svg_valid = resp.status_code == 200
@@ -542,6 +761,7 @@ def check_bimi(domain: str) -> BIMIResult:
     return result
 
 
+@_unless_dns_fails("MTA-STS", MTASTSResult)
 def check_mta_sts(domain: str) -> MTASTSResult:
     result = MTASTSResult()
     records = _query_txt(f"_mta-sts.{domain}")
@@ -576,6 +796,7 @@ def check_mta_sts(domain: str) -> MTASTSResult:
     return result
 
 
+@_unless_dns_fails("TLS-RPT", TLSRPTResult)
 def check_tls_rpt(domain: str) -> TLSRPTResult:
     result = TLSRPTResult()
     records = _query_txt(f"_smtp._tls.{domain}")

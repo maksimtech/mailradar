@@ -536,3 +536,80 @@ class TestDiscoverCandidatesOutput(unittest.TestCase):
         self.assertIn("not verified", result.output)
         self.assertIn("security@example.com", result.output)
         self.assertNotIn("Found 1 email", result.output)
+
+
+# A valid Ed25519 DKIM record (RFC 8463): the key is 32 raw bytes, not DER
+ED25519_DKIM = "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+
+
+def _table_lines(report: DomainReport) -> list[str]:
+    """What the results table prints for `report`, line by line."""
+    from mailradar import cli
+    with cli.console.capture() as capture:
+        cli._print_report(report)
+    return capture.get().splitlines()
+
+
+def _dkim_report(record: str, selectors=None) -> DomainReport:
+    """A report whose DKIM result is check_dkim's, with every selector answering `record`."""
+    from mailradar.checker import check_dkim
+    answer = [MagicMock(strings=[record.encode()])]
+    with patch("mailradar.checker.dns.resolver.resolve", return_value=answer):
+        dkim = check_dkim("example.com", selectors=selectors)
+    report = DomainReport(domain="example.com")
+    report.dkim = dkim
+    return report
+
+
+def _unverified_dmarc_report() -> DomainReport:
+    """A report whose DMARC lookup timed out."""
+    report = DomainReport(domain="example.com", total_score=40, grade="POOR")
+    report.dmarc = DMARCResult(error="DNS lookup for _dmarc.example.com failed: Timeout",
+                               issues=["DMARC not verified — DNS lookup for _dmarc.example.com failed: Timeout"])
+    return report
+
+
+class TestReportTableRows(unittest.TestCase):
+    """The table must not claim more than the checks found."""
+
+    def test_spf_permerror_is_not_shown_as_ok(self):
+        """A record in permerror protects nothing: the table must not show ✅."""
+        report = DomainReport(domain="example.com")
+        report.spf = SPFResult(present=True, permerror=True, raw="v=spf1 -all", issues=["permerror"])
+        row = next(line for line in _table_lines(report) if "SPF" in line and "v=spf1" in line)
+        self.assertNotIn("✅", row)
+
+    def test_unverified_dmarc_is_not_shown_as_not_configured(self):
+        row = next(line for line in _table_lines(_unverified_dmarc_report()) if "DMARC" in line and "│" in line)
+        self.assertNotIn("Not configured", row)
+        self.assertIn("not verified", row.lower())
+
+    def test_ed25519_dkim_key_is_not_described_as_rsa(self):
+        from mailradar.reporter import generate_report
+        report = _dkim_report(ED25519_DKIM, selectors=["default"])
+        row = next(line for line in _table_lines(report) if "DKIM" in line and "selector" in line)
+        self.assertIn("Ed25519", row)
+        self.assertNotIn("RSA", row)
+        for lang in ("en", "it"):
+            self.assertNotIn("256-bit RSA", generate_report(report, lang=lang))
+
+
+class TestIncompleteAnalysis(unittest.TestCase):
+    """A report goes to the domain's owner: it must not state what could not be verified."""
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    @patch("mailradar.reporter.generate_report")
+    @patch("mailradar.checker.analyze_domain", return_value=_unverified_dmarc_report())
+    def test_report_is_not_generated_from_an_incomplete_analysis(self, mock_checker, mock_generate):
+        result = self.runner.invoke(app, ["report", "example.com"])
+        self.assertEqual(result.exit_code, 1)
+        mock_generate.assert_not_called()
+
+    @patch("mailradar.sender.send_report")
+    @patch("mailradar.checker.analyze_domain", return_value=_unverified_dmarc_report())
+    def test_send_does_not_send_a_report_from_an_incomplete_analysis(self, mock_checker, mock_send):
+        result = self.runner.invoke(app, ["send", "example.com"])
+        self.assertEqual(result.exit_code, 1)
+        mock_send.assert_not_called()
