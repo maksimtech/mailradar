@@ -91,6 +91,79 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   while the log still claims it, the log removed while the wait still happens, and the
   guard removed so zero waits anyway.
 
+- **`send` verifies the SMTP server's certificate.** `SMTP_SSL` and `starttls()` were
+  called without a context, and smtplib then verifies neither the certificate nor the
+  host name: anyone on the path could present any certificate and receive the SMTP
+  password given to `login()`. Both now use `ssl.create_default_context()`, and the
+  connection gives up after 30 seconds instead of waiting for ever.
+
+- **SPF is read term by term, as RFC 7208 defines it, not searched for substrings.**
+  `v=spf1 mx all` — `all` with no qualifier, which is `+all` and lets every server pass —
+  scored like a correct record and showed ✅. `include:spf-all.example.net ~all` was read
+  as `-all`, `-ALL` as no `all` at all, and `+all` raised the `+a or +mx` warning. Also
+  now: a record without `all` follows its `redirect=` (gmail.com's form), and with
+  neither it is reported as neutral; two SPF records, a `redirect=` to a name with none,
+  and more than 10 DNS lookups once `include:` and `redirect=` are followed (an include
+  loop included) are a permerror, scored 0 and never shown as ✅. `SPFResult` gains
+  `permerror`, and the law check counts it as weak SPF.
+
+- **DMARC: values are case-insensitive, and two records are no policy.** `p=REJECT;
+  adkim=S` was scored as `p=none` and the report told the owner no protection was
+  active. Two records on `_dmarc.<domain>` end policy discovery (RFC 7489 §6.6.3); the
+  first one was used instead. `v = DMARC1` is a valid record, and an empty `rua=` or
+  `ruf=` no longer counts as reports configured.
+
+- **A DNS lookup that fails is no longer reported as a missing record.** A resolver
+  timeout or SERVFAIL was read as "no record", so the report sent to the owner could say
+  "No DMARC record found — domain is spoofable" about a domain nobody had managed to ask.
+  The check is now marked not verified (`error` on each result): no claim either way, a
+  ⚠️ in the table, nothing for the law check to cite, and `report` and `send` refuse to
+  produce a report from an incomplete analysis. A DKIM selector that fails no longer
+  hides the next one.
+
+- **DKIM: Ed25519 keys are strong and an empty `p=` is a revoked key.** A `k=ed25519` key
+  (RFC 8463, 32 raw bytes) failed to parse as DER and was scored as weak 512-bit RSA, and
+  the law check cited GDPR over it. An empty `p=` revokes the key (RFC 6376 §3.6.1): it
+  was shown as "512-bit RSA" too — the `example.com` output in the README was exactly
+  that. The next selector is now tried, and the revocation is reported if no active key
+  is found.
+
+- **BIMI downloads the logo only from a public `https://` URL.** `l=` comes from the
+  analysed domain's DNS, that is from a third party, and any URL in it was fetched:
+  `l=http://127.0.0.1:8080/admin` reached the network MailRadar runs on. Plain http and
+  IP literals that are not global are now refused; a host name is still not checked for
+  what it resolves to. `v=BIMI1; l=; a=;` declines BIMI and no longer earns 3 points.
+
+- **The organizational domain comes from the Public Suffix List.** The embedded subset of
+  two-label suffixes lacked `co.at` and hundreds more, so `_dmarc.co.at` was queried as
+  the parent of `example.co.at` — against the README's promise that the public suffix is
+  never queried. The full list now ships with the package (`public_suffix_list.dat`, no
+  new dependency, read offline). It is Mozilla's and stays under MPL-2.0: the file keeps
+  its licence header, the README's License section credits it, and the comment where it
+  is loaded says how to refresh it. This changes one documented case: `fvg.it` is on the list,
+  so for `asufc.sanita.fvg.it` the walk stops at `sanita.fvg.it` and no longer asks
+  `_dmarc.fvg.it`. In DNS that is where the record actually is: on 2026-10-07
+  `_dmarc.sanita.fvg.it` answered and `_dmarc.fvg.it` was NXDOMAIN.
+
+- **MTA-STS: what the report says matches what was found.** A policy file answering 404
+  raised no issue at all, `mode: none` (valid, RFC 8461) was "mode unknown", and the report
+  for the owner said "Current: Not configured" for a policy in testing mode.
+
+- **Smaller fixes.** `check example.com.` treated the trailing dot as a missing domain,
+  and `analyze_domain` now normalises the name once, so GPG and MTA-STS no longer see
+  `Example.COM.`. RDAP addresses are matched on the domain, not as a substring
+  (`admin@example.com.evil.org`); the SOA contact is matched case-insensitively and a TXT
+  record that is not UTF-8 no longer hides the others. `python -m mailradar.cli` ran the
+  app before `report`, `send` and `discover` were defined. `batch` crashed with a Rich
+  `MarkupError` on a file name containing `[`.
+
+- **Repository.** `.gitattributes` checks the `.sh` scripts out with LF, without which
+  `core.autocrlf=true` broke `release.sh` on `set -o pipefail`. A bare `pytest` no
+  longer collects the benchmarks, whose runner the dev extra does not install. The
+  Changelog URL in `pyproject.toml` answered 404, Python 3.14 is listed among the
+  classifiers, and in the image the working directory is the volume, so `report --save`
+  no longer writes its file where `docker run --rm` throws it away.
+
 ### Changed
 
 - **The race with PyPI is closed rather than narrowed: the released image no longer asks

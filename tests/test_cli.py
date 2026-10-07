@@ -218,6 +218,12 @@ class TestBatchCommand(unittest.TestCase):
         finally:
             os.unlink(tmp)
 
+    def test_batch_missing_file_with_square_brackets_in_name(self):
+        """The file name is escaped for Rich: '[/x]' in the path must not crash with a MarkupError."""
+        result = self.runner.invoke(app, ["batch", "[/x]missing-file.txt"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIsInstance(result.exception, SystemExit, repr(result.exception))
+
 
 class TestReportCommand(unittest.TestCase):
 
@@ -536,3 +542,155 @@ class TestDiscoverCandidatesOutput(unittest.TestCase):
         self.assertIn("not verified", result.output)
         self.assertIn("security@example.com", result.output)
         self.assertNotIn("Found 1 email", result.output)
+
+
+# A valid Ed25519 DKIM record (RFC 8463): the key is 32 raw bytes, not DER
+ED25519_DKIM = "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+
+
+def _table_lines(report: DomainReport) -> list[str]:
+    """What the results table prints for `report`, line by line."""
+    from mailradar import cli
+    with cli.console.capture() as capture:
+        cli._print_report(report)
+    return capture.get().splitlines()
+
+
+def _dkim_report(record: str, selectors=None) -> DomainReport:
+    """A report whose DKIM result is check_dkim's, with every selector answering `record`."""
+    from mailradar.checker import check_dkim
+    answer = [MagicMock(strings=[record.encode()])]
+    with patch("mailradar.checker.dns.resolver.resolve", return_value=answer):
+        dkim = check_dkim("example.com", selectors=selectors)
+    report = DomainReport(domain="example.com")
+    report.dkim = dkim
+    return report
+
+
+def _unverified_dmarc_report() -> DomainReport:
+    """A report whose DMARC lookup timed out."""
+    report = DomainReport(domain="example.com", total_score=40, grade="POOR")
+    report.dmarc = DMARCResult(error="DNS lookup for _dmarc.example.com failed: Timeout",
+                               issues=["DMARC not verified — DNS lookup for _dmarc.example.com failed: Timeout"])
+    return report
+
+
+def _timed_out(check: str, result_type, name: str):
+    """The result `check` returns when the TXT lookup of `name` times out.
+
+    Derived, not captured: the strings are the ones checker._unless_dns_fails
+    builds from the DNSLookupError that _query_txt raises on a Timeout.
+    """
+    error = f"DNS lookup for {name} failed: Timeout"
+    return result_type(error=error, issues=[f"{check} not verified — {error}"])
+
+
+class TestReportTableRows(unittest.TestCase):
+    """The table must not claim more than the checks found."""
+
+    def test_spf_permerror_is_not_shown_as_ok(self):
+        """A record in permerror protects nothing: the table must not show ✅."""
+        report = DomainReport(domain="example.com")
+        report.spf = SPFResult(present=True, permerror=True, raw="v=spf1 -all", issues=["permerror"])
+        row = next(line for line in _table_lines(report) if "SPF" in line and "v=spf1" in line)
+        self.assertNotIn("✅", row)
+
+    def test_unverified_dmarc_is_not_shown_as_not_configured(self):
+        row = next(line for line in _table_lines(_unverified_dmarc_report()) if "DMARC" in line and "│" in line)
+        self.assertNotIn("Not configured", row)
+        self.assertIn("not verified", row.lower())
+
+    def test_unverified_dkim_is_not_shown_as_not_found(self):
+        report = DomainReport(domain="example.com")
+        report.dkim = _timed_out("DKIM", DKIMResult, "default._domainkey.example.com")
+        row = next(line for line in _table_lines(report) if line.startswith("│ DKIM"))
+        self.assertNotIn("Not found", row)
+        self.assertNotIn("✅", row)
+        self.assertIn("not verified", row.lower())
+
+    def test_unverified_bimi_is_not_shown_as_not_configured(self):
+        report = DomainReport(domain="example.com")
+        report.bimi = _timed_out("BIMI", BIMIResult, "default._bimi.example.com")
+        row = next(line for line in _table_lines(report) if line.startswith("│ BIMI"))
+        self.assertNotIn("Not configured", row)
+        self.assertNotIn("✅", row)
+        self.assertIn("not verified", row.lower())
+
+    def test_ed25519_dkim_key_is_not_described_as_rsa(self):
+        from mailradar.reporter import generate_report
+        report = _dkim_report(ED25519_DKIM, selectors=["default"])
+        row = next(line for line in _table_lines(report) if "DKIM" in line and "selector" in line)
+        self.assertIn("Ed25519", row)
+        self.assertNotIn("RSA", row)
+        for lang in ("en", "it"):
+            self.assertNotIn("256-bit RSA", generate_report(report, lang=lang))
+
+    def test_dkim_revoked_on_every_selector_is_said_briefly_and_honestly(self):
+        """example.com publishes an empty p= under every selector: no list of 17 names, and not 'Not found'."""
+        report = _dkim_report("v=DKIM1; p=")
+        issue = next(i for i in report.dkim.issues if "revoked" in i)
+        self.assertNotIn("mailchimp", issue)
+        self.assertIn("more", issue)
+        row = next(line for line in _table_lines(report) if line.startswith("│ DKIM"))
+        self.assertNotIn("Not found", row)
+        self.assertIn("revoked", row)
+
+
+class TestIncompleteAnalysis(unittest.TestCase):
+    """A report goes to the domain's owner: it must not state what could not be verified."""
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    @patch("mailradar.reporter.generate_report")
+    @patch("mailradar.checker.analyze_domain", return_value=_unverified_dmarc_report())
+    def test_report_is_not_generated_from_an_incomplete_analysis(self, mock_checker, mock_generate):
+        result = self.runner.invoke(app, ["report", "example.com"])
+        self.assertEqual(result.exit_code, 1)
+        mock_generate.assert_not_called()
+
+    @patch("mailradar.sender.send_report")
+    @patch("mailradar.checker.analyze_domain", return_value=_unverified_dmarc_report())
+    def test_send_does_not_send_a_report_from_an_incomplete_analysis(self, mock_checker, mock_send):
+        result = self.runner.invoke(app, ["send", "example.com"])
+        self.assertEqual(result.exit_code, 1)
+        mock_send.assert_not_called()
+
+
+class TestModuleEntryPoint(unittest.TestCase):
+
+    def test_python_m_mailradar_cli_registers_every_command(self):
+        """`python -m mailradar.cli` used to call main() before report, send and discover were defined."""
+        import subprocess
+        import sys
+        from pathlib import Path
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "COLUMNS": "200", "NO_COLOR": "1"}
+        proc = subprocess.run([sys.executable, "-m", "mailradar.cli", "--help"],
+                              cwd=Path(__file__).resolve().parent.parent,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env=env, timeout=60)
+        for command in ("check", "batch", "report", "send", "discover"):
+            self.assertIn(command, proc.stdout, f"command {command!r} missing from python -m mailradar.cli")
+
+    def test_main_block_in_process_registers_every_command(self):
+        """The same check in-process, so coverage sees the `__main__` block run: the subprocess is invisible to it."""
+        import contextlib
+        import io
+        import runpy
+        import sys
+        import warnings
+        saved_argv = sys.argv
+        out = io.StringIO()
+        sys.argv = ["mailradar", "--help"]
+        try:
+            with warnings.catch_warnings(), contextlib.redirect_stdout(out):
+                # This file already imported the module; runpy warns about it,
+                # and running it afresh as __main__ is exactly the point.
+                warnings.filterwarnings("ignore", message=".*found in sys.modules", category=RuntimeWarning)
+                with self.assertRaises(SystemExit) as cm:
+                    runpy.run_module("mailradar.cli", run_name="__main__")
+        finally:
+            sys.argv = saved_argv
+        self.assertIn(cm.exception.code, (0, None))
+        for command in ("check", "batch", "report", "send", "discover"):
+            self.assertIn(command, out.getvalue(), f"command {command!r} missing from the __main__ block's app")

@@ -110,6 +110,25 @@ def test_spf_dkim_weak(spf, dkim, evidence):
     assert findings_of(_report(**overrides)) == {"spf_dkim_weak": evidence}
 
 
+def test_spf_permerror_is_weak_spf():
+    """Receivers apply no SPF to a record in permerror: cited as weak SPF, not passed over."""
+    found = findings_of(_report(spf=SPFResult(present=True, permerror=True, raw="v=spf1 -all")))
+    assert any("permerror" in w for w in found.get("spf_dkim_weak", []))
+
+
+def test_unverified_dmarc_is_not_dmarc_missing():
+    """A DMARC lookup that timed out says nothing either way: there is nothing to cite."""
+    dmarc = DMARCResult(error="DNS lookup for _dmarc.example.com failed: Timeout")
+    assert "dmarc_missing" not in findings_of(_report(dmarc=dmarc))
+
+
+def test_ed25519_dkim_key_is_not_weak():
+    """RFC 8463: 256 bits of Ed25519 are not a short RSA key (what check_dkim returns for one)."""
+    dkim = DKIMResult(present=True, selector="default", key_type="ed25519", key_bits=256, score=15)
+    weak = findings_of(_report(dkim=dkim)).get("spf_dkim_weak", [])
+    assert not any("DKIM" in w for w in weak)
+
+
 def test_cleartext_without_mta_sts():
     assert findings_of(_report(mta_sts=MTASTSResult(present=False))) == {
         "cleartext": ["MTA-STS missing: TLS not mandatory on delivery"],

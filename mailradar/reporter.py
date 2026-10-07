@@ -59,6 +59,7 @@ def generate_report(
         "dkim_present": report.dkim.present,
         "dkim_selector": report.dkim.selector or "N/A",
         "dkim_bits": report.dkim.key_bits or 0,
+        "dkim_key": "Ed25519" if report.dkim.key_type == "ed25519" else f"{report.dkim.key_bits or 0}-bit RSA",
 
         # BIMI
         "bimi_issues": report.bimi.issues,
@@ -66,6 +67,8 @@ def generate_report(
 
         # MTA-STS
         "mta_sts_issues": report.mta_sts.issues,
+        "mta_sts_present": report.mta_sts.present,
+        "mta_sts_mode": report.mta_sts.mode,
 
         # TLS-RPT
         "tls_rpt_issues": report.tls_rpt.issues,

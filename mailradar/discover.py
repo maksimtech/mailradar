@@ -126,11 +126,12 @@ def _discover_via_dns(domain: str) -> list[str]:
     try:
         answers = dns.resolver.resolve(domain, "SOA")
         for r in answers:
-            rname = str(r.rname).rstrip(".")
+            # DNS names are case-insensitive: Hostmaster.Example.COM. counts
+            rname = str(r.rname).rstrip(".").lower()
             # An SOA rname uses its first dot where an address has the @:
             # hostmaster.tplfvg.it is hostmaster@tplfvg.it
             parts = rname.split(".", 1)
-            if len(parts) == 2 and parts[1] == domain:
+            if len(parts) == 2 and parts[1] == domain.lower():
                 email = f"{parts[0]}@{parts[1]}"
                 emails.append(email.lower())
     except Exception:
@@ -140,7 +141,8 @@ def _discover_via_dns(domain: str) -> list[str]:
     try:
         answers = dns.resolver.resolve(domain, "TXT")
         for r in answers:
-            txt = b"".join(r.strings).decode()
+            # errors="replace": one TXT that is not UTF-8 must not cost the others
+            txt = b"".join(r.strings).decode("utf-8", errors="replace")
             found = _extract_emails_from_text(txt, domain)
             emails.extend(found)
     except Exception:
@@ -174,7 +176,8 @@ def _discover_via_whois(domain: str) -> list[str]:
                     for vcard in vcards[1]:
                         if vcard[0] == "email":
                             email = vcard[3]
-                            if f"@{domain}" in email.lower():
+                            # endswith, not `in`: admin@example.com.evil.org is not ours
+                            if email.lower().endswith(f"@{domain.lower()}"):
                                 emails.append(email.lower())
                 for sub in entity.get("entities", []):
                     extract_from_entity(sub)

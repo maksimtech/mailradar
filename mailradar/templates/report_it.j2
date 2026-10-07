@@ -40,13 +40,13 @@ DKIM — ⚠️  Attenzione richiesta
   Attuale:     Non configurato
   Raccomandato: Configurare un selettore DKIM con chiave RSA 2048-bit
 {% else %}
-  Attuale:     Selettore {{ dkim_selector }} | {{ dkim_bits }}-bit RSA
+  Attuale:     Selettore {{ dkim_selector }} | {{ dkim_key }}
   Raccomandato: Aggiornare a chiave RSA 2048-bit
 {% endif %}
   Motivo: {{ dkim_issues | join(', ') }}
 {% else %}
 DKIM — ✅ Configurato correttamente
-  Selettore: {{ dkim_selector }} | {{ dkim_bits }}-bit RSA
+  Selettore: {{ dkim_selector }} | {{ dkim_key }}
 {% endif %}
 
 {% if bimi_issues %}
@@ -58,7 +58,7 @@ BIMI/VMC — ℹ️  Miglioramento consigliato
 
 {% if mta_sts_issues %}
 MTA-STS — ℹ️  Miglioramento consigliato
-  Attuale:     Non configurato
+  Attuale:     {% if mta_sts_present %}Presente, modalità: {{ mta_sts_mode or "sconosciuta" }}{% else %}Non configurato{% endif %}
   Raccomandato: Configurare policy MTA-STS in modalità enforce
 {% endif %}
 

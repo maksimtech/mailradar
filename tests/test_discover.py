@@ -143,6 +143,24 @@ class TestDiscoverViaDns:
             result = _discover_via_dns("example.com")
             assert result == []
 
+    @staticmethod
+    def _discover(soa_rname: str, txts: list[bytes]) -> list[str]:
+        """_discover_via_dns with this SOA contact and these TXT records."""
+        def resolve(name, rdtype="A", *args, **kwargs):
+            if rdtype == "SOA":
+                return [MagicMock(rname=soa_rname)]
+            return [MagicMock(strings=[t]) for t in txts]
+        with patch("dns.resolver.resolve", side_effect=resolve):
+            return _discover_via_dns("example.com")
+
+    def test_soa_rname_in_mixed_case(self):
+        """DNS names are case-insensitive: Hostmaster.Example.COM. is hostmaster@example.com."""
+        assert "hostmaster@example.com" in self._discover("Hostmaster.Example.COM.", [])
+
+    def test_a_txt_record_that_is_not_utf8_does_not_cost_the_others(self):
+        emails = self._discover("ns.example.org.", [b"\xff\xfe junk", b"contact: security@example.com"])
+        assert "security@example.com" in emails
+
 
 class TestDiscoverViaWhois:
 
@@ -175,6 +193,17 @@ class TestDiscoverViaWhois:
         with patch("mailradar.discover.httpx.get", return_value=mock_resp):
             result = _discover_via_whois("example.com")
             assert result == []
+
+    def test_does_not_accept_addresses_of_other_domains(self):
+        """'admin@example.com.evil.org' is not an address of example.com (as the text extractor already knows)."""
+        import json
+        data = {"entities": [{"vcardArray": ["vcard", [
+            ["email", {}, "text", "admin@example.com.evil.org"],
+        ]]}]}
+        mock_resp = MagicMock(status_code=200, text=json.dumps(data))
+        with patch("mailradar.discover.httpx.get", return_value=mock_resp):
+            emails = _discover_via_whois("example.com")
+        assert "admin@example.com.evil.org" not in emails
 
 
 def _mx(*exchanges):

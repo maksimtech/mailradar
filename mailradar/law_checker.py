@@ -57,23 +57,29 @@ def findings_of(report) -> dict[str, list[str]]:
     """
     found: dict[str, list[str]] = {}
 
-    if not report.dmarc.present:
+    # A check whose DNS lookup failed (`error`) is neither missing nor weak
+    if not report.dmarc.present and not report.dmarc.error:
         found["dmarc_missing"] = ["no DMARC record"]
 
     weak = []
     if not report.spf.present:
-        weak.append("no SPF record")
+        if not report.spf.error:
+            weak.append("no SPF record")
+    elif report.spf.permerror:
+        weak.append("SPF permerror: receivers apply no SPF")
     elif report.spf.permissive:
         weak.append(f"SPF {report.spf.all_mechanism or 'permissivo'}")
     if not report.dkim.present:
-        weak.append("no DKIM key under the common selectors")
-    elif report.dkim.key_bits < DKIM_MIN_BITS:
+        if not report.dkim.error:
+            weak.append("no DKIM key under the common selectors")
+    elif report.dkim.key_type == "rsa" and report.dkim.key_bits < DKIM_MIN_BITS:
         weak.append(f"DKIM {report.dkim.key_bits} bit")
     if weak:
         found["spf_dkim_weak"] = weak
 
     if not report.mta_sts.present:
-        found["cleartext"] = ["MTA-STS missing: TLS not mandatory on delivery"]
+        if not report.mta_sts.error:
+            found["cleartext"] = ["MTA-STS missing: TLS not mandatory on delivery"]
     elif report.mta_sts.mode != "enforce":
         found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce"]
 

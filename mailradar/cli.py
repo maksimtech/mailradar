@@ -140,6 +140,16 @@ def _bool_icon(value: bool) -> str:
     return "✅" if value else "❌"
 
 
+# A check whose DNS lookup failed is neither configured nor missing
+_UNVERIFIED = "[yellow]Not verified: DNS lookup failed[/yellow]"
+
+
+def _unverified(report: DomainReport) -> list[str]:
+    """The DNS lookups that failed, i.e. what the report cannot vouch for."""
+    checks = (report.dmarc, report.spf, report.dkim, report.bimi, report.mta_sts, report.tls_rpt)
+    return [check.error for check in checks if check.error]
+
+
 def _print_report(report: DomainReport) -> None:
     color = _score_color(report.total_score)
     emoji = _grade_emoji(report.grade)
@@ -172,26 +182,35 @@ def _print_report(report: DomainReport) -> None:
         if d.inherited:
             # Record trovato su un dominio padre (RFC 7489 §6.6.3)
             dmarc_detail += f" | [yellow]via {escape(d.found_at)}[/yellow]"
+    elif d.error:
+        dmarc_detail = _UNVERIFIED
     else:
         dmarc_detail = "[red]Not configured[/red]"
 
-    dmarc_icon = "✅" if d.policy == "reject" else ("⚠️ " if d.present else "❌")
+    dmarc_icon = "✅" if d.policy == "reject" else ("⚠️ " if d.present or d.error else "❌")
     table.add_row("DMARC", dmarc_icon, dmarc_detail, f"[{_score_color(d.score)}]{d.score}[/{_score_color(d.score)}]")
 
     # SPF row
     s = report.spf
-    spf_detail = escape(s.raw[:55]) if s.present else "[red]Not configured[/red]"
-    spf_icon = "✅" if (s.present and not s.permissive) else ("⚠️ " if s.present else "❌")
+    spf_detail = escape(s.raw[:55]) if s.present else (_UNVERIFIED if s.error else "[red]Not configured[/red]")
+    spf_ok = s.present and not s.permissive and not s.permerror
+    spf_icon = "✅" if spf_ok else ("⚠️ " if s.present or s.error else "❌")
     table.add_row("SPF", spf_icon, spf_detail, f"[{_score_color(s.score)}]{s.score}[/{_score_color(s.score)}]")
 
     # DKIM row
     k = report.dkim
     dkim_detail = ""
     if k.present:
-        dkim_detail = f"selector: {escape(k.selector)} | {k.key_bits}-bit RSA"
+        key = "Ed25519" if k.key_type == "ed25519" else f"{k.key_bits}-bit RSA"
+        dkim_detail = f"selector: {escape(k.selector)} | {key}"
+    elif k.error:
+        dkim_detail = _UNVERIFIED
+    elif k.selector:
+        # Found, but revoked (empty p=): there is no key to sign with
+        dkim_detail = f"[red]selector: {escape(k.selector)} | key revoked[/red]"
     else:
         dkim_detail = "[red]Not found (tried common selectors)[/red]"
-    dkim_icon = "✅" if k.present else "❌"
+    dkim_icon = "✅" if k.present else ("⚠️ " if k.error else "❌")
     table.add_row("DKIM", dkim_icon, dkim_detail, f"[{_score_color(k.score)}]{k.score}[/{_score_color(k.score)}]")
 
     # BIMI row
@@ -199,21 +218,26 @@ def _print_report(report: DomainReport) -> None:
     bimi_detail = ""
     if b.present:
         bimi_detail = f"SVG: {'✓' if b.svg_valid else '✗'} | VMC: {'✓' if b.vmc_present else '✗'}"
+    elif b.error:
+        bimi_detail = _UNVERIFIED
     else:
         bimi_detail = "[dim]Not configured[/dim]"
-    bimi_icon = "✅" if (b.present and b.vmc_present) else ("⚠️ " if b.present else "❌")
+    bimi_icon = "✅" if (b.present and b.vmc_present) else ("⚠️ " if b.present or b.error else "❌")
     table.add_row("BIMI/VMC", bimi_icon, bimi_detail, f"[{_score_color(b.score)}]{b.score}[/{_score_color(b.score)}]")
 
     # MTA-STS row
     m = report.mta_sts
-    mts_detail = f"mode: {escape(m.mode)}" if m.present else "[dim]Not configured[/dim]"
-    mts_icon = "✅" if (m.present and m.mode == "enforce") else ("⚠️ " if m.present else "❌")
+    mts_detail = f"mode: {escape(m.mode)}" if m.present else (_UNVERIFIED if m.error else "[dim]Not configured[/dim]")
+    mts_icon = "✅" if (m.present and m.mode == "enforce") else ("⚠️ " if m.present or m.error else "❌")
     table.add_row("MTA-STS", mts_icon, mts_detail, f"[{_score_color(m.score)}]{m.score}[/{_score_color(m.score)}]")
 
     # TLS-RPT row
     t = report.tls_rpt
-    tls_detail = f"rua: {escape(t.rua[:40])}" if t.present else "[dim]Not configured[/dim]"
-    tls_icon = "✅" if t.present else "❌"
+    tls_detail = (
+        f"rua: {escape(t.rua[:40])}" if t.present
+        else (_UNVERIFIED if t.error else "[dim]Not configured[/dim]")
+    )
+    tls_icon = "✅" if t.present else ("⚠️ " if t.error else "❌")
     table.add_row("TLS-RPT", tls_icon, tls_detail, f"[{_score_color(t.score)}]{t.score}[/{_score_color(t.score)}]")
 
     # GPG row
@@ -404,13 +428,13 @@ def batch(
     try:
         domains = _read_list(file)
     except FileNotFoundError:
-        console.print(f"[red]File not found: {file}[/red]")
+        console.print(f"[red]File not found: {escape(file)}[/red]")
         raise typer.Exit(1) from None
     except UnicodeDecodeError:
-        console.print(f"[red]Cannot read {file}: not valid UTF-8[/red]")
+        console.print(f"[red]Cannot read {escape(file)}: not valid UTF-8[/red]")
         raise typer.Exit(1) from None
     except OSError as e:
-        console.print(f"[red]Cannot read {file}: {e.strerror or e}[/red]")
+        console.print(f"[red]Cannot read {escape(file)}: {escape(str(e.strerror or e))}[/red]")
         raise typer.Exit(1) from None
 
     results = []
@@ -452,8 +476,13 @@ def main():
     app()
 
 
-if __name__ == "__main__":
-    main()
+def _refuse_unverified(analysis: DomainReport) -> None:
+    """A report goes to the domain's owner: it must not state what DNS did not answer."""
+    errors = _unverified(analysis)
+    if errors:
+        console.print(f"[red]❌ Report not generated, the analysis is incomplete: {escape(errors[0])}[/red]")
+        console.print("[dim]Try again later, or with another resolver.[/dim]")
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -477,6 +506,7 @@ def report(
         analysis = analyze_domain(domain)
 
     _print_report(analysis)
+    _refuse_unverified(analysis)
 
     console.print("[bold cyan]📧 Generating email report...[/bold cyan]\n")
     text = generate_report(
@@ -529,6 +559,7 @@ def send(
         analysis = analyze_domain(domain)
 
     _print_report(analysis)
+    _refuse_unverified(analysis)
 
     # Generate report text
     report_text = generate_report(
@@ -649,3 +680,9 @@ def discover(
         console.print("[dim]No GPG public keys found for any address.[/dim]")
 
     console.print()
+
+
+# Last, after every command: placed above `report`, it ran the app before
+# report, send and discover were registered
+if __name__ == "__main__":
+    main()
