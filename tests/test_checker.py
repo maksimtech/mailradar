@@ -324,6 +324,24 @@ class TestCheckSPF:
         assert result.permissive is True
         assert any("+a" in issue or "+mx" in issue for issue in result.issues)
 
+    def test_bare_all_is_plus_all(self):
+        """RFC 7208 §4.6.2: 'all' with no qualifier is '+all', a pass for anyone."""
+        result = check_spf_in({"example.com": ["v=spf1 mx all"]})
+        assert result.permissive is True
+        assert result.score == 0
+
+    def test_dash_all_inside_a_host_name_is_not_a_hardfail(self):
+        """'-all' inside 'include:spf-all.example.net' is not the all mechanism: the final ~all is."""
+        result = check_spf_in({"example.com": ["v=spf1 include:spf-all.example.net ~all"]})
+        assert result.all_mechanism == "~all"
+        assert result.score == 10
+
+
+def check_spf_in(zone: dict[str, list[str]]):
+    """check_spf("example.com") against a DNS where only the names in `zone` answer."""
+    with patch('mailradar.checker.dns.resolver.resolve', side_effect=make_zone_resolver(zone)):
+        return check_spf("example.com")
+
 
 # ─── DKIM ───────────────────────────────────────────────────────────────────
 

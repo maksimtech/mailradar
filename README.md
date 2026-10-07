@@ -288,7 +288,9 @@ the domain. What matters most is how it ends:
 | `?all` | 5 | Neutral: no enforcement |
 | `+all` | 0 | Any server may send as the domain. Critical |
 
-MailRadar also flags `+a` and `+mx` mechanisms as too permissive.
+The record is read term by term, as RFC 7208 defines it: `all` with no
+qualifier is `+all`. MailRadar also flags `+a` and `+mx` mechanisms as too
+permissive.
 
 ### DKIM (up to 15 points)
 

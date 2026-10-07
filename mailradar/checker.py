@@ -2,6 +2,7 @@
 MailRadar — DNS record checker for email security posture analysis.
 """
 
+import re
 from dataclasses import dataclass, field
 
 import dns.exception
@@ -371,6 +372,35 @@ def check_dmarc(domain: str) -> DMARCResult:
     return result
 
 
+# One SPF term: an optional qualifier, the mechanism or modifier name, and
+# whatever follows it (":domain", "/cidr", "=value").
+_SPF_TERM = re.compile(r"([+\-~?]?)([a-z][a-z0-9_.-]*)(.*)", re.IGNORECASE)
+
+
+def _spf_terms(record: str) -> list[tuple[str, str, str]]:
+    """
+    The terms after `v=spf1`, as (qualifier, name, rest). Whole terms, not
+    substrings: `include:spf-all.example.net` holds no `-all`.
+    """
+    terms = []
+    for term in record.split()[1:]:
+        match = _SPF_TERM.fullmatch(term)
+        if match:
+            qualifier, name, rest = match.groups()
+            terms.append((qualifier, name, rest))
+    return terms
+
+
+def _spf_all(terms: list[tuple[str, str, str]]) -> str:
+    """The `all` mechanism with its qualifier, or "" if there is none."""
+    for qualifier, name, rest in terms:
+        if name == "all" and not rest:
+            # RFC 7208 §4.6.2: no qualifier means "+", so a bare `all` lets
+            # every server pass
+            return f"{qualifier or '+'}all"
+    return ""
+
+
 def check_spf(domain: str) -> SPFResult:
     result = SPFResult()
     records = _query_txt(domain)
@@ -379,23 +409,20 @@ def check_spf(domain: str) -> SPFResult:
         if record.startswith("v=spf1"):
             result.present = True
             result.raw = record
+            result.all_mechanism = _spf_all(_spf_terms(record))
 
-            if "-all" in record:
-                result.all_mechanism = "-all"
+            if result.all_mechanism == "-all":
                 result.permissive = False
                 result.score += 20
-            elif "~all" in record:
-                result.all_mechanism = "~all"
+            elif result.all_mechanism == "~all":
                 result.permissive = True
                 result.issues.append("SPF uses ~all (softfail) — consider -all (hardfail)")
                 result.score += 10
-            elif "+all" in record:
-                result.all_mechanism = "+all"
+            elif result.all_mechanism == "+all":
                 result.permissive = True
                 result.issues.append("SPF uses +all — any server can send as this domain!")
                 result.score += 0
-            elif "?all" in record:
-                result.all_mechanism = "?all"
+            elif result.all_mechanism == "?all":
                 result.permissive = True
                 result.issues.append("SPF uses ?all (neutral) — no enforcement")
                 result.score += 5

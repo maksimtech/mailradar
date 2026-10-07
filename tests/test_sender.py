@@ -3,6 +3,7 @@ Tests for MailRadar sender module.
 Uses mocks to avoid real SMTP connections and GPG interactions.
 """
 import shutil
+import ssl
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -116,6 +117,31 @@ def test_send_smtp_failure():
         config = make_smtp_config()
         result = _send_smtp(config, "test@example.com", "Test Subject", "Test body")
         assert result is False
+
+
+def test_smtp_ssl_verifies_certificate_and_host_name():
+    """SMTP credentials must not travel over unverified TLS (smtplib defaults to CERT_NONE)."""
+    with patch("mailradar.sender.smtplib.SMTP_SSL") as smtp_ssl:
+        assert _send_smtp(make_smtp_config(), "security@example.com", "s", "body") is True
+    context = smtp_ssl.call_args.kwargs.get("context")
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+
+
+def test_smtp_starttls_verifies_certificate_and_host_name():
+    """The same defect on the STARTTLS branch: starttls() with no context verifies no certificate."""
+    config = make_smtp_config()
+    config.port = 587
+    config.use_tls = False
+    with patch("mailradar.sender.smtplib.SMTP") as smtp:
+        assert _send_smtp(config, "security@example.com", "s", "body") is True
+    server = smtp.return_value.__enter__.return_value
+    context = server.starttls.call_args.kwargs.get("context")
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    assert smtp.call_args.kwargs.get("timeout"), "no timeout: a silent connection hangs send"
 
 
 # ─── send_report ────────────────────────────────────────────────────────────

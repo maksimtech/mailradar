@@ -4,11 +4,16 @@ MailRadar — Email sender with optional GPG encryption.
 
 import getpass
 import smtplib
+import ssl
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+# Seconds before a silent SMTP server is given up on: without it `send` could
+# wait for ever on a connection that never answers.
+SMTP_TIMEOUT = 30
 
 
 @dataclass
@@ -121,13 +126,18 @@ def _send_smtp(
         else:
             msg.attach(MIMEText(body, "plain", "utf-8"))
 
+        # Without a context smtplib verifies neither the certificate nor the
+        # host name (CERT_NONE): anyone on the path could present any
+        # certificate and read the password handed to login().
+        context = ssl.create_default_context()
         if config.use_tls:
-            with smtplib.SMTP_SSL(config.host, config.port) as server:
+            with smtplib.SMTP_SSL(config.host, config.port, context=context,
+                                  timeout=SMTP_TIMEOUT) as server:
                 server.login(config.username, config.password)
                 server.send_message(msg)
         else:
-            with smtplib.SMTP(config.host, config.port) as server:
-                server.starttls()
+            with smtplib.SMTP(config.host, config.port, timeout=SMTP_TIMEOUT) as server:
+                server.starttls(context=context)
                 server.login(config.username, config.password)
                 server.send_message(msg)
 

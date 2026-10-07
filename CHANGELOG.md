@@ -91,6 +91,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   while the log still claims it, the log removed while the wait still happens, and the
   guard removed so zero waits anyway.
 
+- **`send` verifies the SMTP server's certificate.** `SMTP_SSL` and `starttls()` were
+  called without a context, and smtplib then verifies neither the certificate nor the
+  host name: anyone on the path could present any certificate and receive the SMTP
+  password given to `login()`. Both now use `ssl.create_default_context()`, and the
+  connection gives up after 30 seconds instead of waiting for ever.
+
+- **SPF is read term by term, as RFC 7208 defines it, not searched for substrings.**
+  `v=spf1 mx all` — `all` with no qualifier, which is `+all` and lets every server pass —
+  scored like a correct record and showed ✅. `include:spf-all.example.net ~all` was read
+  as `-all`.
+
 ### Changed
 
 - **The race with PyPI is closed rather than narrowed: the released image no longer asks
