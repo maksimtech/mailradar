@@ -1,0 +1,171 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "httpx 0.28.1 straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+  "by": "analyze_domain(\"startpage.com\")",
+  "requested": [
+   "GET https://keys.openpgp.org/vks/v1/by-email/security@startpage.com",
+   "GET https://keys.openpgp.org/pks/lookup?op=get&search=security%40startpage.com&options=mr",
+   "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=security%40startpage.com&options=mr",
+   "GET https://pgp.mit.edu/pks/lookup?op=get&search=security%40startpage.com&options=mr",
+   "GET https://keys.openpgp.org/vks/v1/by-email/dpo@startpage.com",
+   "GET https://keys.openpgp.org/pks/lookup?op=get&search=dpo%40startpage.com&options=mr",
+   "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=dpo%40startpage.com&options=mr",
+   "GET https://pgp.mit.edu/pks/lookup?op=get&search=dpo%40startpage.com&options=mr",
+   "GET https://keys.openpgp.org/vks/v1/by-email/admin@startpage.com",
+   "GET https://keys.openpgp.org/pks/lookup?op=get&search=admin%40startpage.com&options=mr",
+   "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=admin%40startpage.com&options=mr",
+   "GET https://pgp.mit.edu/pks/lookup?op=get&search=admin%40startpage.com&options=mr",
+   "GET https://keys.openpgp.org/vks/v1/by-email/postmaster@startpage.com",
+   "GET https://keys.openpgp.org/pks/lookup?op=get&search=postmaster%40startpage.com&options=mr",
+   "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=postmaster%40startpage.com&options=mr",
+   "GET https://pgp.mit.edu/pks/lookup?op=get&search=postmaster%40startpage.com&options=mr",
+   "GET https://keys.openpgp.org/vks/v1/by-email/privacy@startpage.com",
+   "GET https://keys.openpgp.org/pks/lookup?op=get&search=privacy%40startpage.com&options=mr",
+   "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=privacy%40startpage.com&options=mr",
+   "GET https://pgp.mit.edu/pks/lookup?op=get&search=privacy%40startpage.com&options=mr"
+  ]
+ },
+ "responses": [
+  {
+   "request": "GET https://keys.openpgp.org/vks/v1/by-email/security@startpage.com",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address security@startpage.com"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/pks/lookup?op=get&search=security%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address security@startpage.com"
+  },
+  {
+   "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=security%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/plain; charset=utf-8"
+   },
+   "body": "Not Found\n"
+  },
+  {
+   "request": "GET https://pgp.mit.edu/pks/lookup?op=get&search=security%40startpage.com&options=mr",
+   "error": "ReadTimeout"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/vks/v1/by-email/dpo@startpage.com",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address dpo@startpage.com"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/pks/lookup?op=get&search=dpo%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address dpo@startpage.com"
+  },
+  {
+   "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=dpo%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/plain; charset=utf-8"
+   },
+   "body": "Not Found\n"
+  },
+  {
+   "request": "GET https://pgp.mit.edu/pks/lookup?op=get&search=dpo%40startpage.com&options=mr",
+   "error": "ReadTimeout"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/vks/v1/by-email/admin@startpage.com",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address admin@startpage.com"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/pks/lookup?op=get&search=admin%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address admin@startpage.com"
+  },
+  {
+   "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=admin%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/plain; charset=utf-8"
+   },
+   "body": "Not Found\n"
+  },
+  {
+   "request": "GET https://pgp.mit.edu/pks/lookup?op=get&search=admin%40startpage.com&options=mr",
+   "error": "ReadTimeout"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/vks/v1/by-email/postmaster@startpage.com",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address postmaster@startpage.com"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/pks/lookup?op=get&search=postmaster%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address postmaster@startpage.com"
+  },
+  {
+   "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=postmaster%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/plain; charset=utf-8"
+   },
+   "body": "Not Found\n"
+  },
+  {
+   "request": "GET https://pgp.mit.edu/pks/lookup?op=get&search=postmaster%40startpage.com&options=mr",
+   "error": "ReadTimeout"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/vks/v1/by-email/privacy@startpage.com",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address privacy@startpage.com"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/pks/lookup?op=get&search=privacy%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address privacy@startpage.com"
+  },
+  {
+   "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=privacy%40startpage.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/plain; charset=utf-8"
+   },
+   "body": "Not Found\n"
+  },
+  {
+   "request": "GET https://pgp.mit.edu/pks/lookup?op=get&search=privacy%40startpage.com&options=mr",
+   "error": "ReadTimeout"
+  }
+ ]
+}

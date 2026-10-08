@@ -1,0 +1,14 @@
+{
+ "_derived": {
+  "from": "http/ecosia_org.json, GET https://mta-sts.ecosia.org/.well-known/mta-sts.txt (recorded 2026-10-07)",
+  "changed": "the same 404 answered for mta-sts.example.com"
+ },
+ "responses": [
+  {
+   "request": "GET https://mta-sts.example.com/.well-known/mta-sts.txt",
+   "status": 404,
+   "headers": {},
+   "body": ""
+  }
+ ]
+}

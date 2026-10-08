@@ -1,0 +1,20 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "httpx 0.28.1 straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+  "by": "check_spf(\"fastmail.com\") and check_mta_sts(\"fastmail.com\")",
+  "requested": [
+   "GET https://mta-sts.fastmail.com/.well-known/mta-sts.txt"
+  ]
+ },
+ "responses": [
+  {
+   "request": "GET https://mta-sts.fastmail.com/.well-known/mta-sts.txt",
+   "status": 200,
+   "headers": {
+    "content-type": "text/plain"
+   },
+   "body": "version: STSv1\nmode: testing\nmx: *.messagingengine.com\nmax_age: 86400\n"
+  }
+ ]
+}

@@ -1,0 +1,142 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "check_spf(\"hostgator.com\")",
+  "queried": [
+   "hostgator.com. TXT",
+   "spf.constantcontact.com. TXT",
+   "_spf.salesforce.com. TXT",
+   "_spf2.hostgator.com. TXT",
+   "spf.protection.outlook.com. TXT",
+   "eig.spf.a.cloudfilter.net. TXT",
+   "_spf.myorderbox.com. TXT",
+   "spf.websitewelcome.com. TXT",
+   "_spf.nfco-mailout.com. TXT",
+   "_netblocks-pro.nfco-mailout.com. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "hostgator.com. IN TXT",
+   ";ANSWER",
+   "hostgator.com. 60 IN TXT \"MS=ms19427866\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=0vcyIt2ASVGA-Hnox9hZPXaaLIX5pYSm8dZd0_0HLyU\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=268NzFe_2w_P3-j4fg2PDTwC5tgY0m__CQR9hYG7hSA\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=HUY22ADwgB0ij1JaYucTVtUI6dAvbNp5g4nQQ9tKHHc\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=WH8320OT9w-ZORb35j4X4VbeUNoMrUyhXoAzISUhEo0\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=XD3tFbXKRYV0fG-3zRGEzPC2irkiXg9Rz2eIKCG-0IQ\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=oYqxGxAsuHwvRDo4FqADW6ToV1nf8ITUfcw728UUvuI\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=pj2LYTgRxkGunX03DSguHxBxwaBABFEUxEDsLgOdlys\"",
+   "hostgator.com. 60 IN TXT \"google-site-verification=yx1ED4Liv7PN2PvYnLuop_CVyyyxLz8lc5M2MRnSNWk\"",
+   "hostgator.com. 60 IN TXT \"knowbe4-site-verification=2196cd8a72de50eedd7703120b752b77\"",
+   "hostgator.com. 60 IN TXT \"v=spf1 ip4:209.17.115.0/24 ip4:64.69.218.0/24 include:spf.constantcontact.com include:_spf.salesforce.com include:_spf2.hostgator.com include:spf.protection.outlook.com include:eig.spf.a.cloudfilter.net include:_spf.myorderbox.com include:spf.websitewelco\" \"me.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "spf.constantcontact.com. IN TXT",
+   ";ANSWER",
+   "spf.constantcontact.com. 86400 IN TXT \"v=spf1 ip4:208.75.120.0/22 ip4:205.207.104.0/22 ~all\"",
+   "spf.constantcontact.com. 86400 IN TXT \"spf2.0/pra ip4:208.75.120.0/22 ip4:205.207.104.0/22 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.salesforce.com. IN TXT",
+   ";ANSWER",
+   "_spf.salesforce.com. 3600 IN TXT \"v=spf1 exists:%{i}._spf.mta.salesforce.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf2.hostgator.com. IN TXT",
+   ";ANSWER",
+   "_spf2.hostgator.com. 60 IN TXT \"v=spf1 ip4:192.185.178.21 ip4:108.167.133.96/27 ip4:108.179.255.192/27 ip4:50.87.240.128/27 ip4:192.185.178.230 ip4:169.55.246.160/27 ip4:108.167.134.25 ip4:69.64.144.0/20 ip4:98.124.192.0/18 ip4:23.83.208.1/20 ip4:74.91.85.0/24 ip4:208.75.120.0/22 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "spf.protection.outlook.com. IN TXT",
+   ";ANSWER",
+   "spf.protection.outlook.com. 210 IN TXT \"v=spf1 ip4:40.92.0.0/15 ip4:40.107.0.0/16 ip4:52.100.0.0/15 ip4:52.102.0.0/16 ip4:52.103.0.0/17 ip4:104.47.0.0/17 ip6:2a01:111:f400::/48 ip6:2a01:111:f403::/49 ip6:2a01:111:f403:8000::/51 ip6:2a01:111:f403:c000::/51 ip6:2a01:111:f403:f000::/52 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "eig.spf.a.cloudfilter.net. IN TXT",
+   ";ANSWER",
+   "eig.spf.a.cloudfilter.net. 300 IN TXT \"v=spf1 ip4:35.89.44.32/29 ip4:44.202.169.32/29 ip4:34.226.25.166/32 ip4:100.28.182.33/32 ip4:100.28.254.76/32 ip4:100.61.84.220/32 ip4:18.210.124.212/32 ip4:18.215.137.104/32 ip4:3.214.91.57/32 ip4:3.230.200.110/32 ip4:32.199.66.231/32 \" \"ip4:34.206.118.3/32 ip4:34.225.157.126/32 ip4:34.225.28.86/32 ip4:44.205.110.174/32 ip4:44.215.46.63/32 ip4:52.71.2.206/32 ip4:54.156.90.4/32 ip4:54.158.220.113/32 ip4:54.159.3.40/32 ip4:54.205.72.13/32 ip4:100.22.108.84/32 ip4:18.236.15.47/32 \" \"ip4:32.184.43.39/32 ip4:34.211.229.208/32 ip4:44.226.35.153/32 ip4:44.230.149.34/32 ip4:44.235.174.145/32 ip4:44.237.127.95/32 ip4:44.237.171.165/32 ip4:44.240.126.13/32 ip4:52.11.150.220/32 ip4:52.11.48.74/32 ip4:52.24.246.80/32 ip4:52.27.15.193/32 \" \"ip4:52.27.38.162/32 ip4:52.34.58.233/32 ip4:52.35.6.222/32 ip4:52.41.18.59/32 ip4:52.88.198.243/32 ip4:54.148.42.2/32 ip4:54.191.193.91/32 ip4:54.213.97.249/32 ip4:54.244.7.238/32 ip4:54.71.112.137/32 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.myorderbox.com. IN TXT",
+   ";ANSWER",
+   "_spf.myorderbox.com. 300 IN TXT \"v=spf1 ip4:162.215.231.0/24 ip4:162.214.222.0/24 ?all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "spf.websitewelcome.com. IN TXT",
+   ";ANSWER",
+   "spf.websitewelcome.com. 300 IN TXT \"v=spf1 include:_spf.nfco-mailout.com ip4:209.17.115.0/24 ip4:64.69.218.0/24 ip4:65.254.253.0/24 ip4:65.254.254.0/24 ip4:162.210.50.0/23 ip4:162.210.48.0/23 ip4:206.188.220.0/23 ip4:206.188.222.0/23 ip4:72.22.75.0/24 ip4:66.235.215.0/24 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.nfco-mailout.com. IN TXT",
+   ";ANSWER",
+   "_spf.nfco-mailout.com. 69 IN TXT \"v=spf1 include:_netblocks-pro.nfco-mailout.com include:_netblocks-atl.nfco-mailout.com ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_netblocks-pro.nfco-mailout.com. IN TXT",
+   ";ANSWER",
+   "_netblocks-pro.nfco-mailout.com. 300 IN TXT \"v=spf1 ip4:67.20.127.0/27 ip4:50.87.255.32/27 ip4:66.147.243.192/27 ip4:162.241.146.0/23 ip4:162.215.244.0/23 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

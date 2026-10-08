@@ -4,7 +4,17 @@ from unittest.mock import MagicMock, patch
 import dns.resolver
 import pytest
 
-from mailradar.checker import analyze_domain, check_dkim, check_dmarc, check_spf
+from mailradar.checker import (
+    SPFResult,
+    _apply_spf_verdict,
+    _is_spf,
+    _spf_all,
+    _spf_terms,
+    analyze_domain,
+    check_dkim,
+    check_dmarc,
+)
+from tests.replay import recorded_txt
 
 
 def make_txt_answer(strings):
@@ -36,16 +46,20 @@ def test_bench_dmarc(benchmark):
 
 @pytest.mark.codspeed
 def test_bench_spf(benchmark):
-    # Only example.com answers: given to every name, SPF_TXT would include
-    # itself, and the benchmark would time an include loop up to the
-    # 10-lookup limit instead of one record
-    def mock_resolve(name, rtype):
-        if name == "example.com":
-            return make_txt_answer([SPF_TXT])
-        raise dns.resolver.NXDOMAIN
+    # The evaluation of qwant.com's record as recorded (tests/fixtures/dns/
+    # qwant_com.json): terms, `all` and verdict. The DNS walk stays out on
+    # purpose: through the replay server it would time UDP round-trips to
+    # 127.0.0.1, not this code
+    (record,) = [r for r in recorded_txt("qwant_com", "qwant.com") if _is_spf(r)]
 
-    with patch('mailradar.checker.dns.resolver.resolve', side_effect=mock_resolve):
-        benchmark(check_spf, "example.com")
+    def evaluate() -> SPFResult:
+        result = SPFResult(present=True, raw=record)
+        terms = _spf_terms(record)
+        result.all_mechanism = _spf_all(terms)
+        _apply_spf_verdict(result, terms)
+        return result
+
+    assert benchmark(evaluate).all_mechanism == "-all"
 
 
 @pytest.mark.codspeed

@@ -1,0 +1,38 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "httpx 0.28.1 straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+  "by": "analyze_domain(\"example.com\"), domain_exists(\"example.com.\") and _discover_via_dns(\"example.com\")",
+  "requested": [
+   "GET https://keys.openpgp.org/vks/v1/by-email/security@example.com",
+   "GET https://keys.openpgp.org/pks/lookup?op=get&search=security%40example.com&options=mr",
+   "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=security%40example.com&options=mr"
+  ]
+ },
+ "responses": [
+  {
+   "request": "GET https://keys.openpgp.org/vks/v1/by-email/security@example.com",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address security@example.com"
+  },
+  {
+   "request": "GET https://keys.openpgp.org/pks/lookup?op=get&search=security%40example.com&options=mr",
+   "status": 404,
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "body": "No key found for email address security@example.com"
+  },
+  {
+   "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=security%40example.com&options=mr",
+   "status": 200,
+   "headers": {
+    "content-type": "application/pgp-keys"
+   },
+   "body": "-----BEGIN PGP PUBLIC KEY BLOCK-----\nComment: Hostname: \nVersion: Hockeypuck 2.2\n\nxjMEaBzQExYJKwYBBAHaRw8BAQdAtxNuoSA2m0CBT1o4c7AcSjtaXnbcYwQm8k3Z\nPxXJi/TNK0V4YW1wbGUsIEluYy4gKFJvb3QpIDxzZWN1cml0eUBleGFtcGxlLmNv\nbT7CmQQTFgoAQRYhBDu1R/Sgnt4cQJgSaFJqW7/pjtbnBQJoHNATAhsDBQkSzAMA\nBQsJCAcCAiICBhUKCQgLAgQWAgMBAh4HAheAAAoJEFJqW7/pjtbnJaUBAK2pkeim\nixQhXKTe9RQIZBE+1MAOqZiIiE96Y/8hVl0PAQCUorOWV66xnMqwcRKOqtEm9hTE\nUhn+qeq28W0BmPJjCM44BGgc0BMSCisGAQQBl1UBBQEBB0BrdajqURuL5T7y9RMJ\nARuXX1sVsqiDC50vSYV9Fe/vMwMBCAfCfgQYFgoAJhYhBDu1R/Sgnt4cQJgSaFJq\nW7/pjtbnBQJoHNATAhsMBQkSzAMAAAoJEFJqW7/pjtbnXVsA/jYtVY8cKRvzQikC\nWf9VjhqXSVdqZM9LwZv7y59izTAkAQDw0Dp+p30jnB9dbMTrF1aoLBo9875r9MMn\nBoLpdEyvBA==\n=vyIH\n-----END PGP PUBLIC KEY BLOCK-----\n"
+  }
+ ]
+}

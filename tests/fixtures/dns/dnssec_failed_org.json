@@ -1,0 +1,22 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "check_spf(\"dnssec-failed.org\"), a zone whose DNSSEC is broken on purpose",
+  "queried": [
+   "dnssec-failed.org. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode SERVFAIL",
+   "flags QR RD RA",
+   ";QUESTION",
+   "dnssec-failed.org. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

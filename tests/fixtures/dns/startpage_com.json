@@ -1,0 +1,171 @@
+{
+ "_recorded": {
+  "date": "2026-10-07",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "analyze_domain(\"startpage.com\")",
+  "queried": [
+   "_dmarc.startpage.com. TXT",
+   "startpage.com. TXT",
+   "spf.mailjet.com. TXT",
+   "_spf.google.com. TXT",
+   "mail.zendesk.com. TXT",
+   "default._domainkey.startpage.com. TXT",
+   "mail._domainkey.startpage.com. TXT",
+   "email._domainkey.startpage.com. TXT",
+   "dkim._domainkey.startpage.com. TXT",
+   "google._domainkey.startpage.com. TXT",
+   "default._bimi.startpage.com. TXT",
+   "_mta-sts.startpage.com. TXT",
+   "_smtp._tls.startpage.com. TXT"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_dmarc.startpage.com. IN TXT",
+   ";ANSWER",
+   "_dmarc.startpage.com. 600 IN TXT \"v=DMARC1; p=reject; sp=none; adkim=s; aspf=s; rua=mailto:dmarc_agg@vali.email,mailto:dmarc@startpage.com; ruf=mailto:abuse@startpage.com\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "startpage.com. IN TXT",
+   ";ANSWER",
+   "startpage.com. 3600 IN TXT \"docusign=4aa04a43-5af3-4b1b-8b86-fb027c1d5de7\" \"canva-site-verification=SQqtO91fxFTe03uHGWYruQ\"",
+   "startpage.com. 3600 IN TXT \"google-site-verification=0C93wk5LSLM-lamfw7DTbObpX_J8MDpxj8B0nP6t30g\"",
+   "startpage.com. 3600 IN TXT \"google-site-verification=g8vFaNLgbWlSgUp3k3bEVjZyaJt3t1llocCZBZAHUYU\"",
+   "startpage.com. 3600 IN TXT \"google-site-verification=uylcKpM8QSGvtnQ90O0RUJqI4pqr3mndH-krbYpc2kA\"",
+   "startpage.com. 3600 IN TXT \"v=spf1 include:spf.mailjet.com include:_spf.google.com include:mail.zendesk.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "spf.mailjet.com. IN TXT",
+   ";ANSWER",
+   "spf.mailjet.com. 2903 IN TXT \"v=spf1 ip4:87.253.232.0/21 ip4:185.189.236.0/22 ip4:185.211.120.0/22 ip4:185.250.236.0/22 ip4:45.14.148.0/22 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.google.com. IN TXT",
+   ";ANSWER",
+   "_spf.google.com. 202 IN TXT \"v=spf1 ip4:74.125.0.0/16 ip4:209.85.128.0/17 ip6:2001:4860:4864::/56 ip6:2404:6800:4864::/56 ip6:2607:f8b0:4864::/56 ip6:2800:3f0:4864::/56 ip6:2a00:1450:4864::/56 ip6:2c0f:fb50:4864::/56 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "mail.zendesk.com. IN TXT",
+   ";ANSWER",
+   "mail.zendesk.com. 3369 IN TXT \"v=spf1 ip4:103.151.192.0/23 ip4:185.12.80.0/22 ip4:188.172.128.0/20 ip4:192.161.144.0/20 ip4:216.198.0.0/18 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._domainkey.startpage.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "mail._domainkey.startpage.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "email._domainkey.startpage.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "dkim._domainkey.startpage.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "google._domainkey.startpage.com. IN TXT",
+   ";ANSWER",
+   "google._domainkey.startpage.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mjYh\" \"lVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJDQs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.startpage.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.startpage.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_smtp._tls.startpage.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ]
+ ]
+}
