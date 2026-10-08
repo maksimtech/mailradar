@@ -24,6 +24,7 @@ Ported from cookieradar, which has polled since 2026-09-24.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -37,6 +38,29 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 PACKAGE = "mailradar"
 # The step output that holds the pip version — 2026.41, not v2026.41.
 PIP_VERSION_OUTPUT = "PIP_VERSION"
+
+
+def _bash() -> str:
+    """The bash the script is written for: the one on PATH, and Git's on Windows.
+
+    On Windows `bash` is also WSL's launcher in System32. CreateProcess looks
+    there before PATH, and so does `shutil.which` from a shell that lists
+    System32 first, and WSL drops the backslashes of the Windows path it is
+    handed: "No such file or directory", exit 127, and every case below failed
+    without the script running at all. Git for Windows ships a bash next to git.
+    """
+    found = shutil.which("bash")
+    if os.name != "nt":
+        return found or "bash"
+    system32 = Path(os.environ.get("SYSTEMROOT", "C:/Windows")) / "System32"
+    if found and Path(found).parent != system32:
+        return found
+    git = shutil.which("git")
+    bundled = Path(git).resolve().parent.parent / "bin" / "bash.exe" if git else None
+    return str(bundled) if bundled and bundled.is_file() else (found or "bash")
+
+
+BASH = _bash()
 
 
 @pytest.fixture
@@ -60,9 +84,9 @@ def fake_pip(tmp_path):
     pip.chmod(0o755)
 
     def run(succeed_at, *args):
-        env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "SUCCEED_AT": str(succeed_at)}
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "SUCCEED_AT": str(succeed_at)}
         proc = subprocess.run(
-            ["bash", str(WAIT_FOR_PYPI), *args],
+            [BASH, str(WAIT_FOR_PYPI), *args],
             env=env,
             capture_output=True,
             text=True,
@@ -76,10 +100,10 @@ def fake_pip(tmp_path):
 
     def start(succeed_at, *args):
         """The same script, left running, for the one case that is about *not* finishing."""
-        env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
                "SUCCEED_AT": str(succeed_at)}
         return subprocess.Popen(
-            ["bash", str(WAIT_FOR_PYPI), *args],
+            [BASH, str(WAIT_FOR_PYPI), *args],
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
