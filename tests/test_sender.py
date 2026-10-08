@@ -2,6 +2,7 @@
 Tests for MailRadar sender module.
 Uses mocks to avoid real SMTP connections and GPG interactions.
 """
+import secrets
 import shutil
 import tempfile
 from unittest.mock import MagicMock, patch
@@ -125,7 +126,10 @@ def test_send_smtp_failure():
 # password handed to login(). These servers present real certificates; what
 # they record is whether the client ever sent AUTH.
 
-PASSWORD = "test_password"
+@pytest.fixture
+def password() -> str:
+    """A fresh secret per test: nothing hard-coded, and nothing a scanner can take for one."""
+    return secrets.token_urlsafe(16)
 
 
 @pytest.fixture
@@ -136,52 +140,52 @@ def untrusted_ca(tmp_path):
     return CertificateAuthority(tmp_path, "untrusted-ca")
 
 
-def _config_for(server, use_tls: bool = True) -> SMTPConfig:
+def _config_for(server, password: str, use_tls: bool = True) -> SMTPConfig:
     return SMTPConfig(host="127.0.0.1", port=server.port, username="security@maksimtech.com",
-                      password=PASSWORD, from_email="security@maksimtech.com", use_tls=use_tls)
+                      password=password, from_email="security@maksimtech.com", use_tls=use_tls)
 
 
 def _auth_sent(server) -> bool:
     return any(command.upper().startswith("AUTH") for command in server.commands)
 
 
-def test_smtp_ssl_refuses_a_certificate_nobody_trusts(smtp_server, untrusted_ca, monkeypatch):
+def test_smtp_ssl_refuses_a_certificate_nobody_trusts(smtp_server, untrusted_ca, monkeypatch, password):
     """SMTP credentials must not travel over unverified TLS (smtplib defaults to CERT_NONE)."""
     monkeypatch.delenv("SSL_CERT_FILE", raising=False)
     server = smtp_server("tls", untrusted_ca.server_context("127.0.0.1"))
-    assert _send_smtp(_config_for(server), "security@example.com", "s", "body") is False
+    assert _send_smtp(_config_for(server, password), "security@example.com", "s", "body") is False
     assert server.connections == 1
     assert not _auth_sent(server), "the password went to a server whose certificate nobody trusts"
 
 
-def test_smtp_ssl_refuses_a_certificate_for_another_host(smtp_server, trusted_ca, monkeypatch):
+def test_smtp_ssl_refuses_a_certificate_for_another_host(smtp_server, trusted_ca, monkeypatch, password):
     """A trusted certificate issued to another name is refused too: the host name is checked."""
     monkeypatch.setenv("SSL_CERT_FILE", str(trusted_ca.path))
     server = smtp_server("tls", trusted_ca.server_context("mail.example.net"))
-    assert _send_smtp(_config_for(server), "security@example.com", "s", "body") is False
+    assert _send_smtp(_config_for(server, password), "security@example.com", "s", "body") is False
     assert not _auth_sent(server), "the password went to a server with another host's certificate"
 
 
-def test_smtp_starttls_refuses_a_certificate_nobody_trusts(smtp_server, untrusted_ca, monkeypatch):
+def test_smtp_starttls_refuses_a_certificate_nobody_trusts(smtp_server, untrusted_ca, monkeypatch, password):
     """The same defect on the STARTTLS branch: starttls() with no context verifies no certificate."""
     monkeypatch.delenv("SSL_CERT_FILE", raising=False)
     server = smtp_server("starttls", untrusted_ca.server_context("127.0.0.1"))
-    assert _send_smtp(_config_for(server, use_tls=False), "security@example.com", "s", "body") is False
+    assert _send_smtp(_config_for(server, password, use_tls=False), "security@example.com", "s", "body") is False
     assert "STARTTLS" in [command.upper() for command in server.commands]
     assert not _auth_sent(server), "the password went over STARTTLS to an untrusted certificate"
 
 
 @pytest.mark.parametrize("mode,use_tls", [("tls", True), ("starttls", False)])
-def test_smtp_delivers_over_a_certificate_that_verifies(smtp_server, trusted_ca, monkeypatch, mode, use_tls):
+def test_smtp_delivers_over_a_certificate_that_verifies(smtp_server, trusted_ca, monkeypatch, mode, use_tls, password):
     """The other side of the same check: a trusted certificate for the host goes through, and the mail with it."""
     monkeypatch.setenv("SSL_CERT_FILE", str(trusted_ca.path))
     server = smtp_server(mode, trusted_ca.server_context("127.0.0.1"))
-    assert _send_smtp(_config_for(server, use_tls), "security@example.com", "s", "body") is True
+    assert _send_smtp(_config_for(server, password, use_tls), "security@example.com", "s", "body") is True
     assert _auth_sent(server)
     assert len(server.messages) == 1
 
 
-def test_smtp_gives_up_on_a_silent_server(smtp_server, monkeypatch):
+def test_smtp_gives_up_on_a_silent_server(smtp_server, monkeypatch, password):
     """No timeout: a server that accepts the connection and never answers hangs send for ever.
 
     SMTP_TIMEOUT is set to half a second so the test does not wait the real
@@ -195,7 +199,7 @@ def test_smtp_gives_up_on_a_silent_server(smtp_server, monkeypatch):
     monkeypatch.setattr(sender, "SMTP_TIMEOUT", 0.5, raising=False)
     outcome = []
     worker = threading.Thread(daemon=True, target=lambda: outcome.append(
-        _send_smtp(_config_for(server), "security@example.com", "s", "body")))
+        _send_smtp(_config_for(server, password), "security@example.com", "s", "body")))
     worker.start()
     worker.join(10)
     assert not worker.is_alive(), "still waiting for a silent server after 10 s: no timeout"
