@@ -12,6 +12,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Changed
+
+- **Python 3.14 is a stable row of the test matrix and 3.15-dev is the experimental one.**
+  pyproject has declared 3.14 since the suite started running on it, and `test.yml` still
+  listed it as the `-dev` row that is allowed to fail: a version promised on PyPI could not
+  redden the build. 3.15.0 is final on 2026-10-09 (PEP 790) and `actions/setup-python`
+  already resolves `3.15-dev` to rc.3, so the experimental row moves there, as in patchradar.
+  Two tests now hold the matrix to the classifiers: every declared version is stable in
+  CI, and the one `-dev` row is the minor after the last stable one. 3.15 enters the
+  classifiers when it is final, not before.
+
 
 ## [2026.43] - 2026-10-08
 
