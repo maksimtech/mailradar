@@ -179,3 +179,67 @@ def test_the_mutation_run_skips_the_benchmarks() -> None:
 
     assert "[tool.mutmut]" in config, "the mutation configuration moved"
     assert "--ignore=tests/benchmarks" in config.split("[tool.mutmut]", 1)[1]
+
+
+# ── the Python matrix ───────────────────────────────────────────────────────
+#
+# The matrix fell behind the project: pyproject declared 3.14 and
+# the suite had been running on it for months, while test.yml still listed it as
+# the `-dev` row that is allowed to fail. A version a classifier promises is a
+# version the build has to be able to go red on.
+
+
+def _matrix() -> dict:
+    import yaml
+
+    return yaml.safe_load(TEST_WORKFLOW.read_text(encoding="utf-8"))["jobs"]["test"]
+
+
+def _stable_versions() -> list[str]:
+    return [str(v) for v in _matrix()["strategy"]["matrix"]["python-version"]]
+
+
+def _classifier_versions() -> list[str]:
+    import tomllib
+
+    classifiers = tomllib.loads(
+        (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["classifiers"]
+    return [
+        m.group(1)
+        for c in classifiers
+        if (m := re.fullmatch(r"Programming Language :: Python :: (3\.\d+)", c))
+    ]
+
+
+def test_every_declared_python_is_a_stable_matrix_entry():
+    """A classifier is a promise; `continue-on-error` is where promises go to
+    stay unverified. 3.14 was declared on PyPI and experimental in CI."""
+    assert sorted(_classifier_versions()) == sorted(_stable_versions()), (
+        "the classifiers and the stable matrix disagree on which Pythons are supported"
+    )
+
+
+def test_the_experimental_row_is_the_next_minor_as_dev():
+    """One `-dev` row, the minor after the last stable one, marked experimental:
+    3.15.0 is final on 2026-10-09, and the day it is, this test says what to
+    promote and what to add next (3.16-dev)."""
+    stable = _stable_versions()
+    major, minor = stable[-1].split(".")
+    expected = f"{major}.{int(minor) + 1}-dev"
+
+    include = _matrix()["strategy"]["matrix"].get("include") or []
+    assert len(include) == 1, f"expected one experimental row, found {include}"
+    row = include[0]
+    assert str(row["python-version"]) == expected, (
+        f"the experimental row is {row['python-version']}, not {expected}"
+    )
+    assert row.get("experimental") is True
+
+
+def test_only_the_experimental_row_may_fail():
+    """The flag is read by `continue-on-error`, or marking a row experimental
+    changes nothing; and the stable rows carry `false`, or every row may fail."""
+    matrix = _matrix()
+    assert matrix["continue-on-error"] == "${{ matrix.experimental }}"
+    assert matrix["strategy"]["matrix"]["experimental"] == [False]

@@ -12,10 +12,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         experimental: [false]
         include:
-          - python-version: "3.14-dev"
+          - python-version: "3.15-dev"
             experimental: true
     continue-on-error: ${{ matrix.experimental }}
     steps:
@@ -44,7 +44,7 @@ jobs:
         run: mailradar --help
 
       - name: Upload coverage to Codecov
-        # Once, not once per matrix entry: the same report three times is three
+        # Once, not once per matrix entry: the same report five times is five
         # uploads of one measurement.
         if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
