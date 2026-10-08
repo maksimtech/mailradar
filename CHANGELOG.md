@@ -12,6 +12,9 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+
+## [2026.43] - 2026-10-08
+
 ### Added
 
 - **The files the build is told to include are checked to be there.** apkradar lost its
@@ -675,7 +678,12 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.09.11...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.43...HEAD
+[2026.43]: https://github.com/maksimtech/mailradar/compare/v2026.42...v2026.43
+[2026.42]: https://github.com/maksimtech/mailradar/compare/v2026.41...v2026.42
+[2026.41]: https://github.com/maksimtech/mailradar/compare/v2026.40...v2026.41
+[2026.40]: https://github.com/maksimtech/mailradar/compare/v2026.09.12...v2026.40
+[2026.09.12]: https://github.com/maksimtech/mailradar/compare/v2026.09.11...v2026.09.12
 [2026.09.11]: https://github.com/maksimtech/mailradar/compare/v2026.09.10...v2026.09.11
 [2026.09.10]: https://github.com/maksimtech/mailradar/compare/v2026.09.9...v2026.09.10
 [2026.09.9]: https://github.com/maksimtech/mailradar/compare/v2026.09.8...v2026.09.9
