@@ -145,4 +145,5 @@ class TestRecordedKeyservers:
         asked = [request for request in proxy.requests if _host_of(request) == "pgp.mit.edu"]
         assert len(asked) == 1
         assert result.found is False
-        assert "pgp.mit.edu" in result.error
+        # "<host>: <what happened>" per keyserver that did not answer
+        assert result.error.split(":")[0] == "pgp.mit.edu"
