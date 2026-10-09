@@ -31,6 +31,10 @@ from mailradar import __version__ as VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = "mailradar"
+# What a tag ships: the package on PyPI and, from the same tag, the image on
+# Docker Hub. A fix to the Dockerfile alone reaches users through the image, so
+# it is a change of this Radar even when no module moved.
+SHIPPED = (PACKAGE_DIR, "Dockerfile")
 CHANGELOG = ROOT / "CHANGELOG.md"
 
 # The generation, this Radar's count, and optionally a fix on top of it:
@@ -123,12 +127,12 @@ def test_a_version_ahead_of_the_last_tag_means_this_package_changed():
     if normalised(VERSION) == normalised(tag):
         return
 
-    changed = git("diff", "--name-only", f"{tag}..HEAD", "--", PACKAGE_DIR)
+    changed = git("diff", "--name-only", f"{tag}..HEAD", "--", *SHIPPED)
     if changed is None:
         pytest.skip(f"git cannot diff {tag}..HEAD in this checkout")
 
     assert changed.strip() or VERSION == BASELINE, (
-        f"{VERSION} is ahead of {tag} and nothing under {PACKAGE_DIR} changed "
+        f"{VERSION} is ahead of {tag} and nothing in {', '.join(SHIPPED)} changed "
         "between them: a Radar that has not changed does not get a version"
     )
 
