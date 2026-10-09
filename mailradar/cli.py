@@ -144,6 +144,14 @@ def _bool_icon(value: bool) -> str:
 # A check whose DNS lookup failed is neither configured nor missing
 _UNVERIFIED = "[yellow]Not verified: DNS lookup failed[/yellow]"
 
+# The Details column
+_DETAILS_WIDTH = 55
+
+
+def _fit(text: str, width: int = _DETAILS_WIDTH) -> str:
+    """`text` cut to `width` with an ellipsis, so a cut is visible: 'include:spf.protection.outlo' was not."""
+    return text if len(text) <= width else text[:width - 1] + "…"
+
 
 def _unverified(report: DomainReport) -> list[str]:
     """The DNS lookups that failed, i.e. what the report cannot vouch for."""
@@ -167,7 +175,7 @@ def _print_report(report: DomainReport) -> None:
     table = Table(box=box.ROUNDED, show_header=True, header_style="bold cyan")
     table.add_column("Check", style="bold", width=12)
     table.add_column("Status", width=6)
-    table.add_column("Details", width=55)
+    table.add_column("Details", width=_DETAILS_WIDTH)
     table.add_column("Score", width=8, justify="right")
 
     # DMARC row
@@ -193,7 +201,7 @@ def _print_report(report: DomainReport) -> None:
 
     # SPF row
     s = report.spf
-    spf_detail = escape(s.raw[:55]) if s.present else (_UNVERIFIED if s.error else "[red]Not configured[/red]")
+    spf_detail = escape(_fit(s.raw)) if s.present else (_UNVERIFIED if s.error else "[red]Not configured[/red]")
     spf_ok = s.present and not s.permissive and not s.permerror
     spf_icon = "✅" if spf_ok else ("⚠️ " if s.present or s.error else "❌")
     table.add_row("SPF", spf_icon, spf_detail, f"[{_score_color(s.score)}]{s.score}[/{_score_color(s.score)}]")
@@ -241,7 +249,7 @@ def _print_report(report: DomainReport) -> None:
     # TLS-RPT row
     t = report.tls_rpt
     tls_detail = (
-        f"rua: {escape(t.rua[:40])}" if t.present
+        f"rua: {escape(_fit(t.rua, _DETAILS_WIDTH - len('rua: ')))}" if t.present
         else (_UNVERIFIED if t.error else "[dim]Not configured[/dim]")
     )
     tls_icon = "✅" if t.present else ("⚠️ " if t.error else "❌")

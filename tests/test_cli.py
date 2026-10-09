@@ -758,3 +758,23 @@ class TestDKIMRow:
         row = _row(_dkim_report("polimi.it"), "DKIM")
         assert "selector1" in row and "1024-bit" in row
         assert "selector2" in row and "2048-bit" in row
+
+
+class TestDetailsColumn:
+    """What the 55-column Details cell shows of a long record, on recorded DNS."""
+
+    def test_a_long_spf_record_is_cut_with_an_ellipsis(self, dns_replay):
+        """github.com's SPF record is 330 characters (recorded): the cell ended in 'include:spf.protection.outlo'."""
+        from mailradar.checker import check_spf
+        dns_replay("github_com")
+        report = DomainReport(domain="github.com", spf=check_spf("github.com"))
+        row = _row(report, "SPF")
+        assert "…" in row
+        assert "outlo " not in row
+
+    def test_tls_rpt_rua_is_shown_whole_when_it_fits(self, dns_replay):
+        """proton.me reports to https://reports.proton.me/reports/smtptls (recorded); the cell cut it at 40."""
+        from mailradar.checker import check_tls_rpt
+        dns_replay("proton_me")
+        report = DomainReport(domain="proton.me", tls_rpt=check_tls_rpt("proton.me"))
+        assert "https://reports.proton.me/reports/smtptls" in _row(report, "TLS-RPT")

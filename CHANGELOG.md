@@ -97,6 +97,14 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   (`trim_blocks`, `lstrip_blocks`): the sections were separated by two to five empty lines.
   Both languages; the cases replay inps.it, pec.poste.it and amazon.it as recorded.
 
+- **The Details column cuts with an ellipsis, shows a TLS-RPT address whole when it fits, and
+  the SPF verdict names the redirect it comes from.** github.com's 330-character SPF record
+  ended in `include:spf.protection.outlo` with nothing to say it was cut; proton.me's TLS-RPT
+  address `https://reports.proton.me/reports/smtptls` lost its last letter to a 40-character
+  cut inside a 55-column cell; and gmail.com's issue read "SPF uses ~all" under a record that
+  shows only `redirect=_spf.google.com` — it now reads "SPF uses ~all (softfail) via
+  redirect=_spf.google.com". The cases replay github.com, proton.me and gmail.com as recorded.
+
 
 ## [2026.43.1] - 2026-10-09
 

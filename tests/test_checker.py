@@ -996,3 +996,14 @@ class TestDKIMSelectors:
         assert "33 common selectors" in issue
         assert "custom selector" in issue
         assert "No DKIM record found" not in issue
+
+
+class TestSPFRedirectWording:
+
+    def test_the_all_verdict_names_the_redirect_it_comes_from(self, dns_replay):
+        """gmail.com: "v=spf1 redirect=_spf.google.com", and the ~all is _spf.google.com's (recorded). The issue
+        said "SPF uses ~all" under a record that shows no ~all at all."""
+        dns_replay("gmail_com")
+        result = check_spf("gmail.com")
+        issue = next(issue for issue in result.issues if "~all" in issue)
+        assert "redirect=_spf.google.com" in issue

@@ -581,6 +581,7 @@ def check_spf(domain: str) -> SPFResult:
     # RFC 7208 §6.1: with no `all`, redirect= hands the verdict to another
     # record. The chain is finite: a loop would have failed the count above.
     redirected = terms
+    via = ""
     while not result.all_mechanism and (target := _spf_redirect(redirected)):
         record = _spf_record_of(target)
         if record is None:
@@ -589,31 +590,34 @@ def check_spf(domain: str) -> SPFResult:
             return result
         redirected = _spf_terms(record)
         result.all_mechanism = _spf_all(redirected)
+        # The verdict is the target's: the record shown has no `all` of its own
+        via = f" via redirect={target}"
 
-    _apply_spf_verdict(result, terms)
+    _apply_spf_verdict(result, terms, via)
     return result
 
 
-def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]]) -> None:
+def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]], via: str = "") -> None:
     """
     Score and annotate `result` from its `all` mechanism and the record's
     `terms`. No DNS: the lookups, which may change `all_mechanism` through
-    redirect=, are check_spf's and have already been made.
+    redirect=, are check_spf's and have already been made; `via` names the
+    redirect= the `all` came from, if it did.
     """
     if result.all_mechanism == "-all":
         result.permissive = False
         result.score += 20
     elif result.all_mechanism == "~all":
         result.permissive = True
-        result.issues.append("SPF uses ~all (softfail) — consider -all (hardfail)")
+        result.issues.append(f"SPF uses ~all (softfail){via} — consider -all (hardfail)")
         result.score += 10
     elif result.all_mechanism == "+all":
         result.permissive = True
-        result.issues.append("SPF uses +all — any server can send as this domain!")
+        result.issues.append(f"SPF uses +all{via} — any server can send as this domain!")
         result.score += 0
     elif result.all_mechanism == "?all":
         result.permissive = True
-        result.issues.append("SPF uses ?all (neutral) — no enforcement")
+        result.issues.append(f"SPF uses ?all (neutral){via} — no enforcement")
         result.score += 5
     else:
         # RFC 7208 §4.7: no `all` and no redirect= ends in neutral
