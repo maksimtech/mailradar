@@ -100,7 +100,6 @@ def test_dmarc_policy_none_is_not_missing():
 @pytest.mark.parametrize("spf, dkim, evidence", [
     (SPFResult(present=False), None, ["no SPF record"]),
     (SPFResult(present=True, all_mechanism="~all", permissive=True), None, ["SPF ~all"]),
-    (None, DKIMResult(present=False), ["no DKIM key under the common selectors"]),
     (None, DKIMResult(present=True, key_bits=1024), ["DKIM 1024 bit"]),
     (SPFResult(present=True, all_mechanism="+all", permissive=True),
      DKIMResult(present=True, key_bits=512), ["SPF +all", "DKIM 512 bit"]),
@@ -258,3 +257,12 @@ def test_gpg_not_verified_is_not_gpg_missing():
     """A keyserver that answered HTTP 429 proved nothing: GDPR art. 32 is not cited for a key that may exist."""
     unverified = GPGResult(found=False, error="keys.openpgp.org: HTTP 429")
     assert "gpg_missing" not in findings_of(_report(gpg=unverified))
+
+
+def test_dkim_not_found_under_common_selectors_is_not_evidence(dns_replay):
+    """amazon.it publishes none of the 33 common selectors and signs its mail under selectors of its own
+    (recorded 2026-10-09): DNS cannot show DKIM absent, so there is no weakness to cite GDPR art. 32 for.
+    Until 2026-10-09 the report to proton.me cited it for the same reason, over keys that exist."""
+    from mailradar.checker import check_dkim
+    dns_replay("amazon_it")
+    assert findings_of(_report(dkim=check_dkim("amazon.it"))) == {}

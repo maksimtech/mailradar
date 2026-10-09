@@ -75,6 +75,14 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   selectors". The cases replay proton.me, polimi.it, amazon.it, inps.it and startpage.com as
   recorded from 1.1.1.1 on 2026-10-09.
 
+- **The law check no longer cites GDPR art. 32 for a DKIM key it did not find.** "no DKIM key
+  under the common selectors" was evidence for the "SPF/DKIM weak" finding, and the report to
+  the domain's owner cited the article over it: for proton.me, whose keys exist under other
+  selectors, and for amazon.it, unicredit.it and poste.it, which sign under selectors of their
+  own. Not measured is not zero. A key that was found and is shorter than 2048 bits is still
+  cited; a key not found under the 33 selectors is reported in the table and the issues, and
+  nothing is cited for it. The case replays amazon.it as recorded on 2026-10-09.
+
 
 ## [2026.43.1] - 2026-10-09
 
