@@ -252,3 +252,9 @@ def test_format_citation():
         f"SHA256: {'ab' * 32}\n"
         "Version of: 2026-09-19"
     )
+
+
+def test_gpg_not_verified_is_not_gpg_missing():
+    """A keyserver that answered HTTP 429 proved nothing: GDPR art. 32 is not cited for a key that may exist."""
+    unverified = GPGResult(found=False, error="keys.openpgp.org: HTTP 429")
+    assert "gpg_missing" not in findings_of(_report(gpg=unverified))

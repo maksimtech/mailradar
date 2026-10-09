@@ -83,7 +83,8 @@ def findings_of(report) -> dict[str, list[str]]:
     elif report.mta_sts.mode != "enforce":
         found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce"]
 
-    if not report.gpg.found:
+    # A keyserver that did not answer (rate limit, timeout) proved nothing
+    if not report.gpg.found and not report.gpg.error:
         found["gpg_missing"] = ["no public key on the keyservers"]
 
     return {finding: found[finding] for finding in FINDING_ARTICLES if finding in found}

@@ -645,7 +645,7 @@ class TestIncompleteAnalysis(unittest.TestCase):
         # example.com as recorded, DNS and keyservers, except that
         # _dmarc.example.com never answers: the DMARC lookup times out
         dns_replay("example_com", silent=["_dmarc.example.com TXT"])
-        http_replay("example_com")
+        http_replay("example_com", "keyservers_example_com")
         self.smtp = smtp_server("tls", trusted_ca.server_context("127.0.0.1"))
 
     def setUp(self):
@@ -704,3 +704,39 @@ class TestModuleEntryPoint(unittest.TestCase):
         self.assertIn(cm.exception.code, (0, None))
         for command in ("check", "batch", "report", "send", "discover"):
             self.assertIn(command, out.getvalue(), f"command {command!r} missing from the __main__ block's app")
+
+
+def _row(report: DomainReport, check: str) -> str:
+    """The table row of `check`, its continuation lines (a wrapped cell) joined to it."""
+    lines = _table_lines(report)
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"│ {check}"))
+    row = lines[start]
+    for line in lines[start + 1:]:
+        if not line.startswith("│  "):
+            break
+        row += " " + line
+    return row
+
+
+class TestGPGRow:
+    """The GPG row must not claim more than the keyservers said (tests/replay.py answers)."""
+
+    def test_a_key_the_keyserver_did_not_verify_is_not_a_tick(self, http_replay):
+        """keyserver.ubuntu.com's key for security@gmail.com was uploaded by 'securityencyryption' (recorded)."""
+        from mailradar.gpg import lookup_gpg
+        http_replay("keyservers_gmail_com")
+        report = DomainReport(domain="gmail.com", gpg=lookup_gpg("gmail.com"))
+        row = _row(report, "GPG")
+        assert "✅" not in row
+        assert "security@gmail.com" in row
+        assert "not verified" in row.lower()
+
+    def test_a_keyserver_that_did_not_answer_is_not_shown_as_no_key(self, http_replay):
+        """keys.openpgp.org answered 429 for every contact of github.com (recorded)."""
+        from mailradar.gpg import lookup_gpg
+        http_replay("keyservers_github_com")
+        report = DomainReport(domain="github.com", gpg=lookup_gpg("github.com"))
+        row = _row(report, "GPG")
+        assert "No public key" not in row
+        assert "✅" not in row
+        assert "not verified" in row.lower()

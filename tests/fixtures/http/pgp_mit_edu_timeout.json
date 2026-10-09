@@ -1,0 +1,21 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "httpx 0.28.1 (Client, HTTP/1.1) straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+    "by": "an HKP index and get of postmaster@pec.poste.it on pgp.mit.edu, both ReadTimeout after the 15 s mailradar allows; the same server answered the same two requests in 0.6 s forty minutes earlier (pgp_mit_edu_pec_poste_it.json) and a get of security@github.com timed out at 15.4 s before that",
+    "requested": [
+      "GET https://pgp.mit.edu/pks/lookup?op=index&search=postmaster%40pec.poste.it&options=mr",
+      "GET https://pgp.mit.edu/pks/lookup?op=get&search=postmaster%40pec.poste.it&options=mr"
+    ]
+  },
+  "responses": [
+    {
+      "request": "GET https://pgp.mit.edu/pks/lookup?op=index&search=postmaster%40pec.poste.it&options=mr",
+      "error": "ReadTimeout after 15.4 s"
+    },
+    {
+      "request": "GET https://pgp.mit.edu/pks/lookup?op=get&search=postmaster%40pec.poste.it&options=mr",
+      "error": "ReadTimeout after 15.4 s"
+    }
+  ]
+}

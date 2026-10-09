@@ -1,0 +1,101 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "httpx 0.28.1 (Client, HTTP/1.1) straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+    "by": "what lookup_gpg(\"github.com\") asks from 2026-10-09 on: keys.openpgp.org VKS by-email for the five contact addresses (all 429, rate limit spent by the day's runs) and keyserver.ubuntu.com HKP index for the five",
+    "requested": [
+      "GET https://keys.openpgp.org/vks/v1/by-email/security@github.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40github.com&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/dpo@github.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=dpo%40github.com&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/admin@github.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=admin%40github.com&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/postmaster@github.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=postmaster%40github.com&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/privacy@github.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=privacy%40github.com&options=mr"
+    ]
+  },
+  "responses": [
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/security@github.com",
+      "status": 429,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<p><strong>Error 429</strong> Too many requests</p>\n<p>See https://keys.openpgp.org/about/api#rate-limiting</p>\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40github.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/dpo@github.com",
+      "status": 429,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<p><strong>Error 429</strong> Too many requests</p>\n<p>See https://keys.openpgp.org/about/api#rate-limiting</p>\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=dpo%40github.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/admin@github.com",
+      "status": 429,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<p><strong>Error 429</strong> Too many requests</p>\n<p>See https://keys.openpgp.org/about/api#rate-limiting</p>\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=admin%40github.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/postmaster@github.com",
+      "status": 429,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<p><strong>Error 429</strong> Too many requests</p>\n<p>See https://keys.openpgp.org/about/api#rate-limiting</p>\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=postmaster%40github.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/privacy@github.com",
+      "status": 429,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<p><strong>Error 429</strong> Too many requests</p>\n<p>See https://keys.openpgp.org/about/api#rate-limiting</p>\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=privacy%40github.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    }
+  ]
+}

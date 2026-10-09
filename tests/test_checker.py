@@ -786,7 +786,7 @@ class TestAnalyzeDomain:
         # alignment and both report addresses, SPF -all after its includes,
         # a 2048-bit DKIM key under `google`, no GPG key on any keyserver
         dns_replay("startpage_com")
-        http_replay("startpage_com")
+        http_replay("startpage_com", "startpage_com_keyservers_index")
         report = analyze_domain("startpage.com")
 
         assert report.domain == "startpage.com"
@@ -815,7 +815,7 @@ class TestAnalyzeDomain:
     def test_domain_is_normalized_once_for_every_check(self, dns_replay, http_replay):
         """'Example.COM.' is analysed as 'example.com' by every check, GPG and the MTA-STS URL included."""
         dns_replay("example_com", "example_com_mta_sts")
-        proxy = http_replay("example_com", "example_com_mta_sts_404")
+        proxy = http_replay("example_com", "example_com_mta_sts_404", "keyservers_example_com")
         report = analyze_domain("Example.COM.")
         assert report.domain == "example.com"
         # The keyservers are asked about security@example.com and nothing else:
@@ -823,8 +823,8 @@ class TestAnalyzeDomain:
         assert [r for r in proxy.requests if r.startswith("GET ")] == [
             "GET https://mta-sts.example.com/.well-known/mta-sts.txt",
             "GET https://keys.openpgp.org/vks/v1/by-email/security@example.com",
-            "GET https://keys.openpgp.org/pks/lookup?op=get&search=security%40example.com&options=mr",
-            "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=security%40example.com&options=mr",
+            "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40example.com&options=mr",
+            "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3BB547F4A09EDE1C40981268526A5BBFE98ED6E7&options=mr",
         ]
         assert report.gpg.uid == "security@example.com"
 

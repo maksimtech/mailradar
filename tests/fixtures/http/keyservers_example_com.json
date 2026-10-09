@@ -1,0 +1,29 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "httpx 0.28.1 (Client, HTTP/1.1) straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+    "by": "keyserver.ubuntu.com HKP index for security@example.com and the get of the one key it lists, whose uid is exactly that address: what lookup_gpg(\"example.com\") asks there from 2026-10-09 on, after the VKS 404 recorded in example_com.json",
+    "requested": [
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40example.com&options=mr",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3BB547F4A09EDE1C40981268526A5BBFE98ED6E7&options=mr"
+    ]
+  },
+  "responses": [
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40example.com&options=mr",
+      "status": 200,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "info:1:1\npub:3BB547F4A09EDE1C40981268526A5BBFE98ED6E7:22:263:1746718739::\nuid:Example, Inc. (Root) <security@example.com>:1746718739:2062078739:\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3BB547F4A09EDE1C40981268526A5BBFE98ED6E7&options=mr",
+      "status": 200,
+      "headers": {
+        "content-type": "application/pgp-keys"
+      },
+      "body": "-----BEGIN PGP PUBLIC KEY BLOCK-----\nComment: Hostname: \nVersion: Hockeypuck 2.2\n\nxjMEaBzQExYJKwYBBAHaRw8BAQdAtxNuoSA2m0CBT1o4c7AcSjtaXnbcYwQm8k3Z\nPxXJi/TNK0V4YW1wbGUsIEluYy4gKFJvb3QpIDxzZWN1cml0eUBleGFtcGxlLmNv\nbT7CmQQTFgoAQRYhBDu1R/Sgnt4cQJgSaFJqW7/pjtbnBQJoHNATAhsDBQkSzAMA\nBQsJCAcCAiICBhUKCQgLAgQWAgMBAh4HAheAAAoJEFJqW7/pjtbnJaUBAK2pkeim\nixQhXKTe9RQIZBE+1MAOqZiIiE96Y/8hVl0PAQCUorOWV66xnMqwcRKOqtEm9hTE\nUhn+qeq28W0BmPJjCM44BGgc0BMSCisGAQQBl1UBBQEBB0BrdajqURuL5T7y9RMJ\nARuXX1sVsqiDC50vSYV9Fe/vMwMBCAfCfgQYFgoAJhYhBDu1R/Sgnt4cQJgSaFJq\nW7/pjtbnBQJoHNATAhsMBQkSzAMAAAoJEFJqW7/pjtbnXVsA/jYtVY8cKRvzQikC\nWf9VjhqXSVdqZM9LwZv7y59izTAkAQDw0Dp+p30jnB9dbMTrF1aoLBo9875r9MMn\nBoLpdEyvBA==\n=vyIH\n-----END PGP PUBLIC KEY BLOCK-----\n"
+    }
+  ]
+}

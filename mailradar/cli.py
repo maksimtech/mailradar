@@ -4,6 +4,7 @@ MailRadar — CLI interface.
 
 import contextlib
 import sys
+from urllib.parse import urlsplit
 
 import typer
 from rich import box
@@ -242,11 +243,20 @@ def _print_report(report: DomainReport) -> None:
 
     # GPG row
     g = report.gpg
-    gpg_detail = (
-        f"uid: {escape(g.uid)} | {escape(g.keyserver)}" if g.found
-        else "[dim]No public key on keyservers[/dim]"
-    )
-    gpg_icon = "✅" if g.found else "❌"
+    keyserver = escape(urlsplit(g.keyserver or "").hostname or g.keyserver or "")
+    if g.found and g.verified:
+        gpg_detail = f"uid: {escape(g.uid)} | {keyserver}"
+        gpg_icon = "✅"
+    elif g.found:
+        # Anyone can upload a key under any address on this keyserver
+        gpg_detail = f"uid: {escape(g.uid)} | {keyserver} [yellow]— address not verified[/yellow]"
+        gpg_icon = "⚠️ "
+    elif g.error:
+        gpg_detail = "[yellow]Not verified: keyserver did not answer[/yellow]"
+        gpg_icon = "⚠️ "
+    else:
+        gpg_detail = "[dim]No public key on keyservers[/dim]"
+        gpg_icon = "❌"
     table.add_row("GPG", gpg_icon, gpg_detail, f"[{_score_color(g.score)}]{g.score}[/{_score_color(g.score)}]")
 
     console.print(table)

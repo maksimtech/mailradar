@@ -347,11 +347,20 @@ failures. The table shows where the reports are sent.
 
 ### GPG (up to 5 points)
 
-MailRadar searches public keyservers (keys.openpgp.org, keyserver.ubuntu.com,
-pgp.mit.edu) for a key published for `security@`, `dpo@`, `admin@`,
-`postmaster@` or `privacy@` at the domain. A published key means security
-issues can be reported to the organization confidentially. The first key
-found is the one `send` uses for encryption.
+MailRadar searches public keyservers (keys.openpgp.org, keyserver.ubuntu.com)
+for a key published for exactly `security@`, `dpo@`, `admin@`, `postmaster@`
+or `privacy@` at the domain. A published key means security issues can be
+reported to the organization confidentially. The first key found is the one
+`send` uses for encryption.
+
+The 5 points go only to a key keys.openpgp.org lists, because that server
+publishes an address only after its owner answered a verification mail.
+keyserver.ubuntu.com lists whatever anyone uploads under any name: a key found
+there is shown with its fingerprint and "address not verified", scores
+nothing, and should be confirmed with the domain before use. A keyserver that
+does not answer (HTTP 429 — keys.openpgp.org allows one by-email lookup a
+minute, with a burst of 50 — or a timeout) is not asked again during the
+analysis and leaves the check "not verified", which is not "no key".
 
 ---
 
@@ -366,10 +375,10 @@ found is the one `send` uses for encryption.
   void lookups is not checked.
 - The BIMI logo host name is not checked for resolving to a private address,
   and the VMC is not downloaded or validated: "VMC" means that `a=` names one.
-- The GPG check confirms that a key is published for the address, not that
-  the address's owner controls it: keyserver.ubuntu.com and pgp.mit.edu do
-  not verify email addresses. Check the key before relying on it for
-  sensitive reports.
+- A key keyserver.ubuntu.com publishes for the address is reported as "not
+  verified": that server does not check who uploads a key, and `send` still
+  encrypts to the first key found. Confirm the fingerprint with the domain
+  before relying on it for sensitive reports.
 - `send` supports SMTP over implicit TLS only (SMTPS, usually port 465).
 - With `send --sign`, if signing fails (for example a wrong passphrase) the
   report is sent unsigned.

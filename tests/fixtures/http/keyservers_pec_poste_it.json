@@ -1,0 +1,56 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "httpx 0.28.1 (Client, HTTP/1.1) straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+    "by": "keyserver.ubuntu.com HKP index for the five contact addresses of pec.poste.it, what lookup_gpg(\"pec.poste.it\") asks there from 2026-10-09 on",
+    "requested": [
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40pec.poste.it&options=mr",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=dpo%40pec.poste.it&options=mr",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=admin%40pec.poste.it&options=mr",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=postmaster%40pec.poste.it&options=mr",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=privacy%40pec.poste.it&options=mr"
+    ]
+  },
+  "responses": [
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40pec.poste.it&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=dpo%40pec.poste.it&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=admin%40pec.poste.it&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=postmaster%40pec.poste.it&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=privacy%40pec.poste.it&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    }
+  ]
+}

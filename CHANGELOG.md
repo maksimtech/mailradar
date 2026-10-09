@@ -12,6 +12,45 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A GPG key is credited only when the keyserver verified the address, and a keyserver that
+  does not answer is not "no key".** Run on ten real domains on 2026-10-09, `check` showed
+  "GPG ✅" for gmail.com, poste.it, polimi.it, github.com and pec.poste.it — none of which
+  publishes a key for its role addresses. Three causes, all in `mailradar.gpg`:
+
+  - the HKP lookup asked `op=get&search=<address>`, and SKS-type servers search by
+    substring or by word: keyserver.ubuntu.com answered `security@gmail.com` with four keys,
+    among them `eli.geminder+security@gmail.com` and one uploaded in 2018 by
+    "securityencyryption", and pgp.mit.edu answered `postmaster@pec.poste.it` with the key of
+    a private person none of whose 72 uids carries the address or the domain (recorded in
+    `tests/fixtures/http/pgp_mit_edu_pec_poste_it.json`). `send` would have encrypted the
+    report to that key. The lookup now asks `op=index` first and takes a key only when one of
+    its uids is exactly the address and the key is not revoked, disabled or expired;
+  - every key counted 5 points, although only keys.openpgp.org publishes an address after
+    its owner answered a verification mail. A key from keyserver.ubuntu.com is now reported
+    with its fingerprint and "address not verified", scores 0, and the law check does not
+    change over it; `found` stays True, so `send` behaves as before;
+  - an HTTP 429 or a timeout was read as "no key". keys.openpgp.org allows one by-email
+    lookup a minute with a burst of 50, and `check` made two requests per address against
+    it (VKS, then the HKP interface of the same host for the same answer): after a few
+    domains every lookup was a 429, the table said "No public key on keyservers" and the
+    report cited GDPR art. 32 for "GPG not available". A keyserver that does not answer is
+    now asked nothing more during the analysis, and if the key was not found elsewhere the
+    row says "Not verified: keyserver did not answer", `GPGResult.error` carries the reason
+    and `law_checker` cites nothing for it. keys.openpgp.org is asked once per address.
+
+  pgp.mit.edu is no longer a default keyserver. That day it took the full 15 s to time out
+  on each of the five contact addresses — 83 s of an 86 s analysis of github.com, poste.it
+  and unicredit.it — answered HTTP 500 at other moments, and the one time it answered in
+  0.6 s it returned the wrong key above. Between two runs an hour apart the score of
+  github.com moved from 46 to 51, poste.it from 28 to 32 and polimi.it from 49 to 54 on its
+  answers alone.
+
+  The cases replay the answers recorded that day on 127.0.0.1: keyserver.ubuntu.com's index
+  and key for security@gmail.com, the five 429s for github.com, security@mozilla.org as a
+  verified key on keys.openpgp.org, pgp.mit.edu's wrong key and its timeouts.
+
 
 ## [2026.43.1] - 2026-10-09
 

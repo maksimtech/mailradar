@@ -1,0 +1,20 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "httpx 0.28.1 (Client, HTTP/1.1) straight to the service, no redirects followed; stored: status, Content-Type and body",
+    "by": "a VKS by-email lookup of security@mozilla.org on keys.openpgp.org, which lists a key under an address only after its owner confirmed a verification mail: the one 200 answer recorded, for the verified-key path",
+    "requested": [
+      "GET https://keys.openpgp.org/vks/v1/by-email/security@mozilla.org"
+    ]
+  },
+  "responses": [
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/security@mozilla.org",
+      "status": 200,
+      "headers": {
+        "content-type": "application/pgp-keys"
+      },
+      "body": "-----BEGIN PGP PUBLIC KEY BLOCK-----\nComment: ADEF B2E2 457D B737 1A03  134B A7CD 99DA 64E9 DED7\nComment: Mozilla Security <security@mozilla.org>\n\n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\nq/jdznvsSsbmsw+exOBt\n=Xsyq\n-----END PGP PUBLIC KEY BLOCK-----\n"
+    }
+  ]
+}
