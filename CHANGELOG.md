@@ -83,6 +83,20 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   cited; a key not found under the 33 selectors is reported in the table and the issues, and
   nothing is cited for it. The case replays amazon.it as recorded on 2026-10-09.
 
+- **The letter `report` writes says what was found, without the empty lines.** Generated for
+  inps.it, which publishes `p=reject`, it told the owner that "anyone can send emails
+  impersonating @inps.it": the GDPR paragraph about a missing or `p=none` DMARC was
+  unconditional. It is now written for `p=none` or no record, a `p=quarantine` domain gets
+  a sentence about what quarantine does not do, and a `p=reject` domain gets neither. DKIM
+  "Current: Not configured" was written for every domain without a key under the common
+  selectors — amazon.it, unicredit.it, poste.it, all of which sign — and for a revoked key:
+  the letter now writes every key found (`Keys found: selector1 1024-bit RSA, selector2
+  2048-bit RSA`), the revocation, or "No key under 33 common selectors — a custom selector
+  cannot be ruled out", and the recommendation for the last case is a key under the
+  selector in use, not a new selector. The Jinja environment trims block lines
+  (`trim_blocks`, `lstrip_blocks`): the sections were separated by two to five empty lines.
+  Both languages; the cases replay inps.it, pec.poste.it and amazon.it as recorded.
+
 
 ## [2026.43.1] - 2026-10-09
 
