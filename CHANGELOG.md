@@ -12,6 +12,9 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+
+## [2026.43.1] - 2026-10-09
+
 ### Changed
 
 - **Python 3.14 is a stable row of the test matrix and 3.15-dev is the experimental one.**
@@ -717,7 +720,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.43...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.43.1...HEAD
+[2026.43.1]: https://github.com/maksimtech/mailradar/compare/v2026.43...v2026.43.1
 [2026.43]: https://github.com/maksimtech/mailradar/compare/v2026.42...v2026.43
 [2026.42]: https://github.com/maksimtech/mailradar/compare/v2026.41...v2026.42
 [2026.41]: https://github.com/maksimtech/mailradar/compare/v2026.40...v2026.41
