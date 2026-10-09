@@ -201,7 +201,10 @@ def _print_report(report: DomainReport) -> None:
     # DKIM row
     k = report.dkim
     dkim_detail = ""
-    if k.present:
+    if k.present and len(k.keys) > 1:
+        # Every active key, the weakest first: it is the one the score measures
+        dkim_detail = " | ".join(f"{escape(selector)}: {escape(key)}" for selector, key in k.keys.items())
+    elif k.present:
         key = "Ed25519" if k.key_type == "ed25519" else f"{k.key_bits}-bit RSA"
         dkim_detail = f"selector: {escape(k.selector)} | {key}"
     elif k.error:
@@ -209,6 +212,9 @@ def _print_report(report: DomainReport) -> None:
     elif k.selector:
         # Found, but revoked (empty p=): there is no key to sign with
         dkim_detail = f"[red]selector: {escape(k.selector)} | key revoked[/red]"
+    elif k.tried:
+        # A selector is the sender's choice: not found is not absent
+        dkim_detail = f"[red]Not found under {k.tried} common selectors[/red]"
     else:
         dkim_detail = "[red]Not found (tried common selectors)[/red]"
     dkim_icon = "✅" if k.present else ("⚠️ " if k.error else "❌")

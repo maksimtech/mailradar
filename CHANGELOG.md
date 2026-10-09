@@ -51,6 +51,30 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   and key for security@gmail.com, the five 429s for github.com, security@mozilla.org as a
   verified key on keys.openpgp.org, pgp.mit.edu's wrong key and its timeouts.
 
+- **DKIM asks for every common selector, 33 of them, and measures the weakest key found.**
+  `check proton.me` said "No DKIM record found with common selectors" and the law check cited
+  GDPR art. 32 for "no DKIM key under the common selectors": proton.me signs under
+  `protonmail` and `protonmail2`, two 2048-bit keys, and none of the 17 selectors tried was
+  one of them. The list gains Proton's three, Fastmail's `fm1`-`fm3`, `amazonses`,
+  `zendesk1`/`zendesk2`, `k2`, `k3`, `pm`, `cm`, `dkim1`, `dkim2` and `smtp`.
+
+  The check used to stop at the first selector with a key. inps.it and polimi.it, both on
+  Microsoft 365, publish a 1024-bit key under `selector1` and a 2048-bit one under
+  `selector2`: the table showed the first and said "upgrade to 2048-bit" about a domain that
+  has the 2048-bit key already. Every selector is now asked for; a receiver verifies a
+  signature made with any published key, so the weakest one is the posture and sets the
+  score, and `DKIMResult.keys` names them all — the table shows `selector1: 1024-bit RSA |
+  selector2: 2048-bit RSA`, the issue says which is weak and what else is there. On the
+  recorded startpage.com this finds a 1024-bit SendGrid key under `s2` beside the 2048-bit
+  `google` one, and the domain's score goes from 79 to 74.
+
+  A key under none of the 33 is "not found", never absent: DNS cannot list selectors, and
+  amazon.it (recorded) signs under selectors of its own. The issue now reads "No DKIM key
+  found under 33 common selectors — a custom selector cannot be ruled out: check the s= tag
+  of a received message's DKIM-Signature header", and the row "Not found under 33 common
+  selectors". The cases replay proton.me, polimi.it, amazon.it, inps.it and startpage.com as
+  recorded from 1.1.1.1 on 2026-10-09.
+
 
 ## [2026.43.1] - 2026-10-09
 

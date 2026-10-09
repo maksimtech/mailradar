@@ -1,0 +1,203 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+    "by": "a TXT query for each of the 16 DKIM selectors added to check_dkim on 2026-10-09, for example.com; the 17 older ones are in example_com.json",
+    "queried": [
+      "k2._domainkey.example.com. TXT",
+      "k3._domainkey.example.com. TXT",
+      "protonmail._domainkey.example.com. TXT",
+      "protonmail2._domainkey.example.com. TXT",
+      "protonmail3._domainkey.example.com. TXT",
+      "pm._domainkey.example.com. TXT",
+      "fm1._domainkey.example.com. TXT",
+      "fm2._domainkey.example.com. TXT",
+      "fm3._domainkey.example.com. TXT",
+      "amazonses._domainkey.example.com. TXT",
+      "zendesk1._domainkey.example.com. TXT",
+      "zendesk2._domainkey.example.com. TXT",
+      "cm._domainkey.example.com. TXT",
+      "dkim1._domainkey.example.com. TXT",
+      "dkim2._domainkey.example.com. TXT",
+      "smtp._domainkey.example.com. TXT"
+    ]
+  },
+  "responses": [
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "k2._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "k2._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "k3._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "k3._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "protonmail._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "protonmail._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "protonmail2._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "protonmail2._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "protonmail3._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "protonmail3._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "pm._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "pm._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "fm1._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "fm1._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "fm2._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "fm2._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "fm3._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "fm3._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "amazonses._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "amazonses._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "zendesk1._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "zendesk1._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "zendesk2._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "zendesk2._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "cm._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "cm._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "dkim1._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "dkim1._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "dkim2._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "dkim2._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "smtp._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "smtp._domainkey.example.com. 300 IN TXT \"v=DKIM1; p=\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ]
+  ]
+}

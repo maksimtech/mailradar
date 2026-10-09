@@ -784,17 +784,21 @@ class TestAnalyzeDomain:
     def test_analyze_domain_excellent(self, dns_replay, http_replay):
         # startpage.com as recorded on 2026-10-07: DMARC p=reject with strict
         # alignment and both report addresses, SPF -all after its includes,
-        # a 2048-bit DKIM key under `google`, no GPG key on any keyserver
-        dns_replay("startpage_com")
+        # a 2048-bit DKIM key under `google`, no GPG key on any keyserver.
+        # The 33 selectors recorded on 2026-10-09 add s1 (2048-bit) and s2, a
+        # 1024-bit SendGrid key a receiver would verify a signature with: the
+        # weakest published key is the posture, and it costs the GOOD grade.
+        dns_replay("startpage_com", "startpage_com_dkim_selectors")
         http_replay("startpage_com", "startpage_com_keyservers_index")
         report = analyze_domain("startpage.com")
 
         assert report.domain == "startpage.com"
         assert report.dmarc.policy == "reject"
         assert report.spf.all_mechanism == "-all"
-        assert report.dkim.key_bits == 2048
-        assert report.total_score >= 75
-        assert report.grade in ("EXCELLENT", "GOOD")
+        assert report.dkim.keys == {"google": "2048-bit RSA", "s1": "2048-bit RSA", "s2": "1024-bit RSA"}
+        assert (report.dkim.selector, report.dkim.key_bits) == ("s2", 1024)
+        assert report.total_score == 74
+        assert report.grade == "MODERATE"
 
     def test_analyze_domain_critical(self):
         def mock_resolve(name, rtype):
@@ -814,7 +818,7 @@ class TestAnalyzeDomain:
 
     def test_domain_is_normalized_once_for_every_check(self, dns_replay, http_replay):
         """'Example.COM.' is analysed as 'example.com' by every check, GPG and the MTA-STS URL included."""
-        dns_replay("example_com", "example_com_mta_sts")
+        dns_replay("example_com", "example_com_mta_sts", "example_com_dkim_more_selectors")
         proxy = http_replay("example_com", "example_com_mta_sts_404", "keyservers_example_com")
         report = analyze_domain("Example.COM.")
         assert report.domain == "example.com"
@@ -952,3 +956,43 @@ class TestScoreNormalization:
         with _mock_checks(**{k: v * 2 for k, v in MAX_SCORES.items()}):
             report = analyze_domain("example.com")
         assert report.total_score == 100
+
+
+class TestDKIMSelectors:
+    """check_dkim against the DNS of real domains, recorded on 2026-10-09 (tests/replay.py)."""
+
+    def test_proton_me_signs_under_the_protonmail_selectors(self, dns_replay):
+        """proton.me publishes 2048-bit keys under protonmail and protonmail2 (recorded). None of the 17
+        selectors tried until 2026-10-09 was one of them: `check proton.me` said "No DKIM record found with
+        common selectors" and the law check cited GDPR art. 32 for a key that exists."""
+        dns_replay("proton_me")
+        result = check_dkim("proton.me")
+        assert result.present is True
+        assert result.selector == "protonmail"
+        assert result.key_bits == 2048
+        assert result.score == 15
+
+    def test_the_weakest_published_key_is_the_posture_and_every_key_is_named(self, dns_replay):
+        """polimi.it publishes a 1024-bit key under selector1 and a 2048-bit one under selector2 (recorded).
+        A receiver verifies a signature made with either, so the weaker key is what the score measures;
+        the issue names both, so the reader knows the 2048-bit one is already there."""
+        dns_replay("polimi_it")
+        result = check_dkim("polimi.it")
+        assert result.present is True
+        assert result.key_bits == 1024
+        assert result.selector == "selector1"
+        assert result.score == 10
+        issue = next(issue for issue in result.issues if "1024" in issue)
+        assert "selector1" in issue and "selector2" in issue and "2048" in issue
+
+    def test_a_key_not_found_under_common_selectors_is_not_declared_absent(self, dns_replay):
+        """amazon.it publishes none of the 33 common selectors (recorded) and signs its mail all the same,
+        under selectors of its own: DNS cannot prove DKIM absent, and the issue must not say it is."""
+        dns_replay("amazon_it")
+        result = check_dkim("amazon.it")
+        assert result.present is False
+        assert result.score == 0
+        issue = result.issues[0]
+        assert "33 common selectors" in issue
+        assert "custom selector" in issue
+        assert "No DKIM record found" not in issue

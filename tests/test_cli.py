@@ -627,7 +627,7 @@ class TestReportTableRows(unittest.TestCase):
 
     def test_dkim_revoked_on_every_selector_is_said_briefly_and_honestly(self):
         """example.com publishes an empty p= under every selector: no list of 17 names, and not 'Not found'."""
-        self.dns_replay("example_com")
+        self.dns_replay("example_com", "example_com_dkim_more_selectors")
         report = _dkim_report("example.com")
         issue = next(i for i in report.dkim.issues if "revoked" in i)
         self.assertNotIn("mailchimp", issue)
@@ -644,7 +644,7 @@ class TestIncompleteAnalysis(unittest.TestCase):
     def _network(self, dns_replay, http_replay, smtp_server, trusted_ca):
         # example.com as recorded, DNS and keyservers, except that
         # _dmarc.example.com never answers: the DMARC lookup times out
-        dns_replay("example_com", silent=["_dmarc.example.com TXT"])
+        dns_replay("example_com", "example_com_dkim_more_selectors", silent=["_dmarc.example.com TXT"])
         http_replay("example_com", "keyservers_example_com")
         self.smtp = smtp_server("tls", trusted_ca.server_context("127.0.0.1"))
 
@@ -740,3 +740,21 @@ class TestGPGRow:
         assert "No public key" not in row
         assert "✅" not in row
         assert "not verified" in row.lower()
+
+
+class TestDKIMRow:
+    """The DKIM row against the DNS of real domains, recorded on 2026-10-09."""
+
+    def test_not_found_under_common_selectors_is_not_shown_as_absent(self, dns_replay):
+        """amazon.it publishes none of the 33 common selectors (recorded), and signs its mail all the same."""
+        dns_replay("amazon_it")
+        row = _row(_dkim_report("amazon.it"), "DKIM")
+        assert "Not found under 33 common selectors" in row
+        assert "✅" not in row
+
+    def test_two_keys_of_different_strength_are_both_named(self, dns_replay):
+        """polimi.it: 1024-bit under selector1, 2048-bit under selector2 (recorded)."""
+        dns_replay("polimi_it")
+        row = _row(_dkim_report("polimi.it"), "DKIM")
+        assert "selector1" in row and "1024-bit" in row
+        assert "selector2" in row and "2048-bit" in row

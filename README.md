@@ -308,11 +308,15 @@ too permissive.
 
 DKIM signs outgoing mail with a key published at
 `<selector>._domainkey.<domain>`. The selector is not public, so MailRadar
-tries a list of common ones (`default`, `google`, `selector1`, `selector2`,
-`k1`, `mail` and others) and measures the RSA key size of the first one found.
-An Ed25519 key (`k=ed25519`, RFC 8463) scores like a 2048-bit RSA key. An empty
-`p=` is a revoked key (RFC 6376 §3.6.1): MailRadar moves on to the next
-selector, and reports the revocation if no active key is found.
+tries 33 common ones — Google (`google`), Microsoft 365 (`selector1`,
+`selector2`), Proton (`protonmail`, `protonmail2`, `protonmail3`), Fastmail
+(`fm1`-`fm3`), Amazon SES, Zendesk, Mailchimp, SendGrid, Mimecast, Postmark,
+`default`, `mail`, `dkim` and others — and asks for every one of them: a
+receiver verifies a signature made with any published key, so the weakest key
+found is the one measured, and the table names them all (`selector1: 1024-bit
+RSA | selector2: 2048-bit RSA`). An Ed25519 key (`k=ed25519`, RFC 8463) scores
+like a 2048-bit RSA key. An empty `p=` is a revoked key (RFC 6376 §3.6.1): it
+does not count, and the revocation is reported if no active key is found.
 
 | Key size | Points |
 |----------|--------|
@@ -320,8 +324,9 @@ selector, and reports the revocation if no active key is found.
 | 1024 bits | 10 (upgrade recommended) |
 | Smaller | 3 (upgrade immediately) |
 
-"Not found" does not always mean DKIM is missing: the domain may use a
-selector outside the list.
+"Not found under 33 common selectors" is not "DKIM missing": Amazon,
+Proofpoint customers and many others sign under selectors of their own. The
+`s=` tag of a received message's `DKIM-Signature` header says which.
 
 ### BIMI / VMC (up to 10 points)
 
