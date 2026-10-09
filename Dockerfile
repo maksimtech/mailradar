@@ -11,9 +11,19 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 # System packages, upgraded at build time: a Debian fix reaches the image
 # through a rebuild and nobody has to chase it.
+#
+# `gpg gpg-agent`, not the `gnupg` metapackage. The metapackage pulls in dirmngr,
+# which depends on libldap2, which depends on libsasl2-2 — and cyrus-sasl2 carries
+# CVE-2026-107161 (high) with no fix in trixie, which is what kept Security Posture
+# red (Docker Scout alert #66). dirmngr is gpg's keyserver and WKD client, and
+# nothing here uses it: sender.py runs gpg for --import, --encrypt and --clearsign
+# only, and the public key it imports has already been fetched over HTTP by
+# mailradar.gpg. Measured in this base image: the pair brings 9 packages, the
+# metapackage 21; the three calls work with the pair alone, offline, and
+# tests/docker/inspect.sh checks both in CI.
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends gnupg && \
+    apt-get install -y --no-install-recommends gpg gpg-agent && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

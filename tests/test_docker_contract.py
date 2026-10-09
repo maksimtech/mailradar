@@ -81,3 +81,43 @@ def test_the_licence_label_is_the_one_the_standard_names():
 
     assert 'org.opencontainers.image.licenses="MIT"' in text
     assert "org.opencontainers.image.license=" not in text
+
+
+def _apt_get_installs() -> list[list[str]]:
+    """Every `apt-get install` in the Dockerfile, as the list of packages it names.
+
+    Line continuations are joined first, then each RUN is split on `&&`, so a package on
+    a continued line and an option between `install` and the first name both land where
+    they should. Options are anything starting with `-`; `--no-install-recommends` is one
+    of them and is deliberately not counted as a package.
+    """
+    joined = re.sub(r"\\r?\n", " ", dockerfile())
+    installs = []
+    for line in joined.splitlines():
+        if not line.startswith("RUN "):
+            continue
+        for command in line[len("RUN "):].split("&&"):
+            words = command.split()
+            if words[:2] != ["apt-get", "install"]:
+                continue
+            installs.append([w for w in words[2:] if not w.startswith("-")])
+    return installs
+
+
+def test_gpg_and_gpg_agent_are_installed_and_the_gnupg_metapackage_is_not():
+    """`gnupg` is a metapackage. It pulls in `dirmngr`, which depends on `libldap2`, which
+    depends on `libsasl2-2` — and cyrus-sasl2 carries CVE-2026-107161, high, with no fix in
+    trixie (Docker Scout alert #66, 2026-10-09). None of that is used: `sender.py` runs
+    gpg for `--import`, `--encrypt --trust-model always` and `--clearsign`, and the keys
+    reach it over HTTP from `mailradar.gpg`, never through gpg's own keyserver or WKD
+    code, which is what dirmngr is for. `gpg` and `gpg-agent` cover those three calls on
+    their own, and measured in python:3.12-slim-trixie the pair brings 9 packages where
+    the metapackage brings 21.
+
+    Exactly these two, not "at least": whatever is added here is added to the attack
+    surface of an image that is pulled as `latest`, and should have to say why.
+    """
+    installs = _apt_get_installs()
+
+    assert len(installs) == 1, installs
+    assert set(installs[0]) == {"gpg", "gpg-agent"}, installs[0]

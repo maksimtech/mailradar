@@ -23,6 +23,34 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   CI, and the one `-dev` row is the minor after the last stable one. 3.15 enters the
   classifiers when it is final, not before.
 
+### Security
+
+- **The image installs `gpg` and `gpg-agent`, not the `gnupg` metapackage.** Security
+  Posture on `main` was red for Docker Scout alert #66: CVE-2026-107161, high, in cyrus-sasl2
+  (`libsasl2-2`), with no fix in trixie and nothing to wait for. The library was there for
+  one reason: `gnupg` is a metapackage, and it pulls in `dirmngr`, which depends on
+  `libldap2`, which depends on `libsasl2-2`. dirmngr is gpg's keyserver and WKD client, and
+  nothing in mailradar uses it — `sender.py` runs gpg for `--import`, `--encrypt
+  --trust-model always` and `--clearsign --pinentry-mode loopback`, and the public key it
+  imports has already been fetched over HTTP by `mailradar.gpg`. No `--recv-keys`, no
+  keyserver, no WKD.
+
+  Measured in `python:3.12-slim-trixie`: `gnupg` brings 21 packages, `gpg gpg-agent` 9,
+  none of them libsasl2, libldap or dirmngr. The image goes from 108 installed packages to
+  96 and loses 12.7 MB; `docker scout cves --only-package cyrus-sasl2` finds the one high
+  on the old image and no package at all on the new one. The three gpg calls were run for
+  real in the new image, offline, on a key generated there — generate, export, import into
+  an empty homedir, encrypt, clearsign, verify — and `sender._encrypt_with_gpg` and
+  `sender._sign_with_gpg` themselves were called in it the same way.
+
+  Two cases hold it: `tests/test_docker_contract.py` parses the Dockerfile's `apt-get
+  install` and requires exactly `gpg` and `gpg-agent`, and `tests/docker/inspect.sh`, run
+  on the built image by `docker-build-check.yml`, asks dpkg that `libsasl2-2`, `dirmngr`
+  and `gnupg` are absent and `gpg` and `gpg-agent` present, then runs the flow above and
+  fails the step if any of it does not hold. Until this change inspect.sh only reported;
+  that section judges, because a one-word edit would reopen the finding without anything
+  else in the build changing.
+
 
 ## [2026.43] - 2026-10-08
 

@@ -24,8 +24,9 @@
 # nothing:
 #     docker run --rm -i --entrypoint sh mailradar:build-check - < inspect.sh
 #
-# It reports and does not judge: a red step here would be a broken diagnostic, and
-# what matters is whether the numbers and the record agree.
+# The sections that measure report and do not judge: a red step there would be a
+# broken diagnostic, and what matters is whether the numbers and the record agree.
+# The last section, on gpg, does judge — it holds a decision, and says why there.
 set -eu
 
 echo "── build tooling, which the Dockerfile removes ──"
@@ -68,3 +69,79 @@ done
 echo
 echo "── size of the installed set ──"
 printf '  %s packages\n' "$(dpkg-query -f '.\n' -W | wc -l)"
+
+# ── gpg without dirmngr ──
+#
+# Everything above reports. This section judges, because it holds a decision rather
+# than a measurement: the Dockerfile installs `gpg gpg-agent` and not the `gnupg`
+# metapackage, which pulls in dirmngr → libldap2 → libsasl2-2, and cyrus-sasl2
+# carries CVE-2026-107161 (high, no fix in trixie; Docker Scout alert #66). Nothing
+# in mailradar needs dirmngr: sender.py calls gpg for --import, --encrypt and
+# --clearsign, with the public key already fetched over HTTP by mailradar.gpg.
+# Putting `gnupg` back would be a one-word edit that reopens the finding without
+# anything else in the build changing, so the image is asked directly.
+#
+# Then the three calls sender.py makes are run for real, offline, on a key made
+# here: an image with gpg but without gpg-agent, or with an agent that cannot be
+# started, would pass the package check and fail the user.
+echo
+echo "── gpg without dirmngr ──"
+failed=0
+for pkg in libsasl2-2 dirmngr gnupg; do
+    if dpkg-query -W -f '${Status}\n' "$pkg" 2>/dev/null | grep -q '^install ok installed$'; then
+        echo "  <- $pkg IS INSTALLED, and should not be"
+        failed=1
+    else
+        echo "  $pkg absent, as intended"
+    fi
+done
+for pkg in gpg gpg-agent; do
+    if dpkg-query -W -f '${Status}\n' "$pkg" 2>/dev/null | grep -q '^install ok installed$'; then
+        echo "  $pkg $(dpkg-query -W -f '${Version}' "$pkg") present"
+    else
+        echo "  <- $pkg IS MISSING, and sender.py needs it"
+        failed=1
+    fi
+done
+
+# The flow of sender.py, without a network: a key generated in one homedir, exported,
+# imported into an empty one, used to encrypt with --trust-model always (a key just
+# fetched is not trusted), then clearsign through the loopback pinentry.
+keys=$(mktemp -d /tmp/mr-keys.XXXXXX)
+ring=$(mktemp -d /tmp/mr-ring.XXXXXX)
+gpg_flow() {
+    gpg --batch --homedir "$keys" --passphrase 'probe' --pinentry-mode loopback \
+        --quick-gen-key 'Probe <probe@example.invalid>' default default never \
+        || { echo "  <- key generation failed"; return 1; }
+    gpg --batch --homedir "$keys" --armor --export probe@example.invalid > "$keys/pub.asc" \
+        || { echo "  <- export failed"; return 1; }
+    gpg --batch --yes --homedir "$ring" --import < "$keys/pub.asc" \
+        || { echo "  <- import into an empty homedir failed"; return 1; }
+    printf 'report\n' | gpg --batch --yes --homedir "$ring" --trust-model always --armor \
+        --encrypt --recipient probe@example.invalid > "$ring/msg.asc" \
+        || { echo "  <- encrypt failed"; return 1; }
+    grep -q 'BEGIN PGP MESSAGE' "$ring/msg.asc" || { echo "  <- encrypt produced no PGP message"; return 1; }
+    printf 'probe\nreport\n' | gpg --batch --yes --armor --homedir "$keys" --clearsign \
+        --local-user probe@example.invalid --passphrase-fd 0 --pinentry-mode loopback > "$keys/signed.asc" \
+        || { echo "  <- clearsign failed"; return 1; }
+    grep -q 'BEGIN PGP SIGNED MESSAGE' "$keys/signed.asc" || { echo "  <- clearsign produced no signed message"; return 1; }
+    gpg --batch --homedir "$keys" --verify "$keys/signed.asc" \
+        || { echo "  <- the clearsigned message does not verify"; return 1; }
+    return 0
+}
+if gpg_flow > "$ring/flow.log" 2>&1; then
+    echo "  generate, export, import, encrypt, clearsign, verify: all ok"
+else
+    echo "  <- the gpg flow sender.py relies on FAILED:"
+    sed 's/^/     /' "$ring/flow.log"
+    failed=1
+fi
+gpgconf --homedir "$keys" --kill all 2>/dev/null || true
+gpgconf --homedir "$ring" --kill all 2>/dev/null || true
+rm -rf "$keys" "$ring"
+
+if [ "$failed" -ne 0 ]; then
+    echo "  gpg section: FAILED"
+    exit 1
+fi
+echo "  gpg section: ok"
