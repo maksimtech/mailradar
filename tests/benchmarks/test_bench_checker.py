@@ -17,13 +17,19 @@ from mailradar.checker import (
 from tests.replay import recorded_txt
 
 
+class _TXT:
+    """One TXT rdata as dnspython hands it over: the `strings` attribute is all
+    _query_txt reads. A plain object, so the benchmark times mailradar and not
+    the construction of a MagicMock per answer."""
+
+    __slots__ = ("strings",)
+
+    def __init__(self, text: str):
+        self.strings = [text.encode()]
+
+
 def make_txt_answer(strings):
-    answers = []
-    for s in strings:
-        rdata = MagicMock()
-        rdata.strings = [s.encode()]
-        answers.append(rdata)
-    return answers
+    return [_TXT(s) for s in strings]
 
 
 DMARC_TXT = "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:rua@example.com; ruf=mailto:ruf@example.com"
@@ -83,7 +89,9 @@ def test_bench_full_analysis(benchmark):
     def mock_resolve(name, rtype):
         if "_dmarc" in name:
             return make_txt_answer([DMARC_TXT])
-        elif "_domainkey" in name:
+        elif name == "selector1._domainkey.example.com":
+            # One published selector, as a real domain has; the other 32 of
+            # DKIM_SELECTORS are NXDOMAIN, which is what check_dkim meets in the field
             return make_txt_answer([DKIM_TXT])
         elif name.startswith("example.com"):
             return make_txt_answer([SPF_TXT])
