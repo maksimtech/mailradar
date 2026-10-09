@@ -1,0 +1,110 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "httpx 0.28.1 (Client, HTTP/1.1) straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+    "by": "what lookup_gpg(\"gmail.com\") asks from 2026-10-09 on: keys.openpgp.org VKS by-email for the five contact addresses (all answered 429, the by-email limit is 1/min with a burst of 50 and the day's runs had spent it), keyserver.ubuntu.com HKP index for the five, and the get of the one key whose uid is exactly security@gmail.com",
+    "requested": [
+      "GET https://keys.openpgp.org/vks/v1/by-email/security@gmail.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40gmail.com&options=mr",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x6902757CCE90C14EA12A5A5E44789306437E75D5&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/dpo@gmail.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=dpo%40gmail.com&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/admin@gmail.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=admin%40gmail.com&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/postmaster@gmail.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=postmaster%40gmail.com&options=mr",
+      "GET https://keys.openpgp.org/vks/v1/by-email/privacy@gmail.com",
+      "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=privacy%40gmail.com&options=mr"
+    ]
+  },
+  "responses": [
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/security@gmail.com",
+      "status": 404,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "body": "No key found for email address security@gmail.com"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40gmail.com&options=mr",
+      "status": 200,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "info:1:4\npub:B974E0B7FEC642C92398C48BF362969EA55DB311:1:4096:1539239777::\npub:CAF6CFF9351925A6D7D932ABD0BEAD6D19EF2462:1:3072:1658869081::\npub:6902757CCE90C14EA12A5A5E44789306437E75D5:1:2048:1525948574::\nuid:securityencyryption <security@gmail.com>:1525948574::\npub:49C6C7B8E33C38DDC0C6FE01B0BE16BC8F0A454A:1:2048:1343589017::\nuid:Eli Geminder <eli.geminder+security@gmail.com>:1343589017::\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x6902757CCE90C14EA12A5A5E44789306437E75D5&options=mr",
+      "status": 200,
+      "headers": {
+        "content-type": "application/pgp-keys"
+      },
+      "body": "-----BEGIN PGP PUBLIC KEY BLOCK-----\nComment: Hostname: \nVersion: Hockeypuck 2.2\n\nxsBNBFr0IJ4BCADz9b0vhksnaeyGQqfPd3odnljEysVHsbesGweqLrte0d0ue5Oa\nSoFOZzjU6hJFF12oY6yhjcgVjvE2ib9Sr9WrQmkU0Y7KNAQNE56HF7bbmvux4GJ7\nDUozfv4nHLj2NH+8koQYdw8tFTWPsQsTKUHcL3F2/VjqF/gELrcTWLFUdhzDpinG\nwxj7ndNIteLrJsX+2sfZ+Zdin1FijOh2Cb7w+aF/CkTILphcqKzD0lNAsggEJckn\nXlDufyEjQ+VSbixfB24qOW1bs+MyL5FxWoy69zJLFRntH6dwQBqyExYmr7MS8gxw\nyIOyA3VQfwVGcUW4RxdYrApJH9K8OXj7uqYPABEBAAHNKHNlY3VyaXR5ZW5jeXJ5\ncHRpb24gPHNlY3VyaXR5QGdtYWlsLmNvbT7CwHcEEwEIACEFAlr0IJ4CGwMFCwkI\nBwIGFQgJCgsCBBYCAwECHgECF4AACgkQRHiTBkN+ddVJOAf/XRX2hfaY9dUZ7yCJ\n5AfIdvduB802rTNbh32DE6irjk95vTEpj+OikwgRKRYeSyu1vY3MbwjUjOyy4EwL\nwPhPu1hFfNB3s+UCcLFeGwWkfXdWom2mlGPu6NoW2G5Caonk212fq/Rw087xpPRD\nGkQP+otjJjtrBk6AJmK+V79aZRVOQtZ3/MmGyDffF9zt4bCHlbkpTmDKLrQXH00a\nav0gcfAlwO8X/QxOsenE0YXK+rS0YGOUTS/Pj4AoWJlQN2xWucS65SvACShoAZvu\nOHxJ/PAFrVkV/O7vvbOeRhYvANzj2qkDtjrFgzrq0fNOIVV+Fn+bNZmWfxIydli9\nCwoz687ATQRa9CCeAQgAupsy8oeyHIW5nxdS+cQTi3pFfWCq/sahVjEmWOqVf7yw\nJDjBcdaGxhh+guZRDiJBSF9NOQjE2M4X+AHyBXfy9oVaOGiXMG9IIpGz+/kBoHao\nfv2qdVbBr/vWy9mj+WnvOUdpRR5NjtXbWL7W7vkj3xIta60oNrA7MrBInrb7LBC0\n26STWeieED8osBqwg446e8dGUezYYHNiLX3S7M3snJnMcNgSDki1dFkZInYERPcX\nj7hYXA49giPUePz5iJFk5tJL4lK24bj5Cm/zu9AhJ65/H2nK/ePBB3umJjKiMx4o\n4Dg19FMGy9pn3Dn5BRAN0873O835iXq2i5R4OMtSbQARAQABwsBfBBgBCAAJBQJa\n9CCeAhsMAAoJEER4kwZDfnXVCE0H/iCCH3puep2uasarJdclFuAqI/VZoPeYfJ8G\nNaR5npNQNICqZTEGk/LS9psIIN4jUN28foqwoEKHAb7dOejws4fxryussTfVfPJA\nwdvyyWkiSJTJW/QUllq09pDZY/K5yb+lddDRBVUlGtxsrwu0a4smLXld2u/SNj7h\nWCWnCt7kUSdJEoD9Gf4y+8BFZAXSGemZ29f0LeK/Q/luD4QXzIM1Zla17PFbtiKD\nB7XVO2yRDe89I4n2EJVuk9gRGPQysxqz3jLzi9spMEQbTrjtPg3tjjvQ4WLrNXav\nG1/MN1nWw357atuQ34M+k7h2b4HMtzbG/koRN7twUxcp1E4EUa4=\n=I4Sz\n-----END PGP PUBLIC KEY BLOCK-----\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/dpo@gmail.com",
+      "status": 404,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "body": "No key found for email address dpo@gmail.com"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=dpo%40gmail.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/admin@gmail.com",
+      "status": 404,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "body": "No key found for email address admin@gmail.com"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=admin%40gmail.com&options=mr",
+      "status": 200,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "info:1:38\npub:4644450B50F30DE4A303E8C6EAD432F68BF96310:17:2048:1574685816::\nuid:admin <admin@gmail.com>:1574685816::\npub:2CDA471F59A3D231D56D48754B2E353E9AE8F520:1:3072:1642498853::\npub:DADCDD12167C7BB5C6DD51AF212034F81CFE3E90:1:3072:1498468459::\nuid:Thunderadmin <admin@gmail.com>:1498468459::\npub:E6A294AB6C9DC0E523EE7B20EB3B86D94571B0B0:1:2048:1510661021::\nuid:Admin adin <admin@gmail.com>:1510661021::\npub:0A036856F70AE18852D3597243C61E5F8535F6F0:1:2048:1305494403::\nuid:admin <admin@gmail.com>:1305494403::\npub:448AA79CA09C71BE97E90B03E9BDBABCF1DA2341:1:3072:1642506567::\npub:05FED459F856B2A433759CA77B9D5E8EA5BD3022:22:263:1700114779::\nuid:Gokul <Admin@gmail.com>:1700114779:1794810600:\npub:80C59046E671C464A06A4DDF5CFB35A3C0C523B2:1:4096:1459282944::\nuid:admin <admin@gmail.com>:1459282944::\npub:3D7BCAA00E2E17C66A3712C2D6B25718FB6A4B63:1:2048:1540445277::\nuid:niranjan (cns lab) <admin@gmail.com>:1540445277::\npub:F23D5EB91144C76334B2DB376F99D6ADC33795D3:1:1024:1685988714::\npub:CC83D0A765A28D94030784488C7FA66B5FDE1ED3:1:4096:1447084693::\nuid:HTTPS <admin@gmail.com>:1447084693::\npub:E9F5D81FCD9FFEC580BDBE79416EDFDF248206C4:1:3072:1601312726::\nuid:Gabriel Gallo Martines (Keys... kkk) <admin@gmail.com>:1601312726::\npub:FEAC3F26B28552F00E773FE960E50AEA2338BEC4:1:4096:1740905968::\npub:61CF743D984CD5A5001241E81213615181B40765:17:1024:1579077199::\npub:62AB6E725C023EFF8EACEC773EC1CE24871A53D6:1:2048:1393577091::\nuid:nicolas (nicolas) <admin@gmail.com>:1393577091::\npub:ABA7ED416DC8CC0191E7EBCC82A1C217A375B307:1:2048:1410791339::\nuid:Vasya <Admin@gmail.com>:1410791339:1410858000:\npub:856B74DD9570802F90050C1CE7D62F123DF4B907:1:3072:1611064000::\npub:D21A70CCCFD3EC4A69189F3F91A8187580C83A08:1:4096:1635932323::\npub:DCD3BFA073989287203F2A2BB575462024E06828:1:2048:1456972909::\npub:DFD832DF4576C5FA6B13CAB13A9D20435DA0F6A8:1:3072:1731947049::\nuid:pepito <admin@gmail.com>:1731947049:1826555049:\npub:3E241D10984067A2587C5FDA6B77CB908D946FA8:22:263:1716839335::\nuid:admin <admin@gmail.com>:1716839335:1811408400:\npub:AED1D9D35DE0A6DC005A645009896B5D39D8A7E8:1:3072:1713190768::\npub:D117D35D8918D6986CA6DEA873F2E5DF05D8157A:1:2048:1737961607::\nuid:admin <admin@gmail.com>:1737961607:1832529600:\npub:6E72D0AE0524C78B054C116E8059EB1CAEF7972B:1:2048:1517560289::\nuid:admin <admin@gmail.com>:1517560289::\npub:8611EABABA4BE71E8AE07DB37A5CAF90BD5D725B:17:1024:1380672455::\npub:CD7965A86BCC68BD6BFFF3E863BA94025F5C396B:1:3072:1355297825::\nuid:xcash <admin@gmail.com>:1355297825::\npub:AAA61C72BEFB6DFC12774172B9300EFAB80440EB:1:3072:1582302291::\nuid:Open Market <admin@gmail.com>:1582302291::\npub:4AB41E0B904A627E63517345F1B9A307080B8E0C:1:4096:1410793338::\nuid:Onnden <Admin@gmail.com>:1410795033:1442415738:\nuid:Anonymous <Admin@gmail.com>:1410793679:1442415738:\npub:14E35A0E3B52355BC7A5F8E26A4779119E53231C:1:2048:1737532968::\nuid:Admin <admin@gmail.com>:1737532968:1832126400:\npub:4ADFDFFD5BB852BCA4392CB837FC1EE46E65FBFC:1:2048:1393775425::\nuid:nicolas granado (nicolas) <admin@gmail.com>:1393775425::\npub:3FFCD72FD7A055DE66496E7C4ADA96BDF23B871D:1:2048:1489992727::\nuid:Way Chow <admin@gmail.com>:1489992727::\npub:C1FADD3BEC2A3E9750F93A4BEE76C5B07762217D:1:2048:1505809258::\nuid:admin <admin@gmail.com>:1505809258::\npub:9F7D5E2AD01966DA3EEA1E092E9E4E8F40556B1E:1:3072:1593981281::\nuid:admin <admin@gmail.com>:1593981281::\npub:CC5760156B77B9DEE0BB881FA632EDDAF1A00D6E:1:2048:1393575351::\nuid:nicolas (nicolas) <admin@gmail.com>:1393575351::\npub:0EBEF3079054544ABA70D2D758FA4CB809176BDE:1:2048:1463925172::\nuid:admin smith (admin) <admin@gmail.com>:1463925172::\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/postmaster@gmail.com",
+      "status": 404,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "body": "No key found for email address postmaster@gmail.com"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=postmaster%40gmail.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    },
+    {
+      "request": "GET https://keys.openpgp.org/vks/v1/by-email/privacy@gmail.com",
+      "status": 429,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<p><strong>Error 429</strong> Too many requests</p>\n<p>See https://keys.openpgp.org/about/api#rate-limiting</p>\n"
+    },
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=privacy%40gmail.com&options=mr",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8"
+      },
+      "body": "Not Found\n"
+    }
+  ]
+}

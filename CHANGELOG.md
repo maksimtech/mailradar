@@ -12,6 +12,101 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A GPG key is credited only when the keyserver verified the address, and a keyserver that
+  does not answer is not "no key".** Run on ten real domains on 2026-10-09, `check` showed
+  "GPG ✅" for gmail.com, poste.it, polimi.it, github.com and pec.poste.it — none of which
+  publishes a key for its role addresses. Three causes, all in `mailradar.gpg`:
+
+  - the HKP lookup asked `op=get&search=<address>`, and SKS-type servers search by
+    substring or by word: keyserver.ubuntu.com answered `security@gmail.com` with four keys,
+    among them `eli.geminder+security@gmail.com` and one uploaded in 2018 by
+    "securityencyryption", and pgp.mit.edu answered `postmaster@pec.poste.it` with the key of
+    a private person none of whose 72 uids carries the address or the domain (recorded in
+    `tests/fixtures/http/pgp_mit_edu_pec_poste_it.json`). `send` would have encrypted the
+    report to that key. The lookup now asks `op=index` first and takes a key only when one of
+    its uids is exactly the address and the key is not revoked, disabled or expired;
+  - every key counted 5 points, although only keys.openpgp.org publishes an address after
+    its owner answered a verification mail. A key from keyserver.ubuntu.com is now reported
+    with its fingerprint and "address not verified", scores 0, and the law check does not
+    change over it; `found` stays True, so `send` behaves as before;
+  - an HTTP 429 or a timeout was read as "no key". keys.openpgp.org allows one by-email
+    lookup a minute with a burst of 50, and `check` made two requests per address against
+    it (VKS, then the HKP interface of the same host for the same answer): after a few
+    domains every lookup was a 429, the table said "No public key on keyservers" and the
+    report cited GDPR art. 32 for "GPG not available". A keyserver that does not answer is
+    now asked nothing more during the analysis, and if the key was not found elsewhere the
+    row says "Not verified: keyserver did not answer", `GPGResult.error` carries the reason
+    and `law_checker` cites nothing for it. keys.openpgp.org is asked once per address.
+
+  pgp.mit.edu is no longer a default keyserver. That day it took the full 15 s to time out
+  on each of the five contact addresses — 83 s of an 86 s analysis of github.com, poste.it
+  and unicredit.it — answered HTTP 500 at other moments, and the one time it answered in
+  0.6 s it returned the wrong key above. Between two runs an hour apart the score of
+  github.com moved from 46 to 51, poste.it from 28 to 32 and polimi.it from 49 to 54 on its
+  answers alone.
+
+  The cases replay the answers recorded that day on 127.0.0.1: keyserver.ubuntu.com's index
+  and key for security@gmail.com, the five 429s for github.com, security@mozilla.org as a
+  verified key on keys.openpgp.org, pgp.mit.edu's wrong key and its timeouts.
+
+- **DKIM asks for every common selector, 33 of them, and measures the weakest key found.**
+  `check proton.me` said "No DKIM record found with common selectors" and the law check cited
+  GDPR art. 32 for "no DKIM key under the common selectors": proton.me signs under
+  `protonmail` and `protonmail2`, two 2048-bit keys, and none of the 17 selectors tried was
+  one of them. The list gains Proton's three, Fastmail's `fm1`-`fm3`, `amazonses`,
+  `zendesk1`/`zendesk2`, `k2`, `k3`, `pm`, `cm`, `dkim1`, `dkim2` and `smtp`.
+
+  The check used to stop at the first selector with a key. inps.it and polimi.it, both on
+  Microsoft 365, publish a 1024-bit key under `selector1` and a 2048-bit one under
+  `selector2`: the table showed the first and said "upgrade to 2048-bit" about a domain that
+  has the 2048-bit key already. Every selector is now asked for; a receiver verifies a
+  signature made with any published key, so the weakest one is the posture and sets the
+  score, and `DKIMResult.keys` names them all — the table shows `selector1: 1024-bit RSA |
+  selector2: 2048-bit RSA`, the issue says which is weak and what else is there. On the
+  recorded startpage.com this finds a 1024-bit SendGrid key under `s2` beside the 2048-bit
+  `google` one, and the domain's score goes from 79 to 74.
+
+  A key under none of the 33 is "not found", never absent: DNS cannot list selectors, and
+  amazon.it (recorded) signs under selectors of its own. The issue now reads "No DKIM key
+  found under 33 common selectors — a custom selector cannot be ruled out: check the s= tag
+  of a received message's DKIM-Signature header", and the row "Not found under 33 common
+  selectors". The cases replay proton.me, polimi.it, amazon.it, inps.it and startpage.com as
+  recorded from 1.1.1.1 on 2026-10-09. Asking 33 selectors instead of stopping at the first costs
+  DNS round trips, not CPU: the key parse is cached by record, since the same key is often
+  published under several selectors.
+
+- **The law check no longer cites GDPR art. 32 for a DKIM key it did not find.** "no DKIM key
+  under the common selectors" was evidence for the "SPF/DKIM weak" finding, and the report to
+  the domain's owner cited the article over it: for proton.me, whose keys exist under other
+  selectors, and for amazon.it, unicredit.it and poste.it, which sign under selectors of their
+  own. Not measured is not zero. A key that was found and is shorter than 2048 bits is still
+  cited; a key not found under the 33 selectors is reported in the table and the issues, and
+  nothing is cited for it. The case replays amazon.it as recorded on 2026-10-09.
+
+- **The letter `report` writes says what was found, without the empty lines.** Generated for
+  inps.it, which publishes `p=reject`, it told the owner that "anyone can send emails
+  impersonating @inps.it": the GDPR paragraph about a missing or `p=none` DMARC was
+  unconditional. It is now written for `p=none` or no record, a `p=quarantine` domain gets
+  a sentence about what quarantine does not do, and a `p=reject` domain gets neither. DKIM
+  "Current: Not configured" was written for every domain without a key under the common
+  selectors — amazon.it, unicredit.it, poste.it, all of which sign — and for a revoked key:
+  the letter now writes every key found (`Keys found: selector1 1024-bit RSA, selector2
+  2048-bit RSA`), the revocation, or "No key under 33 common selectors — a custom selector
+  cannot be ruled out", and the recommendation for the last case is a key under the
+  selector in use, not a new selector. The Jinja environment trims block lines
+  (`trim_blocks`, `lstrip_blocks`): the sections were separated by two to five empty lines.
+  Both languages; the cases replay inps.it, pec.poste.it and amazon.it as recorded.
+
+- **The Details column cuts with an ellipsis, shows a TLS-RPT address whole when it fits, and
+  the SPF verdict names the redirect it comes from.** github.com's 330-character SPF record
+  ended in `include:spf.protection.outlo` with nothing to say it was cut; proton.me's TLS-RPT
+  address `https://reports.proton.me/reports/smtptls` lost its last letter to a 40-character
+  cut inside a 55-column cell; and gmail.com's issue read "SPF uses ~all" under a record that
+  shows only `redirect=_spf.google.com` — it now reads "SPF uses ~all (softfail) via
+  redirect=_spf.google.com". The cases replay github.com, proton.me and gmail.com as recorded.
+
 
 ## [2026.43.1] - 2026-10-09
 

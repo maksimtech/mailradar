@@ -60,11 +60,17 @@ class SPFResult:
 @dataclass
 class DKIMResult:
     present: bool = False
+    # The selector of the weakest key found: the score measures it, a
+    # receiver verifies a signature made with any published key
     selector: str = ""
     key_bits: int = 0
     # The k= tag: "rsa" (the default) or "ed25519" (RFC 8463)
     key_type: str = "rsa"
     raw: str = ""
+    # Every active key found, selector -> "2048-bit RSA" / "Ed25519"
+    keys: dict[str, str] = field(default_factory=dict)
+    # How many selectors were asked for: "not found" is relative to them
+    tried: int = 0
     score: int = 0
     # Set when a DNS lookup failed: the check then says nothing either way
     error: str = ""
@@ -575,6 +581,7 @@ def check_spf(domain: str) -> SPFResult:
     # RFC 7208 §6.1: with no `all`, redirect= hands the verdict to another
     # record. The chain is finite: a loop would have failed the count above.
     redirected = terms
+    via = ""
     while not result.all_mechanism and (target := _spf_redirect(redirected)):
         record = _spf_record_of(target)
         if record is None:
@@ -583,31 +590,34 @@ def check_spf(domain: str) -> SPFResult:
             return result
         redirected = _spf_terms(record)
         result.all_mechanism = _spf_all(redirected)
+        # The verdict is the target's: the record shown has no `all` of its own
+        via = f" via redirect={target}"
 
-    _apply_spf_verdict(result, terms)
+    _apply_spf_verdict(result, terms, via)
     return result
 
 
-def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]]) -> None:
+def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]], via: str = "") -> None:
     """
     Score and annotate `result` from its `all` mechanism and the record's
     `terms`. No DNS: the lookups, which may change `all_mechanism` through
-    redirect=, are check_spf's and have already been made.
+    redirect=, are check_spf's and have already been made; `via` names the
+    redirect= the `all` came from, if it did.
     """
     if result.all_mechanism == "-all":
         result.permissive = False
         result.score += 20
     elif result.all_mechanism == "~all":
         result.permissive = True
-        result.issues.append("SPF uses ~all (softfail) — consider -all (hardfail)")
+        result.issues.append(f"SPF uses ~all (softfail){via} — consider -all (hardfail)")
         result.score += 10
     elif result.all_mechanism == "+all":
         result.permissive = True
-        result.issues.append("SPF uses +all — any server can send as this domain!")
+        result.issues.append(f"SPF uses +all{via} — any server can send as this domain!")
         result.score += 0
     elif result.all_mechanism == "?all":
         result.permissive = True
-        result.issues.append("SPF uses ?all (neutral) — no enforcement")
+        result.issues.append(f"SPF uses ?all (neutral){via} — no enforcement")
         result.score += 5
     else:
         # RFC 7208 §4.7: no `all` and no redirect= ends in neutral
@@ -633,21 +643,85 @@ def _ed25519_bits(key: str) -> int:
     return 256
 
 
+def _rsa_bits(key_part: str) -> int:
+    """The modulus size of a DER-encoded RSA public key; a length estimate if it does not parse."""
+    import base64
+
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+    from cryptography.hazmat.primitives.serialization import load_der_public_key
+    try:
+        pub = load_der_public_key(base64.b64decode(key_part + "=="))
+        if isinstance(pub, RSAPublicKey):
+            return pub.key_size
+    except Exception:
+        pass
+    # Fallback to length estimate
+    key_len = len(key_part)
+    if key_len > 350:
+        return 2048
+    if key_len > 170:
+        return 1024
+    return 512
+
+
+# The selectors check_dkim asks about when none is given. A selector is the
+# sender's choice and DNS has no way to list them, so this is the set the
+# common providers use: Google, Microsoft 365 (selector1/2), Proton
+# (protonmail*), Fastmail (fm*), Amazon SES, Zendesk, Mailchimp/Mandrill (k*),
+# SendGrid (s*), Mimecast, Campaign Monitor (cm), Postmark (pm). A key under
+# none of them is "not found", never "absent": Amazon, Proofpoint and others
+# sign under selectors of their own.
+DKIM_SELECTORS = [
+    "default", "mail", "email", "dkim", "google",
+    "selector1", "selector2", "k1", "k2", "k3", "s1", "s2",
+    "protonmail", "protonmail2", "protonmail3", "pm", "fm1", "fm2", "fm3",
+    "amazonses", "zendesk1", "zendesk2",
+    "mimecast", "mandrill", "sendgrid", "mailchimp", "cm", "dkim1", "dkim2", "smtp",
+    "20230601", "20240101", "20250324",
+]
+
+
+@functools.lru_cache(maxsize=256)
+def _dkim_key(record: str) -> tuple[str, int] | None:
+    """(key type, bits) of a DKIM key record; None when p= is empty (RFC 6376 §3.6.1: revoked).
+
+    Cached by record: the DER parse is the costly part, and the same key is
+    often published under several selectors (each a CNAME to the provider's).
+    """
+    tags = _parse_tags(record)
+    key_part = "".join(tags.get("p", "").split())
+    if "p" in tags and not key_part:
+        return None
+    if tags.get("k", "rsa").lower() == "ed25519":
+        return "ed25519", _ed25519_bits(key_part)
+    return "rsa", _rsa_bits(key_part) if "p" in tags else 0
+
+
+def _describe_key(key_type: str, bits: int) -> str:
+    return "Ed25519" if key_type == "ed25519" else f"{bits}-bit RSA"
+
+
+def _key_strength(key_type: str, bits: int) -> int:
+    """A rank for 'weakest key': a valid Ed25519 key is as strong as RSA 2048 (RFC 8463), a malformed one is nothing."""
+    if key_type == "ed25519":
+        return 2048 if bits else 0
+    return bits
+
+
 @_unless_dns_fails("DKIM", DKIMResult)
 def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
+    """
+    The DKIM keys published under `selectors` (the common ones by default).
+    Every selector is asked for, because a receiver verifies a signature made
+    with any published key: the weakest one is the posture, and the result
+    names them all.
+    """
     result = DKIMResult()
-
-    # Common selectors to try
-    default_selectors = [
-        "default", "mail", "email", "dkim", "google",
-        "20250324", "20230601", "20240101",
-        "selector1", "selector2", "k1", "s1", "s2",
-        "mimecast", "mandrill", "sendgrid", "mailchimp",
-    ]
-
-    selectors_to_try = selectors or default_selectors
+    selectors_to_try = selectors or DKIM_SELECTORS
+    result.tried = len(selectors_to_try)
     failed: DNSLookupError | None = None
     revoked: list[str] = []
+    keys: list[tuple[str, str, int, str]] = []  # selector, type, bits, record
 
     for selector in selectors_to_try:
         try:
@@ -658,71 +732,58 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
             continue
         for record in records:
             if "v=DKIM1" in record or "p=" in record:
-                tags = _parse_tags(record)
-                key_part = "".join(tags.get("p", "").split())
-                if "p" in tags and not key_part:
-                    # RFC 6376 §3.6.1: an empty p= revokes the key; after a
-                    # rotation the active one is on another selector
+                key = _dkim_key(record)
+                if key is None:
+                    # After a rotation the active key is on another selector
                     revoked.append(selector)
-                    result.selector = result.selector or selector
-                    continue
-
-                result.present = True
-                result.selector = selector
-                result.raw = record
-
-                if tags.get("k", "rsa").lower() == "ed25519":
-                    result.key_type = "ed25519"
-                    result.key_bits = _ed25519_bits(key_part)
-                # Extract key bits using cryptography
-                elif "p" in tags:
-                    try:
-                        import base64
-
-                        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-                        from cryptography.hazmat.primitives.serialization import load_der_public_key
-                        der = base64.b64decode(key_part + "==")
-                        pub = load_der_public_key(der)
-                        if isinstance(pub, RSAPublicKey):
-                            result.key_bits = pub.key_size
-                    except Exception:
-                        # Fallback to length estimate
-                        key_len = len(key_part)
-                        if key_len > 350:
-                            result.key_bits = 2048
-                        elif key_len > 170:
-                            result.key_bits = 1024
-                        else:
-                            result.key_bits = 512
-
-                if result.key_type == "ed25519":
-                    # RFC 8463: 256 bits of elliptic curve, stronger than RSA 2048
-                    if result.key_bits:
-                        result.score += 15
-                    else:
-                        result.issues.append("DKIM Ed25519 key is malformed — signatures cannot be verified")
-                elif result.key_bits >= 2048:
-                    result.score += 15
-                elif result.key_bits >= 1024:
-                    result.score += 10
-                    result.issues.append("DKIM key is 1024-bit — upgrade to 2048-bit recommended")
                 else:
-                    result.score += 3
-                    result.issues.append("DKIM key is weak — upgrade to 2048-bit immediately")
+                    keys.append((selector, key[0], key[1], record))
+                break
 
-                return result
+    if keys:
+        selector, key_type, bits, record = min(keys, key=lambda key: _key_strength(key[1], key[2]))
+        result.present = True
+        result.selector = selector
+        result.key_type = key_type
+        result.key_bits = bits
+        result.raw = record
+        result.keys = {name: _describe_key(kind, size) for name, kind, size, _ in keys}
+        others = ", ".join(f"{name} {description}" for name, description in result.keys.items())
+        found = f" (keys found: {others})" if len(result.keys) > 1 else ""
 
-    if not result.present and failed:
+        if key_type == "ed25519":
+            # RFC 8463: 256 bits of elliptic curve, stronger than RSA 2048
+            if bits:
+                result.score += 15
+            else:
+                result.issues.append(
+                    f"DKIM Ed25519 key under {selector} is malformed — signatures cannot be verified{found}"
+                )
+        elif bits >= 2048:
+            result.score += 15
+        elif bits >= 1024:
+            result.score += 10
+            result.issues.append(f"DKIM key under {selector} is 1024-bit — upgrade to 2048-bit recommended{found}")
+        else:
+            result.score += 3
+            result.issues.append(f"DKIM key under {selector} is weak — upgrade to 2048-bit immediately{found}")
+        return result
+
+    if failed:
         raise failed
-    if not result.present and revoked:
+    if revoked:
         # Some domains revoke every name at once (example.com answers p= for
         # all of them): the first is enough to say it
+        result.selector = revoked[0]
         more = f" and {len(revoked) - 1} more" if len(revoked) > 1 else ""
         result.issues.append(
             f"DKIM key revoked (empty p=) on selector {revoked[0]}{more} — no active key found"
         )
-    elif not result.present:
-        result.issues.append("No DKIM record found with common selectors")
+    else:
+        result.issues.append(
+            f"No DKIM key found under {result.tried} common selectors — a custom selector cannot be ruled out: "
+            "check the s= tag of a received message's DKIM-Signature header"
+        )
 
     return result
 

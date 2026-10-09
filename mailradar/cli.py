@@ -4,6 +4,7 @@ MailRadar — CLI interface.
 
 import contextlib
 import sys
+from urllib.parse import urlsplit
 
 import typer
 from rich import box
@@ -143,6 +144,14 @@ def _bool_icon(value: bool) -> str:
 # A check whose DNS lookup failed is neither configured nor missing
 _UNVERIFIED = "[yellow]Not verified: DNS lookup failed[/yellow]"
 
+# The Details column
+_DETAILS_WIDTH = 55
+
+
+def _fit(text: str, width: int = _DETAILS_WIDTH) -> str:
+    """`text` cut to `width` with an ellipsis, so a cut is visible: 'include:spf.protection.outlo' was not."""
+    return text if len(text) <= width else text[:width - 1] + "…"
+
 
 def _unverified(report: DomainReport) -> list[str]:
     """The DNS lookups that failed, i.e. what the report cannot vouch for."""
@@ -166,7 +175,7 @@ def _print_report(report: DomainReport) -> None:
     table = Table(box=box.ROUNDED, show_header=True, header_style="bold cyan")
     table.add_column("Check", style="bold", width=12)
     table.add_column("Status", width=6)
-    table.add_column("Details", width=55)
+    table.add_column("Details", width=_DETAILS_WIDTH)
     table.add_column("Score", width=8, justify="right")
 
     # DMARC row
@@ -192,7 +201,7 @@ def _print_report(report: DomainReport) -> None:
 
     # SPF row
     s = report.spf
-    spf_detail = escape(s.raw[:55]) if s.present else (_UNVERIFIED if s.error else "[red]Not configured[/red]")
+    spf_detail = escape(_fit(s.raw)) if s.present else (_UNVERIFIED if s.error else "[red]Not configured[/red]")
     spf_ok = s.present and not s.permissive and not s.permerror
     spf_icon = "✅" if spf_ok else ("⚠️ " if s.present or s.error else "❌")
     table.add_row("SPF", spf_icon, spf_detail, f"[{_score_color(s.score)}]{s.score}[/{_score_color(s.score)}]")
@@ -200,7 +209,10 @@ def _print_report(report: DomainReport) -> None:
     # DKIM row
     k = report.dkim
     dkim_detail = ""
-    if k.present:
+    if k.present and len(k.keys) > 1:
+        # Every active key, the weakest first: it is the one the score measures
+        dkim_detail = " | ".join(f"{escape(selector)}: {escape(key)}" for selector, key in k.keys.items())
+    elif k.present:
         key = "Ed25519" if k.key_type == "ed25519" else f"{k.key_bits}-bit RSA"
         dkim_detail = f"selector: {escape(k.selector)} | {key}"
     elif k.error:
@@ -208,6 +220,9 @@ def _print_report(report: DomainReport) -> None:
     elif k.selector:
         # Found, but revoked (empty p=): there is no key to sign with
         dkim_detail = f"[red]selector: {escape(k.selector)} | key revoked[/red]"
+    elif k.tried:
+        # A selector is the sender's choice: not found is not absent
+        dkim_detail = f"[red]Not found under {k.tried} common selectors[/red]"
     else:
         dkim_detail = "[red]Not found (tried common selectors)[/red]"
     dkim_icon = "✅" if k.present else ("⚠️ " if k.error else "❌")
@@ -234,7 +249,7 @@ def _print_report(report: DomainReport) -> None:
     # TLS-RPT row
     t = report.tls_rpt
     tls_detail = (
-        f"rua: {escape(t.rua[:40])}" if t.present
+        f"rua: {escape(_fit(t.rua, _DETAILS_WIDTH - len('rua: ')))}" if t.present
         else (_UNVERIFIED if t.error else "[dim]Not configured[/dim]")
     )
     tls_icon = "✅" if t.present else ("⚠️ " if t.error else "❌")
@@ -242,11 +257,20 @@ def _print_report(report: DomainReport) -> None:
 
     # GPG row
     g = report.gpg
-    gpg_detail = (
-        f"uid: {escape(g.uid)} | {escape(g.keyserver)}" if g.found
-        else "[dim]No public key on keyservers[/dim]"
-    )
-    gpg_icon = "✅" if g.found else "❌"
+    keyserver = escape(urlsplit(g.keyserver or "").hostname or g.keyserver or "")
+    if g.found and g.verified:
+        gpg_detail = f"uid: {escape(g.uid)} | {keyserver}"
+        gpg_icon = "✅"
+    elif g.found:
+        # Anyone can upload a key under any address on this keyserver
+        gpg_detail = f"uid: {escape(g.uid)} | {keyserver} [yellow]— address not verified[/yellow]"
+        gpg_icon = "⚠️ "
+    elif g.error:
+        gpg_detail = "[yellow]Not verified: keyserver did not answer[/yellow]"
+        gpg_icon = "⚠️ "
+    else:
+        gpg_detail = "[dim]No public key on keyservers[/dim]"
+        gpg_icon = "❌"
     table.add_row("GPG", gpg_icon, gpg_detail, f"[{_score_color(g.score)}]{g.score}[/{_score_color(g.score)}]")
 
     console.print(table)

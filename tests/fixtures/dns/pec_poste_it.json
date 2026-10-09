@@ -1,0 +1,61 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+    "by": "check_dmarc and check_spf on \"pec.poste.it\"",
+    "queried": [
+      "_dmarc.pec.poste.it. TXT",
+      "_dmarc.poste.it. TXT",
+      "pec.poste.it. TXT",
+      "postecert.it. TXT"
+    ]
+  },
+  "responses": [
+    [
+      "opcode QUERY",
+      "rcode NXDOMAIN",
+      "flags QR RD RA",
+      ";QUESTION",
+      "_dmarc.pec.poste.it. IN TXT",
+      ";ANSWER",
+      ";AUTHORITY",
+      "poste.it. 3600 IN SOA dns4.poste.it. postaff.poste.it. 2026100810 7200 3600 604800 86400",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "_dmarc.poste.it. IN TXT",
+      ";ANSWER",
+      "_dmarc.poste.it. 300 IN TXT \"v=DMARC1; p=none; pct=100; rua=mailto:DMARC_rua@poste.it; ruf=mailto:DMARC_ruf@poste.it; fo=1\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "pec.poste.it. IN TXT",
+      ";ANSWER",
+      "pec.poste.it. 3600 IN TXT \"v=spf1 include:postecert.it -all\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "postecert.it. IN TXT",
+      ";ANSWER",
+      "postecert.it. 85920 IN TXT \"_globalsign-domain-verification=WkFxPt1NRukChj8iEIWwOkdJD5jwbjpldBLzQ4uLbC\"",
+      "postecert.it. 85920 IN TXT \"v=spf1 ip4:62.241.5.115 ip4:62.241.5.7 ip4:62.241.5.14 ip4:62.241.5.243 ip4:62.241.5.244 ip4:62.241.5.249 ip4:62.241.5.222 ip4:62.241.5.216 ip4:62.241.5.220 ip4:62.241.5.230 ip4:62.241.5.233 ip4:62.241.5.251 ip4:62.241.5.252 -all\"",
+      "postecert.it. 85920 IN TXT \"_globalsign-domain-verification=-yx5EQphqw_1wR_COAbQDIDrKTEp8pRjnIoqBvWfLw\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ]
+  ]
+}

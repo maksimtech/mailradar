@@ -37,45 +37,51 @@ SPF — ✅ Properly configured
 {% if dkim_issues %}
 DKIM — ⚠️  Action required
 {% if not dkim_present %}
-  Current:     Not configured
-  Recommended: Configure a DKIM selector with RSA 2048-bit key
+  Current:     {{ dkim_current }}
+  Recommended: Publish an RSA 2048-bit (or Ed25519) key under the selector in use
 {% else %}
-  Current:     Selector {{ dkim_selector }} | {{ dkim_key }}
+  Current:     {{ dkim_current }}
   Recommended: Upgrade to RSA 2048-bit key
 {% endif %}
   Reason: {{ dkim_issues | join(', ') }}
 {% else %}
 DKIM — ✅ Properly configured
-  Selector: {{ dkim_selector }} | {{ dkim_key }}
+  {{ dkim_current }}
 {% endif %}
 
 {% if bimi_issues %}
 BIMI/VMC — ℹ️  Improvement recommended
-  Current:     {% if bimi_present %}Present but with errors{% else %}Not configured{% endif %}
+  Current:     {{ bimi_current }}
   Recommended: v=BIMI1; l=https://{{ domain }}/logo.svg; a=https://{{ domain }}/vmc.pem
   Note: BIMI requires a Verified Mark Certificate (VMC) from DigiCert or Entrust
-{% endif %}
 
+{% endif %}
 {% if mta_sts_issues %}
 MTA-STS — ℹ️  Improvement recommended
-  Current:     {% if mta_sts_present %}Present, mode: {{ mta_sts_mode or "unknown" }}{% else %}Not configured{% endif %}
+  Current:     {{ mta_sts_current }}
   Recommended: Configure MTA-STS policy in enforce mode
-{% endif %}
 
+{% endif %}
 {% if tls_rpt_issues %}
 TLS-RPT — ℹ️  Improvement recommended
   Current:     Not configured
   Recommended: v=TLSRPTv1; rua=mailto:tls-rpt@{{ domain }}
-{% endif %}
 
+{% endif %}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 GDPR RELEVANCE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+{% if not dmarc_present or dmarc_policy == "none" %}
 A missing or p=none DMARC configuration provides no protection against domain
 spoofing. Anyone can send emails impersonating @{{ domain }} without recipient
 mail systems rejecting them.
 
+{% elif dmarc_policy == "quarantine" %}
+A p=quarantine DMARC policy asks recipients to treat unauthenticated mail sent
+as @{{ domain }} as suspicious, not to refuse it: with p=reject it is rejected.
+
+{% endif %}
 Under Article 32 of Regulation (EU) 2016/679 (GDPR), data controllers are
 required to implement appropriate technical measures to ensure the security
 of personal data. An incorrectly configured email posture constitutes a

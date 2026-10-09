@@ -95,3 +95,55 @@ class TestMTASTSSection:
     def test_italian_report_does_not_say_not_configured(self):
         text = generate_report(_mta_sts_in_testing(), lang="it")
         assert "Non configurato" not in _section(text, "MTA-STS —")
+
+
+def _analysed(domain: str) -> DomainReport:
+    """A report whose DMARC, SPF and DKIM are the checks' results on the DNS the test replays (no GPG, no HTTP)."""
+    from mailradar.checker import check_dkim, check_dmarc, check_spf
+    report = make_report(domain=domain)
+    report.dmarc = check_dmarc(domain)
+    report.spf = check_spf(domain)
+    report.dkim = check_dkim(domain)
+    return report
+
+
+class TestReportSaysWhatWasFound:
+    """The letter goes to the domain's owner: real DNS, recorded on 2026-10-09 (tests/replay.py)."""
+
+    def test_no_spoofing_paragraph_for_a_domain_with_p_reject(self, dns_replay):
+        """inps.it publishes p=reject (recorded); the letter told it that anyone can impersonate @inps.it."""
+        dns_replay("inps_it")
+        report = _analysed("inps.it")
+        assert "p=none" not in generate_report(report, lang="it").split("RILEVANZA GDPR")[1]
+        assert "p=none" not in generate_report(report, lang="en").split("GDPR RELEVANCE")[1]
+
+    def test_spoofing_paragraph_stays_for_p_none(self, dns_replay):
+        """pec.poste.it inherits p=none from poste.it (recorded)."""
+        dns_replay("pec_poste_it", "pec_poste_it_dkim_selectors")
+        report = _analysed("pec.poste.it")
+        assert "p=none" in generate_report(report, lang="it").split("RILEVANZA GDPR")[1]
+        assert "p=none" in generate_report(report, lang="en").split("GDPR RELEVANCE")[1]
+
+    def test_dkim_not_found_is_not_written_as_not_configured(self, dns_replay):
+        """amazon.it signs under selectors of its own (recorded): none of the 33 common ones answers."""
+        dns_replay("amazon_it")
+        report = _analysed("amazon.it")
+        assert "Non configurato" not in _section(generate_report(report, lang="it"), "DKIM —")
+        assert "Not configured" not in _section(generate_report(report, lang="en"), "DKIM —")
+        assert "33" in _section(generate_report(report, lang="en"), "DKIM —")
+
+    def test_every_dkim_key_found_is_named(self, dns_replay):
+        """inps.it: 1024-bit under selector1, 2048-bit under selector2 (recorded)."""
+        dns_replay("inps_it")
+        report = _analysed("inps.it")
+        for lang in ("it", "en"):
+            section = _section(generate_report(report, lang=lang), "DKIM —")
+            assert "selector1" in section and "1024" in section
+            assert "selector2" in section and "2048" in section
+
+    def test_no_run_of_blank_lines(self, dns_replay):
+        """Template blocks left two to five empty lines between sections."""
+        dns_replay("inps_it")
+        report = _analysed("inps.it")
+        for lang in ("it", "en"):
+            assert "\n\n\n" not in generate_report(report, lang=lang)

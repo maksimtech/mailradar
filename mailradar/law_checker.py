@@ -69,10 +69,10 @@ def findings_of(report) -> dict[str, list[str]]:
         weak.append("SPF permerror: receivers apply no SPF")
     elif report.spf.permissive:
         weak.append(f"SPF {report.spf.all_mechanism or 'permissivo'}")
-    if not report.dkim.present:
-        if not report.dkim.error:
-            weak.append("no DKIM key under the common selectors")
-    elif report.dkim.key_type == "rsa" and report.dkim.key_bits < DKIM_MIN_BITS:
+    # A key under none of the common selectors is not found, not absent: DNS
+    # cannot list selectors, and amazon.it signs under its own. Only a key
+    # that was found, and is short, is a weakness worth citing.
+    if report.dkim.present and report.dkim.key_type == "rsa" and report.dkim.key_bits < DKIM_MIN_BITS:
         weak.append(f"DKIM {report.dkim.key_bits} bit")
     if weak:
         found["spf_dkim_weak"] = weak
@@ -83,7 +83,8 @@ def findings_of(report) -> dict[str, list[str]]:
     elif report.mta_sts.mode != "enforce":
         found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce"]
 
-    if not report.gpg.found:
+    # A keyserver that did not answer (rate limit, timeout) proved nothing
+    if not report.gpg.found and not report.gpg.error:
         found["gpg_missing"] = ["no public key on the keyservers"]
 
     return {finding: found[finding] for finding in FINDING_ARTICLES if finding in found}

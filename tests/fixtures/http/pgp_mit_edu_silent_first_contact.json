@@ -1,0 +1,12 @@
+{
+  "_derived": {
+    "from": "pgp_mit_edu_timeout.json",
+    "changed": "the recorded ReadTimeout of the index for postmaster@pec.poste.it is filed under the index for security@pec.poste.it, the first address lookup_gpg asks about: what the test needs is a keyserver that does not answer the first question, so that it can check nobody asks it the next four"
+  },
+  "responses": [
+    {
+      "request": "GET https://pgp.mit.edu/pks/lookup?op=index&search=security%40pec.poste.it&options=mr",
+      "error": "ReadTimeout after 15.4 s"
+    }
+  ]
+}

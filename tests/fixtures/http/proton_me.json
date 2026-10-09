@@ -1,0 +1,20 @@
+{
+  "_recorded": {
+    "date": "2026-10-09",
+    "how": "httpx 0.28.1 straight to the service, no redirects followed; stored: status, Content-Type, Location and body; the other headers are left out",
+    "by": "check_dmarc, check_spf, check_bimi, check_mta_sts and check_tls_rpt on \"proton.me\", plus a TXT query for each of the 33 DKIM selectors check_dkim tries from 2026-10-09 on",
+    "requested": [
+      "GET https://mta-sts.proton.me/.well-known/mta-sts.txt"
+    ]
+  },
+  "responses": [
+    {
+      "request": "GET https://mta-sts.proton.me/.well-known/mta-sts.txt",
+      "status": 200,
+      "headers": {
+        "content-type": "text/plain; charset=UTF-8"
+      },
+      "body": "version: STSv1\nmode: enforce\nmx: mail.protonmail.ch\nmx: mailsec.protonmail.ch\nmax_age: 604800"
+    }
+  ]
+}

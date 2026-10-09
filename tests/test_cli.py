@@ -627,7 +627,7 @@ class TestReportTableRows(unittest.TestCase):
 
     def test_dkim_revoked_on_every_selector_is_said_briefly_and_honestly(self):
         """example.com publishes an empty p= under every selector: no list of 17 names, and not 'Not found'."""
-        self.dns_replay("example_com")
+        self.dns_replay("example_com", "example_com_dkim_more_selectors")
         report = _dkim_report("example.com")
         issue = next(i for i in report.dkim.issues if "revoked" in i)
         self.assertNotIn("mailchimp", issue)
@@ -644,8 +644,8 @@ class TestIncompleteAnalysis(unittest.TestCase):
     def _network(self, dns_replay, http_replay, smtp_server, trusted_ca):
         # example.com as recorded, DNS and keyservers, except that
         # _dmarc.example.com never answers: the DMARC lookup times out
-        dns_replay("example_com", silent=["_dmarc.example.com TXT"])
-        http_replay("example_com")
+        dns_replay("example_com", "example_com_dkim_more_selectors", silent=["_dmarc.example.com TXT"])
+        http_replay("example_com", "keyservers_example_com")
         self.smtp = smtp_server("tls", trusted_ca.server_context("127.0.0.1"))
 
     def setUp(self):
@@ -704,3 +704,77 @@ class TestModuleEntryPoint(unittest.TestCase):
         self.assertIn(cm.exception.code, (0, None))
         for command in ("check", "batch", "report", "send", "discover"):
             self.assertIn(command, out.getvalue(), f"command {command!r} missing from the __main__ block's app")
+
+
+def _row(report: DomainReport, check: str) -> str:
+    """The table row of `check`, its continuation lines (a wrapped cell) joined to it."""
+    lines = _table_lines(report)
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"│ {check}"))
+    row = lines[start]
+    for line in lines[start + 1:]:
+        if not line.startswith("│  "):
+            break
+        row += " " + line
+    return row
+
+
+class TestGPGRow:
+    """The GPG row must not claim more than the keyservers said (tests/replay.py answers)."""
+
+    def test_a_key_the_keyserver_did_not_verify_is_not_a_tick(self, http_replay):
+        """keyserver.ubuntu.com's key for security@gmail.com was uploaded by 'securityencyryption' (recorded)."""
+        from mailradar.gpg import lookup_gpg
+        http_replay("keyservers_gmail_com")
+        report = DomainReport(domain="gmail.com", gpg=lookup_gpg("gmail.com"))
+        row = _row(report, "GPG")
+        assert "✅" not in row
+        assert "security@gmail.com" in row
+        assert "not verified" in row.lower()
+
+    def test_a_keyserver_that_did_not_answer_is_not_shown_as_no_key(self, http_replay):
+        """keys.openpgp.org answered 429 for every contact of github.com (recorded)."""
+        from mailradar.gpg import lookup_gpg
+        http_replay("keyservers_github_com")
+        report = DomainReport(domain="github.com", gpg=lookup_gpg("github.com"))
+        row = _row(report, "GPG")
+        assert "No public key" not in row
+        assert "✅" not in row
+        assert "not verified" in row.lower()
+
+
+class TestDKIMRow:
+    """The DKIM row against the DNS of real domains, recorded on 2026-10-09."""
+
+    def test_not_found_under_common_selectors_is_not_shown_as_absent(self, dns_replay):
+        """amazon.it publishes none of the 33 common selectors (recorded), and signs its mail all the same."""
+        dns_replay("amazon_it")
+        row = _row(_dkim_report("amazon.it"), "DKIM")
+        assert "Not found under 33 common selectors" in row
+        assert "✅" not in row
+
+    def test_two_keys_of_different_strength_are_both_named(self, dns_replay):
+        """polimi.it: 1024-bit under selector1, 2048-bit under selector2 (recorded)."""
+        dns_replay("polimi_it")
+        row = _row(_dkim_report("polimi.it"), "DKIM")
+        assert "selector1" in row and "1024-bit" in row
+        assert "selector2" in row and "2048-bit" in row
+
+
+class TestDetailsColumn:
+    """What the 55-column Details cell shows of a long record, on recorded DNS."""
+
+    def test_a_long_spf_record_is_cut_with_an_ellipsis(self, dns_replay):
+        """github.com's SPF record is 330 characters (recorded): the cell ended in 'include:spf.protection.outlo'."""
+        from mailradar.checker import check_spf
+        dns_replay("github_com")
+        report = DomainReport(domain="github.com", spf=check_spf("github.com"))
+        row = _row(report, "SPF")
+        assert "…" in row
+        assert "outlo " not in row
+
+    def test_tls_rpt_rua_is_shown_whole_when_it_fits(self, dns_replay):
+        """proton.me reports to https://reports.proton.me/reports/smtptls (recorded); the cell cut it at 40."""
+        from mailradar.checker import check_tls_rpt
+        dns_replay("proton_me")
+        report = DomainReport(domain="proton.me", tls_rpt=check_tls_rpt("proton.me"))
+        assert "https://reports.proton.me/reports/smtptls" in _row(report, "TLS-RPT")

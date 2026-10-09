@@ -308,11 +308,15 @@ too permissive.
 
 DKIM signs outgoing mail with a key published at
 `<selector>._domainkey.<domain>`. The selector is not public, so MailRadar
-tries a list of common ones (`default`, `google`, `selector1`, `selector2`,
-`k1`, `mail` and others) and measures the RSA key size of the first one found.
-An Ed25519 key (`k=ed25519`, RFC 8463) scores like a 2048-bit RSA key. An empty
-`p=` is a revoked key (RFC 6376 §3.6.1): MailRadar moves on to the next
-selector, and reports the revocation if no active key is found.
+tries 33 common ones — Google (`google`), Microsoft 365 (`selector1`,
+`selector2`), Proton (`protonmail`, `protonmail2`, `protonmail3`), Fastmail
+(`fm1`-`fm3`), Amazon SES, Zendesk, Mailchimp, SendGrid, Mimecast, Postmark,
+`default`, `mail`, `dkim` and others — and asks for every one of them: a
+receiver verifies a signature made with any published key, so the weakest key
+found is the one measured, and the table names them all (`selector1: 1024-bit
+RSA | selector2: 2048-bit RSA`). An Ed25519 key (`k=ed25519`, RFC 8463) scores
+like a 2048-bit RSA key. An empty `p=` is a revoked key (RFC 6376 §3.6.1): it
+does not count, and the revocation is reported if no active key is found.
 
 | Key size | Points |
 |----------|--------|
@@ -320,8 +324,9 @@ selector, and reports the revocation if no active key is found.
 | 1024 bits | 10 (upgrade recommended) |
 | Smaller | 3 (upgrade immediately) |
 
-"Not found" does not always mean DKIM is missing: the domain may use a
-selector outside the list.
+"Not found under 33 common selectors" is not "DKIM missing": Amazon,
+Proofpoint customers and many others sign under selectors of their own. The
+`s=` tag of a received message's `DKIM-Signature` header says which.
 
 ### BIMI / VMC (up to 10 points)
 
@@ -347,11 +352,20 @@ failures. The table shows where the reports are sent.
 
 ### GPG (up to 5 points)
 
-MailRadar searches public keyservers (keys.openpgp.org, keyserver.ubuntu.com,
-pgp.mit.edu) for a key published for `security@`, `dpo@`, `admin@`,
-`postmaster@` or `privacy@` at the domain. A published key means security
-issues can be reported to the organization confidentially. The first key
-found is the one `send` uses for encryption.
+MailRadar searches public keyservers (keys.openpgp.org, keyserver.ubuntu.com)
+for a key published for exactly `security@`, `dpo@`, `admin@`, `postmaster@`
+or `privacy@` at the domain. A published key means security issues can be
+reported to the organization confidentially. The first key found is the one
+`send` uses for encryption.
+
+The 5 points go only to a key keys.openpgp.org lists, because that server
+publishes an address only after its owner answered a verification mail.
+keyserver.ubuntu.com lists whatever anyone uploads under any name: a key found
+there is shown with its fingerprint and "address not verified", scores
+nothing, and should be confirmed with the domain before use. A keyserver that
+does not answer (HTTP 429 — keys.openpgp.org allows one by-email lookup a
+minute, with a burst of 50 — or a timeout) is not asked again during the
+analysis and leaves the check "not verified", which is not "no key".
 
 ---
 
@@ -366,10 +380,10 @@ found is the one `send` uses for encryption.
   void lookups is not checked.
 - The BIMI logo host name is not checked for resolving to a private address,
   and the VMC is not downloaded or validated: "VMC" means that `a=` names one.
-- The GPG check confirms that a key is published for the address, not that
-  the address's owner controls it: keyserver.ubuntu.com and pgp.mit.edu do
-  not verify email addresses. Check the key before relying on it for
-  sensitive reports.
+- A key keyserver.ubuntu.com publishes for the address is reported as "not
+  verified": that server does not check who uploads a key, and `send` still
+  encrypts to the first key found. Confirm the fingerprint with the domain
+  before relying on it for sensitive reports.
 - `send` supports SMTP over implicit TLS only (SMTPS, usually port 465).
 - With `send --sign`, if signing fails (for example a wrong passphrase) the
   report is sent unsigned.
