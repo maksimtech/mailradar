@@ -1,6 +1,7 @@
 """Tests for GPG keyserver lookup."""
 import sys
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -64,6 +65,12 @@ class TestLookupGPG:
         assert result.found is False
 
 
+def _host_of(request: str) -> str | None:
+    """The host a replayed 'GET https://...' line went to; None for a CONNECT line."""
+    method, _, target = request.partition(" ")
+    return urlsplit(target).hostname if method == "GET" else None
+
+
 class TestRecordedKeyservers:
     """Keyservers on 127.0.0.1 answering what the real ones answered (tests/replay.py)."""
 
@@ -72,7 +79,7 @@ class TestRecordedKeyservers:
         HTTP 500 at other moments, and when it did answer it matched search words, not addresses
         (pgp_mit_edu_pec_poste_it.json). It is not a default any more."""
         from mailradar.gpg import KEYSERVERS
-        assert not any("pgp.mit.edu" in keyserver for keyserver in KEYSERVERS)
+        assert "pgp.mit.edu" not in {urlsplit(keyserver).hostname for keyserver in KEYSERVERS}
 
     def test_a_key_on_a_keyserver_that_does_not_verify_addresses_scores_nothing(self, http_replay):
         """keyserver.ubuntu.com lists, for security@gmail.com, a 2048-bit key uploaded in 2018 by
@@ -135,7 +142,7 @@ class TestRecordedKeyservers:
         about the other four, and the result says the check is not verified."""
         proxy = http_replay("pgp_mit_edu_silent_first_contact", "keyservers_pec_poste_it")
         result = lookup_gpg("pec.poste.it", keyservers=["https://pgp.mit.edu", "https://keyserver.ubuntu.com"])
-        asked = [request for request in proxy.requests if "pgp.mit.edu" in request and request.startswith("GET")]
+        asked = [request for request in proxy.requests if _host_of(request) == "pgp.mit.edu"]
         assert len(asked) == 1
         assert result.found is False
         assert "pgp.mit.edu" in result.error

@@ -681,8 +681,13 @@ DKIM_SELECTORS = [
 ]
 
 
+@functools.lru_cache(maxsize=256)
 def _dkim_key(record: str) -> tuple[str, int] | None:
-    """(key type, bits) of a DKIM key record; None when p= is empty (RFC 6376 §3.6.1: revoked)."""
+    """(key type, bits) of a DKIM key record; None when p= is empty (RFC 6376 §3.6.1: revoked).
+
+    Cached by record: the DER parse is the costly part, and the same key is
+    often published under several selectors (each a CNAME to the provider's).
+    """
     tags = _parse_tags(record)
     key_part = "".join(tags.get("p", "").split())
     if "p" in tags and not key_part:

@@ -73,7 +73,9 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   found under 33 common selectors — a custom selector cannot be ruled out: check the s= tag
   of a received message's DKIM-Signature header", and the row "Not found under 33 common
   selectors". The cases replay proton.me, polimi.it, amazon.it, inps.it and startpage.com as
-  recorded from 1.1.1.1 on 2026-10-09.
+  recorded from 1.1.1.1 on 2026-10-09. Asking 33 selectors instead of stopping at the first costs
+  DNS round trips, not CPU: the key parse is cached by record, since the same key is often
+  published under several selectors.
 
 - **The law check no longer cites GDPR art. 32 for a DKIM key it did not find.** "no DKIM key
   under the common selectors" was evidence for the "SPF/DKIM weak" finding, and the report to
