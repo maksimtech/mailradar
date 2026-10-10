@@ -12,6 +12,9 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+
+## [2026.44] - 2026-10-10
+
 ### Fixed
 
 - **A GPG key is credited only when the keyserver verified the address, and a keyserver that
@@ -815,7 +818,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.43.1...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.44...HEAD
+[2026.44]: https://github.com/maksimtech/mailradar/compare/v2026.43.1...v2026.44
 [2026.43.1]: https://github.com/maksimtech/mailradar/compare/v2026.43...v2026.43.1
 [2026.43]: https://github.com/maksimtech/mailradar/compare/v2026.42...v2026.43
 [2026.42]: https://github.com/maksimtech/mailradar/compare/v2026.41...v2026.42
