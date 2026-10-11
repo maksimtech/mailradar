@@ -39,6 +39,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **Security Posture judged every pull request by main's alerts.** It listed the alerts without
+  a `ref`, so GitHub answered for main, and its wait compared the scanners' runs with the merge
+  commit, which none of them carries: on mailradar #39 it waited two seconds. It now waits for
+  the runs of the branch head, Bandit included, and reads the open alerts of `refs/pull/N/merge`;
+  the closed ones come from that ref and from main, so an exception main holds as settled is not
+  called unused on a ref with no history. Checked against a recent pull request of each Radar
+  with the real tool: the same verdict as main in all six.
 - **The release evidence describes what ships, and says when a scan saw nothing.** The
   source SBOM listed the build venv's own pip, which the image removes, and, the version
   being dynamic, named the package without a version: both are fixed, and a tag that
