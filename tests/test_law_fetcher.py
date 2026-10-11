@@ -300,3 +300,48 @@ def test_https_to_https_redirect_is_not_re_requested():
 
     assert result == "<html>ok</html>"
     assert seen == ["https://eur-lex.europa.eu/x", "https://eur-lex.europa.eu/y"]
+
+
+def test_get_helper_uses_ephemeral_client_when_none_given(monkeypatch):
+    """_get() must open its own httpx.Client when the caller passes no client.
+
+    This covers the ``if client is None`` branch inside the helper that
+    ordinarily runs in production (no caller-supplied client).
+    """
+    _real_client = httpx.Client  # save before patching to avoid recursion
+
+    def _mock_client_class(**kwargs):
+        return _real_client(
+            transport=httpx.MockTransport(
+                lambda req: httpx.Response(200, text="<html>own-client</html>")
+            ),
+            follow_redirects=True,
+            timeout=kwargs.get("timeout", 30.0),
+        )
+
+    monkeypatch.setattr(httpx, "Client", _mock_client_class)
+    result = real_fetch_html("https://eur-lex.europa.eu/page")
+    assert result == "<html>own-client</html>"
+
+
+def test_https_upgrade_re_request_failure_raises():
+    """If the https:// re-request also fails, a LawFetchError naming the upgrade is raised."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        seen.append(url)
+        if url == "https://publications.europa.eu/resource/celex/32016R0679":
+            return httpx.Response(303, headers={"Location": _CELLAR_HTTP})
+        if url == _CELLAR_HTTP:
+            # httpx follows the 303 here; content would be cleartext
+            return httpx.Response(200, text="<html>http-content</html>")
+        # The https:// upgrade re-request to _CELLAR_HTTPS fails
+        raise httpx.ConnectError("simulated failure", request=request)
+
+    client = _client(handler)
+    with pytest.raises(LawFetchError, match="unreachable after https upgrade"):
+        real_fetch_html(
+            "https://publications.europa.eu/resource/celex/32016R0679", client=client
+        )
+    assert _CELLAR_HTTPS in seen
