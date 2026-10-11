@@ -47,7 +47,7 @@ customers who have given a security contact also get a direct email.
 Every version stays installable and pinnable:
 
 - PyPI: `pip install mailradar==<version>`;
-- Docker Hub: `maksimtech/mailradar:<version>`, a tag the weekly rebuild of
+- Docker Hub: `maksimtech/mailradar:v<version>`, a tag the weekly rebuild of
   `latest` does not overwrite, and the SHA256 digest of that image, which cannot
   change.
 

@@ -13,6 +13,9 @@ name: Release Evidence
 #   EVIDENCE-<version>.md              what these are, from which commit and
 #                                      image digest, on which date
 #
+# The image of a release is tagged with the git tag as it is, v included
+# (maksimtech/mailradar:v2026.44): that is what docker.yml pushes.
+#
 # It runs after "Build and Push Docker Image" has pushed the image of the tag,
 # not on the tag itself: on the tag, the image those files describe does not
 # exist yet. workflow_dispatch attaches the files to a release that was cut
@@ -83,7 +86,10 @@ jobs:
           /tmp/product/bin/pip install --quiet .
           python -m venv /tmp/cyclonedx
           /tmp/cyclonedx/bin/pip install --quiet "cyclonedx-bom==7.4.0"
+          # --pyproject names the product as the SBOM's main component; without
+          # it the file lists an environment and does not say whose.
           /tmp/cyclonedx/bin/cyclonedx-py environment /tmp/product/bin/python \
+            --pyproject pyproject.toml --mc-type application \
             --output-format JSON --spec-version 1.5 \
             --output-file "$OUT/sbom-source-${VERSION}.cdx.json"
 
@@ -105,14 +111,14 @@ jobs:
         env:
           SYFT: ${{ steps.syft.outputs.cmd }}
         run: |
-          "$SYFT" "registry:${IMAGE}:${VERSION}" --platform linux/amd64 \
+          "$SYFT" "registry:${IMAGE}:${TAG}" --platform linux/amd64 \
             -o "cyclonedx-json@1.5=$OUT/sbom-image-${VERSION}.cdx.json"
 
       - name: Scan the image (Trivy)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ env.IMAGE }}:${{ env.VERSION }}
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
           format: json
           output: ${{ env.OUT }}/trivy-image-${{ env.VERSION }}-${{ env.DATE }}.json
           exit-code: '0'
@@ -130,10 +136,15 @@ jobs:
       - name: Describe the evidence
         run: |
           COMMIT=$(git rev-parse HEAD)
-          DIGEST=$(python - "$OUT/sbom-image-${VERSION}.cdx.json" <<'PY'
+          # The digests come from Docker Hub: Syft's metadata.component.version
+          # is the tag, and the first note said "digest v2026.44". The index
+          # digest is the one to pin; the amd64 one is the image described.
+          curl -fsS "https://hub.docker.com/v2/repositories/${IMAGE}/tags/${TAG}" > "$RUNNER_TEMP/tag.json"
+          read -r INDEX_DIGEST AMD64_DIGEST < <(python - "$RUNNER_TEMP/tag.json" <<'PY'
           import json, sys
-          component = json.load(open(sys.argv[1], encoding="utf-8"))["metadata"]["component"]
-          print(component.get("version", "see the image SBOM"))
+          tag = json.load(open(sys.argv[1], encoding="utf-8"))
+          amd64 = [i["digest"] for i in tag["images"] if i.get("os") == "linux" and i.get("architecture") == "amd64"]
+          print(tag["digest"], amd64[0] if amd64 else "absent")
           PY
           )
           cat > "$OUT/EVIDENCE-${VERSION}.md" <<EOF
@@ -141,8 +152,9 @@ jobs:
 
           Produced on $(date -u +%Y-%m-%d) by the Release Evidence workflow, run
           ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID},
-          from commit ${COMMIT} (tag ${TAG}) and image ${IMAGE}:${VERSION},
-          digest ${DIGEST} (linux/amd64).
+          from commit ${COMMIT} (tag ${TAG}) and image ${IMAGE}:${TAG}:
+          index digest ${INDEX_DIGEST}, the one to pin; the SBOM and the scan of
+          the image describe its linux/amd64 image, digest ${AMD64_DIGEST}.
 
           - sbom-image-${VERSION}.cdx.json: CycloneDX 1.5 SBOM of the image, Debian
             packages included, made with Syft v1.52.0.

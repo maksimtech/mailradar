@@ -84,7 +84,7 @@ notifica ai clienti, procedura di rollback. In sintesi:
   carico, anche se la correzione non è ancora pronta;
 - le vulnerabilità accettate, con motivazione e data di revisione, sono in
   `SECURITY-EXCEPTIONS.toml`;
-- ogni versione ha un tag Docker dedicato (es. `maksimtech/mailradar:2026.44`) che le
+- ogni versione ha un tag Docker dedicato (es. `maksimtech/mailradar:v2026.44`) che le
   ricostruzioni settimanali non sovrascrivono, e un digest SHA256 immutabile; il
   rollback consiste nel tornare a quel tag o a quel digest;
 - l'immagine `latest` viene ricostruita ogni settimana per incorporare le patch di
