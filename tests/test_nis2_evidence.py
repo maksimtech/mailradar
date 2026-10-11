@@ -207,7 +207,11 @@ def test_the_image_tag_named_is_the_one_docker_yml_pushes(doc):
     image = f"maksimtech/{PACKAGE.name}"
     docker = DOCKER.read_text(encoding="utf-8")
     assert re.search(r"VERSION=(?:\$\{RAW\}|v\$\{RAW#v\})", docker)
-    assert f"{image}:${{{{ steps.version.outputs.VERSION }}}}" in docker or "format('" + image + ":{0}', steps.version.outputs.VERSION)" in docker
+    pushed = (
+        f"{image}:${{{{ steps.version.outputs.VERSION }}}}",
+        "format('" + image + ":{0}', steps.version.outputs.VERSION)",
+    )
+    assert any(form in docker for form in pushed)
     for name, text in (("the document", doc), ("SECURITY.md", SECURITY.read_text(encoding="utf-8"))):
         assert f"{image}:v" in text, f"{name} does not name the image by its v tag"
         assert not re.search(rf"{re.escape(image)}:(?:\d|<)", text), f"{name} names a tag docker.yml never pushes"
