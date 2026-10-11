@@ -34,6 +34,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   the declaration genuinely does not name it, and pointing pyproject at a file that is not
   there fails too.
 
+### Security
+
+- **`law_fetcher` now upgrades HTTPS→HTTP redirects to HTTPS.** Cellar
+  (`publications.europa.eu`) responds to every request with 303 → `http://`.
+  With `follow_redirects=True` httpx followed the downgrade silently, so
+  legislative content arrived without TLS verification. The fix re-requests
+  the redirect destination over HTTPS; the content is identical
+  (measured 2026-10-11). Affects all Radar that import `law_fetcher`.
+
 ### Fixed
 
 - **The OCI licence label is the key the standard names.** It read
