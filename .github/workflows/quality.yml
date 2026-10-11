@@ -31,3 +31,11 @@ jobs:
         run: ruff check mailradar tests tools
       - name: Type check (mypy)
         run: mypy mailradar
+      # docs/nis2-compliance.md shows uv.lock to a customer as the full list of
+      # dependencies. It had gone three releases without being regenerated: on
+      # 2026-10-11 `uv lock --check` refused it. The uv pinned here is the one
+      # that wrote the file.
+      - name: Lockfile matches pyproject.toml (uv)
+        run: |
+          python -m pip install "uv==0.12.18"
+          uv lock --check

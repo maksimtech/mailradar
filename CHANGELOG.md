@@ -12,6 +12,40 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Added
+
+- **`docs/nis2-compliance.md`: the answers to the seven questions a customer subject to NIS2
+  asks a software supplier, with only what the repository can back.** Written in Italian, for
+  customers under d.lgs. 138/2024. Where the answer is "no" it says no: there is no penetration
+  test, no second reviewer and no access control, because a CLI has no users. It lists every
+  host the tool contacts and what each one receives — the analysed domain to crt.sh and
+  rdap.org, five role addresses of that domain to two keyservers, the cited acts to EUR-Lex and
+  Normattiva — and `tests/test_nis2_evidence.py` compares that list with the hosts named in
+  the modules that can reach the network, so the document goes red when the code changes.
+  The same tests hold the image user, the cache path, the release files and the scanners to
+  what the document says, and refuse "NIS2-ready", "no data sent to third parties" and
+  similar claims anywhere in it, in `SECURITY.md` or in the README.
+- **Every release carries SBOMs and dated scans** (`.github/workflows/sbom.yml`): CycloneDX 1.5
+  of the image, Debian packages included (Syft), and of the Python environment
+  (cyclonedx-py), plus Trivy reports of the image and of the repository at the tag, and a
+  note saying which commit and image digest they describe and that a CVE scan is not a
+  penetration test. It runs after the image of the tag has been pushed, and on demand for a
+  release that is already out.
+- **`SECURITY.md` says how vulnerabilities are found, how fast they are answered, how
+  customers are told and how to roll back.** A fix ships with the next release; for CVSS 9.0
+  or more, customers who gave a security contact hear within 48 hours. The paragraph on
+  "Known Open CVEs", last reviewed on 2026-09-18, is gone: `SECURITY-EXCEPTIONS.toml` is
+  where the accepted ones are, each with a review date.
+
+### Fixed
+
+- **The licence gate had never refused anything.** `pip-licenses --fail-on="GPL;AGPL;LGPL"`
+  compares whole licence strings, and no package declares just "GPL": they declare "GNU
+  Lesser General Public License v2 or later (LGPLv2+)" and the like. Measured on 2026-10-11
+  with chardet 5.2.0 installed: exit 0 without `--partial-match`, exit 1 with it. The flag is
+  there now; MailRadar's own dependencies pass it.
+- **`uv.lock` was three releases old.** `uv lock --check` refused it on 2026-10-11; it is
+  regenerated, and the Quality workflow now fails when it falls behind `pyproject.toml`.
 
 ## [2026.44] - 2026-10-10
 
