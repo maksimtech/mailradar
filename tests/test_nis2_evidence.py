@@ -199,6 +199,23 @@ def test_the_job_env_uses_only_contexts_github_allows_there(evidence):
                 assert used <= JOB_ENV_CONTEXTS, f"env {name} uses {sorted(used - JOB_ENV_CONTEXTS)}"
 
 
+def test_the_image_tag_named_is_the_one_docker_yml_pushes(doc):
+    """docker.yml pushes the git tag as it is, v included: the image of a release
+    is maksimtech/<name>:v<version>. The first dispatch of sbom.yml, on
+    2026-10-11, asked Docker Hub for :2026.44 and got MANIFEST_UNKNOWN, and the
+    document and SECURITY.md gave the same wrong name as the rollback target."""
+    image = f"maksimtech/{PACKAGE.name}"
+    docker = DOCKER.read_text(encoding="utf-8")
+    assert re.search(r"VERSION=(?:\$\{RAW\}|v\$\{RAW#v\})", docker)
+    assert f"{image}:${{{{ steps.version.outputs.VERSION }}}}" in docker or "format('" + image + ":{0}', steps.version.outputs.VERSION)" in docker
+    for name, text in (("the document", doc), ("SECURITY.md", SECURITY.read_text(encoding="utf-8"))):
+        assert f"{image}:v" in text, f"{name} does not name the image by its v tag"
+        assert not re.search(rf"{re.escape(image)}:(?:\d|<)", text), f"{name} names a tag docker.yml never pushes"
+    evidence = EVIDENCE.read_text(encoding="utf-8")
+    assert '"registry:${IMAGE}:${TAG}"' in evidence
+    assert "image-ref: ${{ env.IMAGE }}:${{ env.TAG }}" in evidence
+
+
 def test_the_evidence_job_pins_its_actions():
     for line in EVIDENCE.read_text(encoding="utf-8").splitlines():
         if "uses:" in line:

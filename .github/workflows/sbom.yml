@@ -13,6 +13,9 @@ name: Release Evidence
 #   EVIDENCE-<version>.md              what these are, from which commit and
 #                                      image digest, on which date
 #
+# The image of a release is tagged with the git tag as it is, v included
+# (maksimtech/mailradar:v2026.44): that is what docker.yml pushes.
+#
 # It runs after "Build and Push Docker Image" has pushed the image of the tag,
 # not on the tag itself: on the tag, the image those files describe does not
 # exist yet. workflow_dispatch attaches the files to a release that was cut
@@ -105,14 +108,14 @@ jobs:
         env:
           SYFT: ${{ steps.syft.outputs.cmd }}
         run: |
-          "$SYFT" "registry:${IMAGE}:${VERSION}" --platform linux/amd64 \
+          "$SYFT" "registry:${IMAGE}:${TAG}" --platform linux/amd64 \
             -o "cyclonedx-json@1.5=$OUT/sbom-image-${VERSION}.cdx.json"
 
       - name: Scan the image (Trivy)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ env.IMAGE }}:${{ env.VERSION }}
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
           format: json
           output: ${{ env.OUT }}/trivy-image-${{ env.VERSION }}-${{ env.DATE }}.json
           exit-code: '0'
@@ -141,7 +144,7 @@ jobs:
 
           Produced on $(date -u +%Y-%m-%d) by the Release Evidence workflow, run
           ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID},
-          from commit ${COMMIT} (tag ${TAG}) and image ${IMAGE}:${VERSION},
+          from commit ${COMMIT} (tag ${TAG}) and image ${IMAGE}:${TAG},
           digest ${DIGEST} (linux/amd64).
 
           - sbom-image-${VERSION}.cdx.json: CycloneDX 1.5 SBOM of the image, Debian
