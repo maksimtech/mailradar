@@ -182,6 +182,23 @@ def test_the_evidence_follows_the_image_of_a_release(evidence):
     assert "startsWith(github.event.workflow_run.head_branch, 'v')" in job["if"]
 
 
+JOB_ENV_CONTEXTS = {"github", "inputs", "matrix", "needs", "secrets", "strategy", "vars"}
+
+
+def test_the_job_env_uses_only_contexts_github_allows_there(evidence):
+    """`runner` is not available in a job's `env`, and GitHub refuses the whole
+    file when it finds it: on 2026-10-11 the first dispatch of this workflow
+    answered HTTP 422, "Unrecognized named-value: 'runner'", after the tests and
+    every check had passed. The contexts allowed there are listed in GitHub's
+    context-availability table."""
+    for job in evidence["jobs"].values():
+        for name, value in (job.get("env") or {}).items():
+            for expression in re.findall(r"\$\{\{(.*?)\}\}", str(value)):
+                # The first name of each dotted path: github.event.x names github only.
+                used = set(re.findall(r"(?<![\w.])([a-z_]+)\.", expression))
+                assert used <= JOB_ENV_CONTEXTS, f"env {name} uses {sorted(used - JOB_ENV_CONTEXTS)}"
+
+
 def test_the_evidence_job_pins_its_actions():
     for line in EVIDENCE.read_text(encoding="utf-8").splitlines():
         if "uses:" in line:
