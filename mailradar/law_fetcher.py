@@ -474,6 +474,31 @@ def _source_of(url: str) -> str:
     return "EUR-Lex"
 
 
+MAX_REDIRECTS = 5
+
+
+def _get_over_https(client: httpx.Client, url: str, headers: dict[str, str], source: str) -> httpx.Response:
+    """GET `url`, following redirects by hand and never over plain HTTP.
+
+    Cellar answers its https:// URL with a 303 to an http:// one: recorded on
+    2026-10-11 for the GDPR, resource/celex/32016R0679 -> 303 ->
+    http://publications.europa.eu/resource/cellar/<id>/DOC_1. Followed as given,
+    the act arrived in clear, and the SHA-256 printed beside a citation described
+    bytes nothing had protected in transit. The same path over https:// served
+    the same document, byte for byte, so such a hop is taken over HTTPS; if that
+    fails, the caller's fallback to EUR-Lex applies, as for any other failure.
+    """
+    target = httpx.URL(url)
+    for _ in range(MAX_REDIRECTS + 1):
+        if target.scheme == "http":
+            target = target.copy_with(scheme="https")
+        response = client.get(target, headers=headers, follow_redirects=False)
+        if not response.is_redirect:
+            return response
+        target = response.url.join(response.headers["location"])
+    raise LawFetchError(f"{source} redirected more than {MAX_REDIRECTS} times")
+
+
 def fetch_html(
     url: str,
     *,
@@ -487,10 +512,10 @@ def fetch_html(
     headers = {"User-Agent": USER_AGENT, **(headers or {})}
     try:
         if client is None:
-            with httpx.Client(timeout=timeout, follow_redirects=True) as own_client:
-                response = own_client.get(url, headers=headers)
+            with httpx.Client(timeout=timeout) as own_client:
+                response = _get_over_https(own_client, url, headers, source)
         else:
-            response = client.get(url, headers=headers)
+            response = _get_over_https(client, url, headers, source)
     except httpx.HTTPError as e:
         raise LawFetchError(f"{source} unreachable: {e}") from e
     if response.status_code != 200:
