@@ -53,7 +53,11 @@ jobs:
         id: wait
         env:
           GH_TOKEN: ${{ github.token }}
-          UPLOADERS: CodeQL,Snyk,Docker Scout CVE Scan,Trivy Security Scan
+          # The head of the branch on a pull request: GITHUB_SHA is the merge commit
+          # there, which no scanner run carries, so the wait used to find nothing
+          # pending and stop at once (mailradar #39, two seconds, 2026-10-11).
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          UPLOADERS: Bandit Security Scan,CodeQL,Docker Scout CVE Scan,Build and Push Docker Image,Snyk,Trivy Security Scan
         run: |
           # The counting is done in Python and not in `--jq`: gh's own jq takes a
           # filter and not `--arg`, so the commit and the names would have to be
@@ -64,7 +68,7 @@ jobs:
             pending=$(python - <<'COUNT'
           import json, os
           wanted = set(os.environ["UPLOADERS"].split(","))
-          sha = os.environ["GITHUB_SHA"]
+          sha = os.environ["HEAD_SHA"]
           runs = json.load(open("runs.json", encoding="utf-8"))
           print(sum(1 for r in runs
                     if r["headSha"] == sha and r["name"] in wanted
@@ -75,7 +79,7 @@ jobs:
               echo "ready=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "waiting for $pending analysis run(s) of $GITHUB_SHA"
+            echo "waiting for $pending analysis run(s) of $HEAD_SHA"
             sleep 30
           done
           echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -93,8 +97,13 @@ jobs:
         id: alerts
         env:
           GH_TOKEN: ${{ github.token }}
+          # refs/pull/N/merge on a pull request, refs/heads/main otherwise. Without a
+          # ref the API answers for main, and a pull request was judged by main's
+          # alerts: a finding it introduced passed until it had been merged.
+          ALERT_REF: ${{ github.ref }}
         run: |
-          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100" \
+          echo "Reading the alerts of ${ALERT_REF}"
+          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100&ref=${ALERT_REF}" \
                > alerts.json 2>api-error.txt; then
             echo "count=$(python -c 'import json;print(len(json.load(open("alerts.json"))))')" >> "$GITHUB_OUTPUT"
           else
@@ -107,8 +116,17 @@ jobs:
           # CVE-2026-82560 on 2026-09-29 and had already changed its mind back
           # once. Best effort: without this file the tool falls back to the
           # stricter reading, which is the safe direction.
-          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100" \
-            > closed.json 2>/dev/null || echo "[]" > closed.json
+          #
+          # From the ref and from main: a pull request ref has no history, so an
+          # exception main holds as settled would read as unused there and fail
+          # every pull request. Measured on all six Radar on 2026-10-11 with the
+          # real tool: this union gives the verdict main gives.
+          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100&ref=${ALERT_REF}" \
+            > closed-ref.json 2>/dev/null || echo "[]" > closed-ref.json
+          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100&ref=refs/heads/main" \
+            > closed-main.json 2>/dev/null || echo "[]" > closed-main.json
+          python -c 'import json, sys; json.dump(json.load(open(sys.argv[1])) + json.load(open(sys.argv[2])), open(sys.argv[3], "w"))' \
+            closed-ref.json closed-main.json closed.json
 
       - name: Report that the alerts could not be read
         if: ${{ steps.alerts.outputs.readable == 'false' }}
