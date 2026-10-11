@@ -67,7 +67,9 @@ Oltre a questi, raggiunge il dominio analizzato e chi esso indica:
   l'indirizzo del destinatario. È l'unico comando che consegna dati a un terzo, e lo fa
   solo su richiesta esplicita.
 
-Ogni richiesta HTTP si presenta con uno User-Agent che indica questo repository.
+Le richieste dei testi di legge e quelle alle pagine del sito fatte da `discover` si
+presentano con uno User-Agent che indica questo repository; le altre portano quello
+predefinito della libreria httpx (`python-httpx/<versione>`).
 
 Su disco MailRadar scrive solo la cache dei testi di legge citati, in
 `~/.mailradar/law_cache.json` (oppure nella cartella indicata da `MAILRADAR_HOME`). La
@@ -106,6 +108,7 @@ Analisi automatiche, ciascuna con il proprio workflow in `.github/workflows`:
 | `SonarCloud` | qualità, duplicazioni e copertura | ogni pull request, ogni push su `main` |
 | `Docker Scout` | vulnerabilità note nell'immagine | ogni push su `main`, ogni build dell'immagine, ogni settimana |
 | `Security Posture` | raccoglie gli avvisi pubblicati dagli altri e fallisce se un avviso alto o critico non ha un'eccezione motivata | ogni pull request, ogni push su `main`, ogni settimana |
+| `CodSpeed` | prestazioni: esegue i benchmark del repository e pubblica sulla pull request il confronto con `main`; non blocca il merge | ogni pull request che tocca codice, test o `pyproject.toml`, ogni push su `main` |
 | `mutmut` | mutation testing: verifica che i test si accorgano delle modifiche al codice | ogni settimana |
 <!-- scanners:end -->
 
@@ -139,6 +142,10 @@ SBOM:
 | `trivy-fs-<versione>-<data>.json` | vulnerabilità note nei file del repository al tag, scansione Trivy |
 | `EVIDENCE-<versione>.md` | cosa sono questi file, quando e da quale commit sono stati prodotti |
 <!-- assets:end -->
+
+Se a un tag il repository non contiene un file che Trivy sappia analizzare, come un
+lockfile, il rapporto `trivy-fs` di quella release è vuoto. Un rapporto vuoto non
+indica l'assenza di vulnerabilità, e in quel caso la nota `EVIDENCE` lo dice.
 
 ## 7. E se il fornitore sparisce
 

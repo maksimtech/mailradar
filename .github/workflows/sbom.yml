@@ -84,6 +84,9 @@ jobs:
         run: |
           python -m venv /tmp/product
           /tmp/product/bin/pip install --quiet .
+          # The Dockerfile removes these from the image; the venv's own copies are
+          # not part of what ships, and the first sbom-source of v2026.44 listed pip.
+          /tmp/product/bin/python -m pip uninstall --yes --quiet pip
           python -m venv /tmp/cyclonedx
           /tmp/cyclonedx/bin/pip install --quiet "cyclonedx-bom==7.4.0"
           # --pyproject names the product as the SBOM's main component; without
@@ -92,6 +95,21 @@ jobs:
             --pyproject pyproject.toml --mc-type application \
             --output-format JSON --spec-version 1.5 \
             --output-file "$OUT/sbom-source-${VERSION}.cdx.json"
+          # The version is dynamic in pyproject.toml, so cyclonedx-py leaves it out
+          # of the main component. It is the version of the package installed
+          # above, and a tag that disagrees with it is refused.
+          INSTALLED=$(/tmp/product/bin/python -c 'import importlib.metadata as m; print(m.version("mailradar"))')
+          if [ "$INSTALLED" != "$VERSION" ]; then
+            echo "::error::tag ${TAG} but the package installed from it is mailradar ${INSTALLED}"
+            exit 1
+          fi
+          python - "$OUT/sbom-source-${VERSION}.cdx.json" "$INSTALLED" <<'PY'
+          import json, sys
+          path, version = sys.argv[1], sys.argv[2]
+          bom = json.load(open(path, encoding="utf-8"))
+          bom["metadata"]["component"]["version"] = version
+          json.dump(bom, open(path, "w", encoding="utf-8"), indent=2)
+          PY
 
       # Anonymous pulls from the runners' shared addresses hit Docker Hub's rate
       # limit; Syft and Trivy read the credentials this step writes.
@@ -147,6 +165,15 @@ jobs:
           print(tag["digest"], amd64[0] if amd64 else "absent")
           PY
           )
+          # A report with no Results means Trivy found nothing it could read at
+          # the tag, such as a lockfile. Whoever opens it would read "no
+          # vulnerabilities", so the note says what it is.
+          FS_RESULTS=$(python -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8")).get("Results") or []))' \
+            "$OUT/trivy-fs-${VERSION}-${DATE}.json")
+          FS_NOTE=""
+          if [ "$FS_RESULTS" = "0" ]; then
+            FS_NOTE=" This scan found no file it could analyse at this tag, such as a lockfile: the empty report is not evidence that there are no vulnerabilities."
+          fi
           cat > "$OUT/EVIDENCE-${VERSION}.md" <<EOF
           # MailRadar ${VERSION}: release evidence
 
@@ -163,7 +190,7 @@ jobs:
           - trivy-image-${VERSION}-${DATE}.json: known vulnerabilities in the image
             on that date, Trivy.
           - trivy-fs-${VERSION}-${DATE}.json: known vulnerabilities in the repository
-            files at the tag on that date, Trivy.
+            files at the tag on that date, Trivy.${FS_NOTE}
 
           The Trivy reports are an automated scan for known vulnerabilities. They
           are not a penetration test: no penetration test has been carried out.
