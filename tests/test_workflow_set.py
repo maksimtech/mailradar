@@ -50,6 +50,9 @@ CAPABILITY = {
     and (ROOT / "tests" / "docker" / "smoke.py").is_file(),
     "docker": lambda: (ROOT / "Dockerfile").is_file(),
     "docker-scout": lambda: (ROOT / "Dockerfile").is_file(),
+    # SBOMs and dated Trivy reports attached to every release, made from the
+    # image the release pushed (docs/nis2-compliance.md, questions 1 and 6).
+    "sbom": lambda: (ROOT / "Dockerfile").is_file(),
     "codspeed": lambda: (ROOT / "tests" / "benchmarks").is_dir()
     or (ROOT / "benchmarks").is_dir(),
 }

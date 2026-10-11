@@ -28,6 +28,11 @@ jobs:
             --format=markdown \
             --output-file=licenses.md
           cat licenses.md
+      # --partial-match, or the gate compares whole strings: no package declares
+      # its licence as just "GPL", they declare "GNU Lesser General Public License
+      # v2 or later (LGPLv2+)" and the like. Measured on 2026-10-11 with chardet
+      # 5.2.0 installed: exit 0 without the flag, exit 1 with it. Until then this
+      # step had never refused anything (tests/test_nis2_evidence.py).
       - name: Fail on forbidden licenses
         run: |
-          pip-licenses --fail-on="GPL;AGPL;LGPL"
+          pip-licenses --fail-on="GPL;AGPL;LGPL" --partial-match
