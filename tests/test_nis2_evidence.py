@@ -216,6 +216,22 @@ def test_the_image_tag_named_is_the_one_docker_yml_pushes(doc):
     assert "image-ref: ${{ env.IMAGE }}:${{ env.TAG }}" in evidence
 
 
+def test_the_evidence_note_gives_the_digest_and_not_the_tag_twice():
+    """Syft puts the tag in metadata.component.version, and the first EVIDENCE
+    note attached to v2026.44 read "digest v2026.44". The digest a customer pins
+    comes from Docker Hub, which gives the index digest and one per platform."""
+    evidence = EVIDENCE.read_text(encoding="utf-8")
+    assert '["metadata"]["component"]' not in evidence
+    assert "https://hub.docker.com/v2/repositories/${IMAGE}/tags/${TAG}" in evidence
+
+
+def test_the_source_sbom_names_the_package_it_describes():
+    """Without --pyproject, cyclonedx-py lists the environment and names no main
+    component: the SBOM did not say which product it was the SBOM of."""
+    evidence = EVIDENCE.read_text(encoding="utf-8")
+    assert "--pyproject pyproject.toml" in evidence
+
+
 def test_the_evidence_job_pins_its_actions():
     for line in EVIDENCE.read_text(encoding="utf-8").splitlines():
         if "uses:" in line:
