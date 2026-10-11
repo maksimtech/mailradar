@@ -39,6 +39,9 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **The Saturday mutation run would have died on the NIS2 tests.** mutmut copies only the
+  paths in `also_copy` into `mutants/`, and `tests/test_nis2_evidence.py` reads `docs/`, which
+  was not among them. Listed now, with a test that checks every file those tests read.
 - **The licence gate had never refused anything.** `pip-licenses --fail-on="GPL;AGPL;LGPL"`
   compares whole licence strings, and no package declares just "GPL": they declare "GNU
   Lesser General Public License v2 or later (LGPLv2+)" and the like. Measured on 2026-10-11
