@@ -85,7 +85,7 @@ def test_page_without_articles_raises():
 # ─── fetch_html ───────────────────────────────────────────────────────────────
 
 def _client(handler):
-    return httpx.Client(transport=httpx.MockTransport(handler))
+    return httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
 
 
 def test_fetch_html_returns_page():
@@ -217,6 +217,86 @@ def test_the_language_reaches_cellar_as_a_three_letter_code(monkeypatch):
 
 
 def test_an_error_from_cellar_names_cellar():
-    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(503)))
+    client = _client(lambda request: httpx.Response(503))
     with pytest.raises(LawFetchError, match="Cellar answered HTTP 503"):
         real_fetch_html("https://publications.europa.eu/resource/celex/x", client=client)
+
+
+# ─── HTTPS→HTTP redirect upgrade ──────────────────────────────────────────────
+
+# publications.europa.eu responds to the Cellar URL with 303 → http://; the
+# content is identical at the https:// equivalent. fetch_html must upgrade.
+
+# A resolved Cellar URL looks like this (measured 2026-10-11):
+_CELLAR_HTTP = "http://publications.europa.eu/resource/cellar/resolved-content"
+_CELLAR_HTTPS = "https://publications.europa.eu/resource/cellar/resolved-content"
+
+
+def _cellar_redirect_handler(request: httpx.Request) -> httpx.Response:
+    url = str(request.url)
+    if url == "https://publications.europa.eu/resource/celex/32016R0679":
+        # Real Cellar behaviour: 303 → http:// (scheme downgrade)
+        return httpx.Response(303, headers={"Location": _CELLAR_HTTP})
+    if url == _CELLAR_HTTP:
+        # httpx follows the 303 and lands here: cleartext
+        return httpx.Response(200, text="<html>http-content</html>")
+    if url == _CELLAR_HTTPS:
+        # Our fix re-requests with https://: TLS-verified content
+        return httpx.Response(200, text="<html>https-content</html>")
+    return httpx.Response(404)
+
+
+def test_cellar_http_redirect_is_upgraded_to_https():
+    """fetch_html must not accept content delivered over http://."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return _cellar_redirect_handler(request)
+
+    client = _client(handler)
+    result = real_fetch_html(
+        "https://publications.europa.eu/resource/celex/32016R0679", client=client
+    )
+
+    # Content must come from the https:// re-request, not the http:// redirect target
+    assert result == "<html>https-content</html>"
+    # The last request the client made must be https://
+    assert seen[-1] == _CELLAR_HTTPS
+    # http:// was visited (httpx followed the 303), but we did not return that body
+    assert _CELLAR_HTTP in seen
+
+
+def test_non_https_origin_does_not_trigger_upgrade():
+    """Redirect from http:// to http:// (e.g. Normattiva) is accepted as-is."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if str(request.url) == "http://normattiva.it/x":
+            return httpx.Response(301, headers={"Location": "http://normattiva.it/resolved"})
+        return httpx.Response(200, text="<html>ok</html>")
+
+    client = _client(handler)
+    result = real_fetch_html("http://normattiva.it/x", client=client)
+
+    assert result == "<html>ok</html>"
+    # No https:// re-request: origin was already http
+    assert len(seen) == 2  # original + redirect target
+
+
+def test_https_to_https_redirect_is_not_re_requested():
+    """A redirect that stays on https:// must not cause a double request."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if str(request.url).endswith("/x"):
+            return httpx.Response(301, headers={"Location": "https://eur-lex.europa.eu/y"})
+        return httpx.Response(200, text="<html>ok</html>")
+
+    client = _client(handler)
+    result = real_fetch_html("https://eur-lex.europa.eu/x", client=client)
+
+    assert result == "<html>ok</html>"
+    assert seen == ["https://eur-lex.europa.eu/x", "https://eur-lex.europa.eu/y"]

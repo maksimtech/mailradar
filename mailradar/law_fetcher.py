@@ -474,6 +474,20 @@ def _source_of(url: str) -> str:
     return "EUR-Lex"
 
 
+def _get(
+    url: str,
+    *,
+    client: httpx.Client | None,
+    timeout: float,
+    headers: dict,
+) -> httpx.Response:
+    """One GET, using the caller's client or an ephemeral one."""
+    if client is None:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as own_client:
+            return own_client.get(url, headers=headers)
+    return client.get(url, headers=headers)
+
+
 def fetch_html(
     url: str,
     *,
@@ -482,17 +496,29 @@ def fetch_html(
     headers: dict | None = None,
 ) -> str:
     """Download a page. Anything but HTTP 200 is an error: EUR-Lex answers
-    some automated requests with 202 and a JavaScript challenge."""
+    some automated requests with 202 and a JavaScript challenge.
+
+    If a redirect leads from HTTPS to HTTP (publications.europa.eu responds
+    303 → http://), the destination is re-requested over HTTPS: the content
+    is identical but arrives with TLS verification.
+    """
     source = _source_of(url)
-    headers = {"User-Agent": USER_AGENT, **(headers or {})}
+    all_headers = {"User-Agent": USER_AGENT, **(headers or {})}
     try:
-        if client is None:
-            with httpx.Client(timeout=timeout, follow_redirects=True) as own_client:
-                response = own_client.get(url, headers=headers)
-        else:
-            response = client.get(url, headers=headers)
+        response = _get(url, client=client, timeout=timeout, headers=all_headers)
     except httpx.HTTPError as e:
         raise LawFetchError(f"{source} unreachable: {e}") from e
+
+    # publications.europa.eu responds 303 → http:// (scheme downgrade). The
+    # content is identical over HTTPS, so upgrade the scheme and re-request
+    # rather than accepting cleartext delivery.
+    if httpx.URL(url).scheme == "https" and response.url.scheme == "http":
+        https_url = str(response.url.copy_with(scheme="https"))
+        try:
+            response = _get(https_url, client=client, timeout=timeout, headers=all_headers)
+        except httpx.HTTPError as e:
+            raise LawFetchError(f"{source} unreachable after https upgrade: {e}") from e
+
     if response.status_code != 200:
         raise LawFetchError(f"{source} answered HTTP {response.status_code}")
     return response.text
