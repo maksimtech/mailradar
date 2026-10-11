@@ -46,6 +46,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   the closed ones come from that ref and from main, so an exception main holds as settled is not
   called unused on a ref with no history. Checked against a recent pull request of each Radar
   with the real tool: the same verdict as main in all six.
+- **The texts of the law arrived in clear.** Cellar answers its https:// URL with a 303 to an
+  http:// one (recorded on 2026-10-11 for the GDPR), and `fetch_html` followed it, so the act
+  travelled without TLS and the SHA-256 printed beside a citation described bytes nothing had
+  protected. Redirects are now followed by hand and a hop to http:// is taken over https://,
+  which serves the same document byte for byte; if that fails, the fallback to EUR-Lex applies.
+  Checked live: the GDPR came back whole over two HTTPS requests. The test replays Cellar's
+  recorded 303.
 - **The release evidence describes what ships, and says when a scan saw nothing.** The
   source SBOM listed the build venv's own pip, which the image removes, and, the version
   being dynamic, named the package without a version: both are fixed, and a tag that

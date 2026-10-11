@@ -1,0 +1,14 @@
+{
+  "_recorded": {
+    "date": "2026-10-11T17:20:41Z",
+    "how": "curl -D - against the real service, with the headers fetch_act_html sends: Accept: application/xhtml+xml, Accept-Language: ita",
+    "note": "Status, Location and Content-Type are as Cellar answered; the body of the 303 was empty (0 bytes). The same path over https:// answered 200 with 823981 bytes, byte for byte the document the http:// URL served."
+  },
+  "request": "https://publications.europa.eu/resource/celex/32016R0679",
+  "status": 303,
+  "headers": {
+    "Content-Type": "application/xhtml+xml;charset=UTF-8",
+    "Cache-Control": "no-store",
+    "Location": "http://publications.europa.eu/resource/cellar/3e485e15-11bd-11e6-ba9a-01aa75ed71a1.0013.03/DOC_1"
+  }
+}
