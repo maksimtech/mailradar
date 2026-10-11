@@ -152,6 +152,8 @@ also_copy = [
     "SECURITY.md",
     "release.sh",
     ".gitattributes",
+    # docs/nis2-compliance.md, which tests/test_nis2_evidence.py holds to the code.
+    "docs",
 ]
 # mutmut 3.8 refuses to run on Windows and points at WSL, so this is a CI-only
 # configuration: the scheduled workflow runs it on ubuntu.

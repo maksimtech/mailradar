@@ -349,3 +349,16 @@ def test_quality_keeps_the_lockfile_in_step_with_pyproject():
     dependencies has to be the current one."""
     quality = (WORKFLOWS / "quality.yml").read_text(encoding="utf-8")
     assert re.search(r"uv(?:==[\d.]+)?\s.*lock --check|uv lock --check", quality)
+
+
+def test_the_mutation_run_copies_what_these_tests_read():
+    """mutmut copies the package and tests/ into mutants/ and runs the suite from
+    there, adding only the paths listed in `also_copy`: a test that reads a file
+    left behind dies in the stats phase, before a single mutant is tried. These
+    tests read docs/, which was not listed (found by the same work on apkradar)."""
+    import tomllib
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    also_copy = pyproject["tool"]["mutmut"]["also_copy"]
+    for path in (DOC, SECURITY, README, DOCKERFILE, EVIDENCE):
+        assert path.relative_to(ROOT).parts[0] in also_copy, path.relative_to(ROOT).as_posix()
