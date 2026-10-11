@@ -224,9 +224,11 @@ def test_the_evidence_note_gives_the_digest_and_not_the_tag_twice():
     """Syft puts the tag in metadata.component.version, and the first EVIDENCE
     note attached to v2026.44 read "digest v2026.44". The digest a customer pins
     comes from Docker Hub, which gives the index digest and one per platform."""
-    evidence = EVIDENCE.read_text(encoding="utf-8")
-    assert '["metadata"]["component"]' not in evidence
-    assert "https://hub.docker.com/v2/repositories/${IMAGE}/tags/${TAG}" in evidence
+    # Only the step that writes the note: the source SBOM step does write the
+    # version into its own metadata.component, which is a different thing.
+    describe = _evidence_step("Describe the evidence")
+    assert '["metadata"]["component"]' not in describe
+    assert "https://hub.docker.com/v2/repositories/${IMAGE}/tags/${TAG}" in describe
 
 
 def test_the_source_sbom_names_the_package_it_describes():
@@ -271,6 +273,7 @@ SCANNERS = {
     "SonarCloud": "sonarcloud",
     "Security Posture": "security-posture",
     "mutmut": "mutation",
+    "CodSpeed": "codspeed",
 }
 
 
@@ -362,3 +365,63 @@ def test_the_mutation_run_copies_what_these_tests_read():
     also_copy = pyproject["tool"]["mutmut"]["also_copy"]
     for path in (DOC, SECURITY, README, DOCKERFILE, EVIDENCE):
         assert path.relative_to(ROOT).parts[0] in also_copy, path.relative_to(ROOT).as_posix()
+
+
+# --- What the evidence says about itself --------------------------------------
+
+
+def _evidence_step(name: str) -> str:
+    workflow = yaml.safe_load(EVIDENCE.read_text(encoding="utf-8"))
+    job = next(iter(workflow["jobs"].values()))
+    return next(s["run"] for s in job["steps"] if s.get("name") == name)
+
+
+def test_the_source_sbom_says_which_version_it_describes():
+    """The version is dynamic in pyproject.toml, so cyclonedx-py names the main
+    component and leaves its version out: the sbom-source files attached on
+    2026-10-11 named the package and no version. The workflow writes the version
+    of the package it installed, and refuses a tag that disagrees with it."""
+    import tomllib
+
+    dist = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["name"]
+    sbom = _evidence_step("SBOM of the Python environment")
+    assert f'm.version("{dist}")' in sbom
+    assert '!= "$VERSION"' in sbom
+    assert '["version"] =' in sbom
+
+
+def test_the_source_sbom_leaves_out_what_the_image_removes():
+    """The Dockerfile uninstalls pip, and the sbom-source attached on 2026-10-11
+    still listed it: the venv's own copy, which the image does not ship. The
+    environment described drops what the image drops, before it is described."""
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    removed = [p for p in ("pip", "setuptools", "wheel") if re.search(rf"pip uninstall[^\n]*\b{p}\b", dockerfile)]
+    assert "pip" in removed
+    sbom = _evidence_step("SBOM of the Python environment")
+    install = sbom.index("/tmp/product/bin/pip install")
+    uninstall = sbom.index("/tmp/product/bin/python -m pip uninstall --yes --quiet")
+    describe = sbom.index("cyclonedx-py environment")
+    assert install < uninstall < describe
+    line = sbom[uninstall : sbom.index("\n", uninstall)].split()
+    assert all(p in line for p in removed), f"the image removes {removed}"
+
+
+def test_an_empty_repository_scan_is_not_presented_as_a_clean_one(doc):
+    """A trivy-fs report with no Results means Trivy found no file it could read
+    at that tag, such as a lockfile. Whoever opens it reads "no vulnerabilities",
+    so the note and the document say what it is."""
+    describe = _evidence_step("Describe the evidence")
+    assert "found no file it could analyse" in describe
+    assert "non indica l'assenza di vulnerabilità" in " ".join(doc.split())
+
+
+def test_the_user_agent_claim_matches_the_requests(doc):
+    """The first revision said every HTTP request named this repository in its
+    User-Agent. checker.py (BIMI, MTA-STS), gpg.py and two calls in discover.py
+    send httpx's default one; only law_fetcher.py and the site pages fetched by
+    discover set it."""
+    prose = " ".join(doc.split())
+    assert "Ogni richiesta HTTP si presenta con uno User-Agent" not in prose
+    assert "python-httpx" in prose
+    checker = (PACKAGE / "checker.py").read_text(encoding="utf-8")
+    assert "httpx.get(result.svg_url, timeout=5)" in checker

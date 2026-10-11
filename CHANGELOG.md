@@ -39,6 +39,14 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **The release evidence describes what ships, and says when a scan saw nothing.** The
+  source SBOM listed the build venv's own pip, which the image removes, and, the version
+  being dynamic, named the package without a version: both are fixed, and a tag that
+  disagrees with the installed version is refused. An empty `trivy-fs` report, as at a tag
+  with no lockfile, is now called what it is in the note and in the document. CodSpeed is
+  listed among the checks of question 5.
+- **The document said every HTTP request named this repository in its User-Agent.**
+  The BIMI, MTA-STS and keyserver requests, and two in `discover`, send httpx's default.
 - **The Saturday mutation run would have died on the NIS2 tests.** mutmut copies only the
   paths in `also_copy` into `mutants/`, and `tests/test_nis2_evidence.py` reads `docs/`, which
   was not among them. Listed now, with a test that checks every file those tests read.
