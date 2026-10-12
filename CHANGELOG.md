@@ -80,6 +80,12 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **The NIS2 document describes the branch rules as they are since 2026-10-12.** The ruleset on
+  main lost the owner's bypass and requires a pull request for every change, the version bump
+  included; the document said the maintainer could bypass the rules. A test holds the new
+  wording and refuses the old.
+- **`release.sh` falls back to a rebase merge** when the ruleset refuses a squash, as apkradar's
+  does, and says to enable auto-merge when it cannot be turned on.
 - **`release.sh` goes through a pull request.** main now takes pull requests only, the owner
   included, after a cloud session pushed straight to it with the owner's account. The script
   commits the bump on `release/vX` and pushes that branch only; with `gh` and a GitHub origin it
