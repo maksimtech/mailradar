@@ -1,93 +1,74 @@
-# MailRadar — CLAUDE.md
+# MailRadar — istruzioni per Claude Code
 
-Contesto rapido per riprendere il lavoro senza ricostruire la storia.
+Claude Code legge questo file da solo. Contiene regole di lavoro e fatti che il
+repository conferma; la storia sta nel CHANGELOG e nelle pull request, non qui.
 
 ## Cos'è
 
-Analizzatore di email security posture: DMARC, SPF, DKIM, BIMI, VMC e GPG.
-Scopre i domini da un file di input, li audita, genera un report HTML in
-italiano o inglese. CLI Typer, nessuna API/DB (tool da riga di comando puro).
+Analizzatore della postura di sicurezza email di un dominio (DMARC, SPF, DKIM,
+BIMI, VMC, MTA-STS, TLS-RPT, GPG), a riga di comando. Comandi: `check`, `batch`,
+`report`, `send`, `discover`. Cosa contatta in rete e cosa scrive su disco è in
+`docs/nis2-compliance.md`, sezione 3.
 
-Repo: <https://github.com/maksimtech/mailradar>
+## Regole di lavoro
 
-## Struttura
+- **Ogni modifica passa da una pull request** su `main`, unita quando i controlli
+  obbligatori sono verdi. Niente push diretti su `main` e niente
+  `gh pr merge --admin`: il proprietario può scavalcare il ruleset, ma è un
+  bypass, non il flusso. Unica eccezione, il commit di versione che crea
+  `release.sh`.
+- **Commit firmati** con l'identità e la chiave configurate nel repository:
+  `git log -1 --format=%G?` deve dare `G`. Messaggi `tipo(ambito): …`, con il
+  perché nel corpo. La riga `Co-Authored-By` la indica l'ambiente di Claude Code;
+  non scrivere nomi di modello né link a sessioni in questo file.
+- **TDD**: il test che riproduce il difetto fallisce prima della correzione, e si
+  vede fallire.
+- **Niente mock.** Input reali, oggetti reali, server locali veri (in
+  `tests/replay.py` ci sono DNS, HTTP e SMTP su 127.0.0.1 con una CA di test). Al
+  confine di rete si possono riprodurre solo risposte registrate dal servizio
+  vero, in fixture che lo dichiarano (`_recorded`); una fixture costruita o
+  ricavata si dichiara `_derived`. Risposte inventate e patch di funzioni interne
+  per simulare un comportamento non si usano. "Non misurato" non è zero.
+- **`docs/nis2-compliance.md` è documentazione per i clienti** ed è tenuta al
+  codice da `tests/test_nis2_evidence.py`: se cambiano gli host contattati, i file
+  scritti, l'immagine o i workflow, il documento si aggiorna nella stessa PR.
+  Nessuna affermazione che il repository non possa dimostrare.
+- **Avvisi di sicurezza accettati** solo in `SECURITY-EXCEPTIONS.toml`, con motivo
+  e `review_by`; mai `# nosec` o `# noqa` per zittire uno scanner.
+- **Repository di terzi**: nessuna issue, PR o commento senza conferma esplicita
+  del proprietario.
 
-```
-mailradar/
-  cli.py         # entry point `mailradar`
-  discover.py    # trova domini dalla lista input
-  checker.py     # audita DMARC/SPF/DKIM/BIMI/VMC
-  sender.py      # invia il report via email
-  reporter.py    # genera HTML dal template Jinja2
-  gpg.py         # verifica GPG dei report
-  law_fetcher.py # scarica GDPR/NIS2 da Cellar/EUR-Lex (copia da patchradar)
-  law_checker.py # confronta testo con cache SHA-256
-  law_cache.py   # ~/.mailradar/law_cache.json
-  templates/
-    report_it.j2
-    report_en.j2
-  public_suffix_list.dat
-tests/           # pytest (NO asyncio — mailradar è tutto sync)
-```
+## Comandi
 
-## Comandi essenziali
+Come li esegue la CI (Quality e Tests). Su Windows il Python del venv è
+`.venv/Scripts/python`, su Linux `.venv/bin/python`.
 
 ```bash
-pip install -e . --break-system-packages
-
-# Test (niente asyncio_mode nel pytest.ini — non usare pytest-asyncio qui)
-python -m pytest tests/ -q
-python -m pytest tests/test_law_fetcher.py -q
-
-# Coverage law_fetcher
-python -m pytest tests/test_law_fetcher.py \
-  --cov=mailradar.law_fetcher --cov-report=term-missing -q
-
-ruff check mailradar/ tests/
-mypy mailradar/
+python -m venv .venv
+.venv/Scripts/python -m pip install -e ".[dev]"
+.venv/Scripts/python -m pytest -q
+.venv/Scripts/ruff check mailradar tests tools
+.venv/Scripts/mypy mailradar
+uv lock --check            # con uv 0.12.18, la versione fissata in quality.yml
 ```
 
-## Differenze rispetto a patchradar
+Su Windows i test di `tests/test_release_script.py` falliscono anche su un `main`
+pulito, perché lanciano bash: non sono regressioni. Per confrontare, usare un
+`git worktree add --detach <cartella> origin/main`.
 
-| Aspetto | mailradar | patchradar |
-|---------|-----------|------------|
-| asyncio | No | Sì (`asyncio_mode = "auto"`) |
-| DB | No | aiosqlite |
-| API | No | FastAPI |
-| `_client()` nei test | con `follow_redirects=True` | senza (gestisce redirect a mano) |
-| Cache home | `~/.mailradar/` | `~/.patchradar/` |
+## Release
 
-**Attenzione:** `law_fetcher.py` in mailradar usa `_get()` con
-`follow_redirects=True` (httpx segue i redirect automaticamente). In
-patchradar usa `_get_over_https()` con `follow_redirects=False` e gestione
-manuale. Le due implementazioni si assomigliano ma non sono identiche —
-non copiare test da un repo all'altro senza verificare.
+`release.sh` porta la versione (CalVer `YYYY.count[.fix]`), crea il tag `vX` e
+pubblica. Il tag fa partire PyPI, la release GitHub con le note dal CHANGELOG e
+l'immagine `maksimtech/mailradar:vX`; poi Release Evidence (`sbom.yml`) allega
+SBOM e scansioni datate. Per una release già uscita:
+`gh workflow run sbom.yml -f tag=vX`.
 
-## law_fetcher.py — stato
+## Note
 
-- Fix HTTPS redirect Cellar (`e7974de`) mergato su main
-- Test ephemeral-client e https-upgrade failure paths (`95b4070`) su main
-- Stesse sorgenti di patchradar: Cellar prima, EUR-Lex fallback
-
-## Git
-
-Branch principale: `main`. Push diretto per fix/test.  
-Prefissi commit: `fix(scope):`, `test(scope):`, `feat(scope):`, `docs(scope):`.
-
-Attribuzione da aggiungere in fondo a ogni commit:
-```
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_0154qVT8TUGnkx4DFoZCbD76
-```
-
-## PR recenti
-
-- `#42` — fix HTTPS redirect Cellar (mergata, stessa fix di exeradar)
-- `#41` — chiusa come superseded da #42
-- `#30` — fix 24 difetti da code review
-
-## Note veloci
-
-- Nessun `asyncio_mode` nel pyproject: i test sono tutti sincroni
-- `public_suffix_list.dat` bundled nel pacchetto (non scaricato a runtime)
-- `~/.mailradar/law_cache.json` — stesso schema di patchradar/exeradar
+- `law_fetcher.py` e `law_cache.py` sono copiati, non condivisi, in mailradar,
+  exeradar, cookieradar, apkradar e patchradar: una correzione va portata in
+  tutte le copie. I redirect si seguono a mano e mai in chiaro
+  (`_get_over_https`): Cellar risponde con un 303 verso `http://`.
+- I test sono sincroni: niente `asyncio_mode` (vedi il commento in
+  `pyproject.toml`).
