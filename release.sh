@@ -179,8 +179,11 @@ PR_URL=$(gh pr create --repo "$REPO" --base main --head "$BRANCH_NAME" \
     --body "Version bump for ${NAME} ${VERSION}, made by release.sh. When it is merged the script tags the merge commit ${TAG}, which publishes the release.") \
     || { echo "❌ ${BRANCH_NAME} is pushed but the pull request could not be opened." >&2; next_steps >&2; exit 1; }
 echo "🔀 ${PR_URL}"
+# Squash where the ruleset allows it, rebase where it allows only that (apkradar's
+# main took rebase merges only on 2026-10-12). Either lands the one bump commit.
 gh pr merge "$PR_URL" --auto --squash --delete-branch --subject "chore: bump version to ${VERSION}" \
-    || { echo "❌ auto-merge could not be enabled on ${PR_URL}." >&2; next_steps >&2; exit 1; }
+    || gh pr merge "$PR_URL" --auto --rebase --delete-branch \
+    || { echo "❌ auto-merge could not be enabled on ${PR_URL}: is \"Allow auto-merge\" on in the repository settings?" >&2; next_steps >&2; exit 1; }
 
 # Waits for GitHub to merge it once the required checks pass. RELEASE_WAIT_MINUTES
 # bounds the wait; when it runs out nothing is lost, the tag step just runs later.
