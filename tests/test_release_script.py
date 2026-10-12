@@ -12,8 +12,14 @@ The half of the incident that did the damage was not covered anywhere. The scrip
 pushed main *before* tagging, so when the tag step died the bump was already on the
 remote: a version nothing pointed at, and no workflow to react to it, because they
 trigger on the tag. `test_a_tag_that_cannot_be_made_leaves_the_remote_untouched` is
-that case, and it passes only because the tag is now made before anything is pushed
-and the push is atomic.
+that case, and it passes only because the tag is now made before anything is pushed.
+
+Since 2026-10-12 main takes nothing but pull requests, the owner included, so the
+script no longer pushes main: `release.sh <version>` commits the bump on
+release/v<version> and pushes that branch only, and `release.sh --tag <version>`
+tags main once the bump has been merged and pushes the tag only. Here origin is a
+bare repository on disk, not GitHub, so the script opens no pull request; the merge
+GitHub would make is made with git, as the squash merge would land it.
 """
 import pathlib
 import shutil
@@ -79,17 +85,67 @@ def _remote_tags(remote):
     return _git(remote, "tag").split()
 
 
-def test_release_bumps_version_and_pushes_commit_and_tag(repo):
+def _remote_branches(remote):
+    return _git(remote, "for-each-ref", "--format=%(refname:short)", "refs/heads").split()
+
+
+def _merge_release(work, version):
+    """What the squash merge of the release pull request leaves on main: the bump,
+    as one new commit on top of it. Made with git against the same bare remote."""
+    _git(work, "fetch", "-q", "origin")
+    _git(work, "cherry-pick", f"origin/release/v{version}")
+    _git(work, "push", "-q", "origin", "main")
+
+
+def test_release_pushes_the_bump_on_a_release_branch_and_leaves_main_alone(repo):
     work, remote = repo
 
     proc = _release(work, "2026.42")
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert (work / "mailradar" / "__init__.py").read_text(encoding="utf-8") == '__version__ = "2026.42"\n'
-    assert _git(remote, "log", "-1", "--format=%s", "main") == "chore: bump version to 2026.42"
+    assert _git(remote, "log", "-1", "--format=%s", "release/v2026.42") == "chore: bump version to 2026.42"
+    assert _git(remote, "show", "release/v2026.42:mailradar/__init__.py") == '__version__ = "2026.42"'
+    assert _git(remote, "log", "-1", "--format=%s", "main") == "initial", "main was pushed"
+    assert _remote_tags(remote) == []
+    assert _git(work, "rev-parse", "--abbrev-ref", "HEAD") == "main"
+    assert "./release.sh --tag 2026.42" in proc.stdout
+
+
+def test_tag_mode_tags_the_merged_bump_and_pushes_the_tag_only(repo):
+    work, remote = repo
+    assert _release(work, "2026.42").returncode == 0
+    _merge_release(work, "2026.42")
+    main_before = _git(remote, "rev-parse", "main")
+
+    proc = _release(work, "--tag", "2026.42")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
     assert _remote_tags(remote) == ["v2026.42"]
-    assert _git(remote, "rev-parse", "v2026.42^{commit}") == _git(remote, "rev-parse", "main")
+    assert _git(remote, "rev-parse", "v2026.42^{commit}") == main_before
+    assert _git(remote, "rev-parse", "main") == main_before, "tag mode moved main"
     assert _git(remote, "cat-file", "-t", "v2026.42") == "tag"  # annotated
+
+
+def test_tag_mode_refuses_a_main_that_does_not_carry_the_version(repo):
+    work, remote = repo
+    assert _release(work, "2026.42").returncode == 0  # pushed, not merged
+
+    proc = _release(work, "--tag", "2026.42")
+
+    assert proc.returncode != 0
+    assert "merge the release pull request first" in proc.stdout + proc.stderr
+    assert _remote_tags(remote) == []
+
+
+def test_a_release_already_under_way_is_refused(repo):
+    work, remote = repo
+    assert _release(work, "2026.42").returncode == 0
+    _git(work, "branch", "-D", "release/v2026.42")  # only the remote branch is left
+
+    proc = _release(work, "2026.42")
+
+    assert proc.returncode != 0
+    assert "already under way" in proc.stdout + proc.stderr
 
 
 def _assert_refused(proc, remote, message, work=None):
@@ -246,6 +302,7 @@ def test_the_script_accepts_the_version_this_repository_is_on(repo):
     assert "Invalid version" not in proc.stderr, proc.stderr
     assert "Ambiguous version" not in proc.stderr, proc.stderr
     assert proc.returncode == 0, proc.stderr
+    assert f"release/v{year}.{count + 1}" in _remote_branches(remote)
 
 
 def test_the_tag_carries_a_message(repo):
@@ -254,6 +311,8 @@ def test_the_tag_carries_a_message(repo):
     work, remote = repo
 
     assert _release(work, "2026.42").returncode == 0
+    _merge_release(work, "2026.42")
+    assert _release(work, "--tag", "2026.42").returncode == 0
     message = _git(remote, "tag", "-l", "--format=%(contents)", "v2026.42")
 
     assert message.strip(), "the tag has no message"
@@ -264,14 +323,13 @@ def test_a_tag_that_cannot_be_made_leaves_the_remote_untouched(repo, tmp_path):
     """The incident of 2026-10-03, as a test.
 
     Tag signing on and a signing program that does not exist, so `git tag -a` fails
-    exactly where it failed then. What must not happen is what did happen: the bump
-    reaching the remote while the tag does not, leaving a version nothing points at
-    and no workflow reacting, since they trigger on the tag.
-
-    It passes because the tag is now made before anything is pushed, and the push is
-    atomic. Against the old order it fails on the last assertion.
+    exactly where it failed then. What must not happen is a half release on the
+    remote; since the bump reaches main through its pull request, the half that can
+    go wrong now is the tag alone, and it is made before anything is pushed.
     """
     work, remote = repo
+    assert _release(work, "2026.42").returncode == 0
+    _merge_release(work, "2026.42")
     config = pathlib.Path(tmp_path / "gitconfig")
     config.write_text(
         config.read_text(encoding="utf-8")
@@ -280,13 +338,10 @@ def test_a_tag_that_cannot_be_made_leaves_the_remote_untouched(repo, tmp_path):
         encoding="utf-8",
     )
 
-    proc = _release(work, "2026.42")
+    proc = _release(work, "--tag", "2026.42")
 
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert _remote_tags(remote) == []
-    assert _git(remote, "log", "-1", "--format=%s", "main") == "initial", (
-        "the bump reached the remote without its tag"
-    )
 
 
 @pytest.fixture
@@ -341,6 +396,7 @@ def test_a_failing_suite_stops_the_release(repo, python3_with_pytest):
     said = proc.stdout + proc.stderr
     assert "suite" in said.lower() or "test" in said.lower()
     assert _remote_tags(remote) == []
+    assert "release/v2026.42" not in _remote_branches(remote), "it pushed a branch anyway"
     assert _git(work, "rev-parse", "HEAD") == head_before, "it committed anyway"
     assert _git(remote, "log", "-1", "--format=%s", "main") == "a suite"
 
@@ -352,7 +408,7 @@ def test_a_passing_suite_lets_it_through(repo, python3_with_pytest):
     proc = _release(work, "2026.42")
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert _remote_tags(remote) == ["v2026.42"]
+    assert "release/v2026.42" in _remote_branches(remote)
 
 
 def test_a_repository_with_no_tests_is_not_held_up(repo):
@@ -361,23 +417,18 @@ def test_a_repository_with_no_tests_is_not_held_up(repo):
     work, remote = repo
 
     assert _release(work, "2026.42").returncode == 0
-    assert _remote_tags(remote) == ["v2026.42"]
+    assert "release/v2026.42" in _remote_branches(remote)
 
 
-def test_the_push_is_atomic_so_a_refused_tag_leaves_main_alone(repo):
-    """Half a release is worse than none, and this is the half that happens.
-
-    Not measured until the script was mutated: replacing `git push --atomic origin
-    main "$TAG"` with two separate pushes left every case here green. With two pushes
-    main arrives and the tag does not, so the repository carries a version bump that
-    no release and no published artifact corresponds to — and the tag that would
-    produce them cannot be pushed by this script afterwards either, because the
-    version it would be given is now "already the current version".
-
-    The remote refuses tags through a pre-receive hook, which is the way to make the
-    second half fail on demand.
-    """
+def test_a_refused_tag_push_changes_nothing_else(repo):
+    """Tag mode pushes the tag and nothing else, so a remote that refuses it is left
+    exactly as it was: main already carries the bump, through its pull request.
+    Until 2026-10-12 this was the atomic push of main and tag together. The remote
+    refuses tags through a pre-receive hook, which makes the push fail on demand."""
     work, remote = repo
+    assert _release(work, "2026.42").returncode == 0
+    _merge_release(work, "2026.42")
+    main_before = _git(remote, "rev-parse", "main")
 
     hook = remote / "hooks" / "pre-receive"
     hook.write_text(
@@ -393,10 +444,8 @@ def test_the_push_is_atomic_so_a_refused_tag_leaves_main_alone(repo):
     )
     hook.chmod(0o755)
 
-    proc = _release(work, "2026.42")
+    proc = _release(work, "--tag", "2026.42")
 
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert _remote_tags(remote) == []
-    assert _git(remote, "log", "-1", "--format=%s", "main") == "initial", (
-        "main moved although the tag was refused: the push was not atomic"
-    )
+    assert _git(remote, "rev-parse", "main") == main_before
