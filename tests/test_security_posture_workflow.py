@@ -76,3 +76,15 @@ def test_the_closed_alerts_come_from_the_ref_and_from_main(collect):
     assert "alerts?state=closed&per_page=100&ref=${ALERT_REF}" in run
     assert "alerts?state=closed&per_page=100&ref=refs/heads/main" in run
     assert "closed.json" in run
+
+
+def test_main_s_open_alerts_count_as_known_on_a_pull_request(collect):
+    """On a pull request ref CodeQL reports only what the change introduces. On
+    cookieradar #37 (2026-10-12) it reported one new alert, so CodeQL had spoken,
+    and an exception for findings still open on main, in files the change did not
+    touch, read as unused and failed the gate. main's open alerts are history the
+    tool may match an entry against, like the closed ones; simulated on #37's real
+    alerts, the false "unused" goes and the real new alert stays."""
+    run = collect["run"]
+    assert "alerts?state=open&per_page=100&ref=refs/heads/main" in run
+    assert "open-main.json" in run
