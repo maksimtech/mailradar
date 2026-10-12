@@ -125,8 +125,15 @@ jobs:
             > closed-ref.json 2>/dev/null || echo "[]" > closed-ref.json
           gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100&ref=refs/heads/main" \
             > closed-main.json 2>/dev/null || echo "[]" > closed-main.json
-          python -c 'import json, sys; json.dump(json.load(open(sys.argv[1])) + json.load(open(sys.argv[2])), open(sys.argv[3], "w"))' \
-            closed-ref.json closed-main.json closed.json
+          # And main's open alerts: on a pull request ref CodeQL reports only what
+          # the change introduces, so an exception for a finding still open on main
+          # in an untouched file read as unused as soon as CodeQL reported anything
+          # else (cookieradar #37, 2026-10-12). They are history the entry may match,
+          # not alerts of this ref: blocking is decided on alerts.json alone.
+          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100&ref=refs/heads/main" \
+            > open-main.json 2>/dev/null || echo "[]" > open-main.json
+          python -c 'import json, sys; json.dump([a for f in sys.argv[1:-1] for a in json.load(open(f))], open(sys.argv[-1], "w"))' \
+            closed-ref.json closed-main.json open-main.json closed.json
 
       - name: Report that the alerts could not be read
         if: ${{ steps.alerts.outputs.readable == 'false' }}
