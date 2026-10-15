@@ -13,10 +13,10 @@ BIMI, VMC, MTA-STS, TLS-RPT, GPG), a riga di comando. Comandi: `check`, `batch`,
 ## Regole di lavoro
 
 - **Ogni modifica passa da una pull request** su `main`, unita quando i controlli
-  obbligatori sono verdi. Niente push diretti su `main` e niente
-  `gh pr merge --admin`: il proprietario può scavalcare il ruleset, ma è un
-  bypass, non il flusso. Unica eccezione, il commit di versione che crea
-  `release.sh`.
+  obbligatori sono verdi. Dal 2026-10-12 il ruleset non ha eccezioni, nemmeno per
+  il proprietario: un push diretto su `main` viene rifiutato, e lo è anche
+  `gh pr merge --admin`. Anche il commit di versione passa da una PR (vedi
+  Release).
 - **Commit firmati** con l'identità e la chiave configurate nel repository:
   `git log -1 --format=%G?` deve dare `G`. Messaggi `tipo(ambito): …`, con il
   perché nel corpo. La riga `Co-Authored-By` la indica l'ambiente di Claude Code;
@@ -58,11 +58,15 @@ pulito, perché lanciano bash: non sono regressioni. Per confrontare, usare un
 
 ## Release
 
-`release.sh` porta la versione (CalVer `YYYY.count[.fix]`), crea il tag `vX` e
-pubblica. Il tag fa partire PyPI, la release GitHub con le note dal CHANGELOG e
-l'immagine `maksimtech/mailradar:vX`; poi Release Evidence (`sbom.yml`) allega
-SBOM e scansioni datate. Per una release già uscita:
-`gh workflow run sbom.yml -f tag=vX`.
+`./release.sh X` (CalVer `YYYY.count[.fix]`) controlla, porta la versione, fa
+girare la suite e mette il commit di versione su `release/vX`, poi pubblica solo
+quel ramo. Se `gh` c'è e `origin` è questo repository su GitHub, apre la PR con
+auto-merge, aspetta che GitHub la unisca (al massimo `RELEASE_WAIT_MINUTES`,
+default 60) e crea il tag `vX` sul commit di `main`. `./release.sh --tag X` fa solo
+quest'ultimo passo, se l'attesa si è interrotta. Il tag fa partire PyPI, la
+release GitHub con le note dal CHANGELOG e l'immagine `maksimtech/mailradar:vX`;
+poi Release Evidence (`sbom.yml`) allega SBOM e scansioni datate. Per una release
+già uscita: `gh workflow run sbom.yml -f tag=vX`.
 
 ## Note
 

@@ -39,6 +39,12 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **On a pull request, Security Posture called live exceptions unused.** CodeQL reports only what
+  the change introduces on a pull request ref, so when it reported anything, an exception for a
+  finding still open on main in an untouched file matched nothing and failed the gate
+  (cookieradar #37, 2026-10-12). main's open alerts now count as history the record may match,
+  like the closed ones; blocking is still decided on the pull request's own alerts. Simulated on
+  #37's real alerts: the false "unused" goes, the real new alert stays.
 - **Security Posture judged every pull request by main's alerts.** It listed the alerts without
   a `ref`, so GitHub answered for main, and its wait compared the scanners' runs with the merge
   commit, which none of them carries: on mailradar #39 it waited two seconds. It now waits for
@@ -71,6 +77,22 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   there now; MailRadar's own dependencies pass it.
 - **`uv.lock` was three releases old.** `uv lock --check` refused it on 2026-10-11; it is
   regenerated, and the Quality workflow now fails when it falls behind `pyproject.toml`.
+
+### Changed
+
+- **The NIS2 document describes the branch rules as they are since 2026-10-12.** The ruleset on
+  main lost the owner's bypass and requires a pull request for every change, the version bump
+  included; the document said the maintainer could bypass the rules. A test holds the new
+  wording and refuses the old.
+- **`release.sh` falls back to a rebase merge** when the ruleset refuses a squash, as apkradar's
+  does, and says to enable auto-merge when it cannot be turned on.
+- **`release.sh` goes through a pull request.** main now takes pull requests only, the owner
+  included, after a cloud session pushed straight to it with the owner's account. The script
+  commits the bump on `release/vX` and pushes that branch only; with `gh` and a GitHub origin it
+  opens the pull request with auto-merge, waits for the merge and tags the merge commit.
+  `./release.sh --tag X` is that last step alone. The guarantees stay: nothing is committed when
+  the suite fails, and the tag is made before anything is pushed.
+
 
 ## [2026.44] - 2026-10-10
 
