@@ -68,6 +68,14 @@ removable `perl` and `perl-base`, which is Essential and which dpkg itself \
 depends on. Measured inside the built patchradar image on 2026-09-29, only \
 `perl-base` is installed; this image is built the same way, so the finding is \
 ours to record and not ours to close.
+
+Since 2026-10-05T12:15:49Z Docker Scout has stopped reporting it, which is why \
+the gate lists this entry as settled. It is kept, and the reason is not how long \
+the silence has lasted: `patchradar debian CVE-2026-82560` on 2026-10-15 still \
+reports perl no-dsa in trixie at 5.40.1-6+deb13u1, no fix in any suite, Debian \
+bug 1148455. The package named in `where` is still unfixed in trixie and only \
+the reporting changed. Deleting a flaw that is demonstrably present because a \
+scanner fell silent is the one direction this file must not drift in.
 """
 review_by = "2026-12-31"
 
@@ -156,29 +164,6 @@ review_by = "2026-12-31"
 # ─────────────────────────────────────────────────────────────────────────────
 
 [[exception]]
-id = "CVE-2026-84782"
-source = "Docker Scout"
-where = "openssl 3.5.7-1~deb13u2 in the published image; fixed in Debian 3.5.7-1~deb13u3"
-why = """
-An out-of-bounds read in OpenSSL's DTLS retransmission, advisory published \
-2026-09-29. Debian has already fixed it: `patchradar debian CVE-2026-84782` \
-reports it resolved in trixie at openssl 3.5.7-1~deb13u3, so this is not an \
-acceptance — it is a rebuild.
-
-The Dockerfile runs `apt-get update && apt-get upgrade -y`, so the next image \
-built picks the fix up with no change to this repository. Docker Scout reads the \
-image published on Docker Hub, which is why the alert stays open until then. The \
-short date is the check that the publish happened: if this is still here \
-afterwards, either the image was not republished or the upgrade did not take.
-
-Reachability, for what it is worth: the flaw is in DTLS, and nothing here speaks \
-DTLS. mailradar opens TLS sockets over TCP to check certificates, cookieradar \
-drives Chromium over HTTPS, apkradar fetches store listings over HTTPS. None of \
-that is datagram TLS.
-"""
-review_by = "2026-10-31"
-
-[[exception]]
 id = "SNYK-DEBIAN13-GCC14-20335537"
 source = "Snyk Container"
 where = "gcc-14 / libstdc++6 14.2.0-19, python slim-trixie base image"
@@ -193,6 +178,14 @@ Nor is it removable. Snyk names the source package `gcc-14`, and what is actuall
 installed is `libstdc++6`, the C++ runtime that a long list of packages in the \
 base image link against. Removing it is not an option the way the full `perl` \
 would have been.
+
+Since 2026-10-07T20:07:42Z Snyk Container has stopped reporting it, which is why \
+the gate lists this entry as settled. It is kept, and the reason is not how long \
+the silence has lasted: `patchradar debian CVE-2026-102010` on 2026-10-15 still \
+reports gcc-14 no-dsa in trixie at 14.2.0-19, with the fix only in sid \
+(14.4.0-3). The package named in `where` is still unfixed in trixie and only the \
+reporting changed. Deleting a flaw that is demonstrably present because a \
+scanner fell silent is the one direction this file must not drift in.
 """
 review_by = "2026-12-31"
 
@@ -224,6 +217,14 @@ The flaw also reported as SNYK-DEBIAN13-GCC14-20335537, under the other scanner'
 id. Open in trixie for gcc-12 and gcc-14, no fixed version in any suite, no Debian \
 bug — `patchradar debian CVE-2026-102010`. Evidence goes on \
 https://security-tracker.debian.org/tracker/CVE-2026-102010.
+
+Since 2026-10-12T13:04:03Z Docker Scout has stopped reporting it, which is why \
+the gate lists this entry as settled. It is kept, and the reason is not how long \
+the silence has lasted: `patchradar debian CVE-2026-102010` on 2026-10-15 still \
+reports gcc-14 no-dsa in trixie at 14.2.0-19, with the fix only in sid \
+(14.4.0-3). The package named in `where` is still unfixed in trixie and only the \
+reporting changed. Deleting a flaw that is demonstrably present because a \
+scanner fell silent is the one direction this file must not drift in.
 """
 review_by = "2026-12-31"
 
@@ -236,6 +237,14 @@ CVE-2026-95619, an integer overflow in gcc-14, published on 2026-10-02. Read wit
 `patchradar debian CVE-2026-95619`: open in trixie for gcc-12 (12.4.0-5) and \
 gcc-14 (14.2.0-19), no fixed version in any suite, no Debian bug recorded. \
 Evidence goes on https://security-tracker.debian.org/tracker/CVE-2026-95619.
+
+Since 2026-10-08T14:34:39Z Snyk Container has stopped reporting it, which is why \
+the gate lists this entry as settled. It is kept, and the reason is not how long \
+the silence has lasted: `patchradar debian CVE-2026-95619` on 2026-10-15 still \
+reports gcc-14 no-dsa in trixie at 14.2.0-19, with the fix only in sid \
+(14.4.0-3). The package named in `where` is still unfixed in trixie and only the \
+reporting changed. Deleting a flaw that is demonstrably present because a \
+scanner fell silent is the one direction this file must not drift in.
 """
 review_by = "2026-12-31"
 
@@ -245,6 +254,14 @@ source = "Docker Scout"
 where = "gcc-14 / libstdc++6 14.2.0-19, python slim-trixie base image"
 why = """
 The same flaw as SNYK-DEBIAN13-GCC14-20386241 above, under the other scanner's id.
+
+Since 2026-10-12T13:04:03Z Docker Scout has stopped reporting it, which is why \
+the gate lists this entry as settled. It is kept, and the reason is not how long \
+the silence has lasted: `patchradar debian CVE-2026-95619` on 2026-10-15 still \
+reports gcc-14 no-dsa in trixie at 14.2.0-19, with the fix only in sid \
+(14.4.0-3). The package named in `where` is still unfixed in trixie and only the \
+reporting changed. Deleting a flaw that is demonstrably present because a \
+scanner fell silent is the one direction this file must not drift in.
 """
 review_by = "2026-12-31"
 
@@ -252,25 +269,3 @@ review_by = "2026-12-31"
 # pcre2, and this one is not an acceptance at all.
 # ─────────────────────────────────────────────────────────────────────────────
 
-[[exception]]
-id = "CVE-2026-103111"
-source = "Docker Scout"
-where = "pcre2 10.46-1~deb13u2 in the published image; fixed in Debian 10.46-1~deb13u3"
-why = """
-Debian has already fixed it: `patchradar debian CVE-2026-103111` reports it \
-resolved in trixie at pcre2 10.46-1~deb13u3, and in sid at 10.48-3.1. So this is a \
-rebuild rather than something to accept — the Dockerfile runs \
-`apt-get update && apt-get upgrade -y`, and the next image built picks the fix up \
-with no change to this repository.
-
-docker.yml rebuilds `latest` every Monday with `no-cache: true`, precisely so that \
-Debian's patches arrive without waiting for a release, so this closes by itself \
-within the week. The short date below is the check that it did: if the alert is \
-still here afterwards, either the scheduled rebuild did not run or the upgrade did \
-not take.
-
-Docker Scout's own alert text carries EPSS 0.002060 at percentile 0.095970, and \
-this repository's gate computed 0.2% at p9 from FIRST directly. Two independent \
-readings of the same forecast agreeing is worth recording once.
-"""
-review_by = "2026-10-31"

@@ -80,6 +80,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **`SECURITY-EXCEPTIONS.toml`: the settled entries that stay now say why.** Snyk stopped reporting
+  the gcc-14 advisories on 2026-10-07 and 2026-10-08, and Docker Scout, which had lost and regained
+  CVE-2026-102010 and CVE-2026-95619 once, last closed them on 2026-10-12, so the gate lists all four
+  entries as settled. `patchradar debian` on 2026-10-15
+  still reports gcc-14 no-dsa in trixie at 14.2.0-19, with the fix only in sid, so the package is
+  still unfixed and only the reporting changed. The same holds for CVE-2026-82560 in perl, quiet
+  since 2026-10-05 and still no-dsa with no fix in any suite (Debian bug 1148455). The entries are
+  kept, and each now records when the scanner fell silent and what Debian said, as the
+  CVE-2026-82560 entry in the other Radar already did. Deleting a flaw that is demonstrably present
+  because a scanner fell silent is the one direction the file must not drift in.
+
 - **The NIS2 document describes the branch rules as they are since 2026-10-12.** The ruleset on
   main lost the owner's bypass and requires a pull request for every change, the version bump
   included; the document said the maintainer could bypass the rules. A test holds the new
@@ -93,6 +104,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   `./release.sh --tag X` is that last step alone. The guarantees stay: nothing is committed when
   the suite fails, and the tag is made before anything is pushed.
 
+### Removed
+
+- **CVE-2026-84782 (openssl) and CVE-2026-103111 (pcre2) out of `SECURITY-EXCEPTIONS.toml`.** Both
+  entries described a rebuild rather than an acceptance. Debian fixed both in trixie (openssl
+  3.5.7-1~deb13u3, pcre2 10.46-1~deb13u3), GitHub closed both alerts on 2026-10-04, and the
+  scheduled no-cache rebuild of 2026-10-12 did not bring them back. If either returns, a fix has
+  regressed, and that is worth a failing build.
 
 ## [2026.44] - 2026-10-10
 
