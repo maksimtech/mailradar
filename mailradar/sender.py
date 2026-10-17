@@ -10,6 +10,7 @@ import tempfile
 from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, formatdate, make_msgid
 
 # Seconds before a silent SMTP server is given up on: without it `send` could
 # wait for ever on a connection that never answers.
@@ -116,9 +117,16 @@ def _send_smtp(
     """Send email via SMTP."""
     try:
         msg = MIMEMultipart()
-        msg["From"] = f"{config.from_name} <{config.from_email}>"
+        # formataddr quotes the name: "[NOME] <a@b>" built by hand parsed to no
+        # address at all ([ and ] are RFC 5322 specials) and "Rossi, Mario <a@b>"
+        # to "Rossi", and smtplib took the envelope sender from that — MAIL
+        # FROM:<>, the bounce reverse-path. Date is required (RFC 5322 §3.6),
+        # and a message without a Message-ID reads as spam.
+        msg["From"] = formataddr((config.from_name, config.from_email))
         msg["To"] = to_email
         msg["Subject"] = subject
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=config.from_email.rpartition("@")[2])
 
         if encrypted:
             msg.attach(MIMEText(body, "plain", "utf-8"))
@@ -134,12 +142,13 @@ def _send_smtp(
             with smtplib.SMTP_SSL(config.host, config.port, context=context,
                                   timeout=SMTP_TIMEOUT) as server:
                 server.login(config.username, config.password)
-                server.send_message(msg)
+                # The envelope stated, not inferred from the headers.
+                server.send_message(msg, from_addr=config.from_email, to_addrs=[to_email])
         else:
             with smtplib.SMTP(config.host, config.port, timeout=SMTP_TIMEOUT) as server:
                 server.starttls(context=context)
                 server.login(config.username, config.password)
-                server.send_message(msg)
+                server.send_message(msg, from_addr=config.from_email, to_addrs=[to_email])
 
         return True
     except Exception as e:
