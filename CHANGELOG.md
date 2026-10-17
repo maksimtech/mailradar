@@ -12,6 +12,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+## [2026.45] - 2026-10-17
+
 ### Added
 
 - **`docs/nis2-compliance.md`: the answers to the seven questions a customer subject to NIS2
@@ -928,7 +930,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.44...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.45...HEAD
+[2026.45]: https://github.com/maksimtech/mailradar/compare/v2026.44...v2026.45
 [2026.44]: https://github.com/maksimtech/mailradar/compare/v2026.43.1...v2026.44
 [2026.43.1]: https://github.com/maksimtech/mailradar/compare/v2026.43...v2026.43.1
 [2026.43]: https://github.com/maksimtech/mailradar/compare/v2026.42...v2026.43
