@@ -191,7 +191,9 @@ mailradar send example.com --lang en \
    never falls back to sending unencrypted.
 2. **No GPG key, SMTP configured**: the report is sent in plaintext to the
    first of `security@`, `dpo@`, `privacy@`, `admin@`, `postmaster@` that the
-   SMTP server accepts.
+   SMTP server accepts — only when every keyserver answered. If one did not
+   (HTTP 429, a timeout), a key may exist: nothing is sent, and the command
+   exits with code 1; try again later.
 3. **No SMTP settings**: the report is printed for copy-paste, with suggested
    recipients.
 
@@ -203,7 +205,7 @@ mailradar send example.com --lang en \
 | `--smtp-pass` | SMTP password. Prefer the `MAILRADAR_SMTP_PASS` environment variable, so the password does not end up in your shell history |
 | `--from` | Sender address |
 | `--sign` | Clear-sign the report with your own GPG private key for the `--from` address (requires `--from`). The passphrase is asked interactively |
-| `--lang`, `--name`, `--role`, `--org` | As in `report` |
+| `--lang`, `--name`, `--role`, `--org` | As in `report`. With SMTP configured they are required: a report would otherwise reach the recipient signed "[NOME]", and `send` refuses, before asking anything of the network |
 
 SMTP delivery happens only when `--smtp-host`, `--smtp-user`, the password
 and `--from` are all set.

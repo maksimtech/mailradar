@@ -661,6 +661,8 @@ class TestIncompleteAnalysis(unittest.TestCase):
         result = self.runner.invoke(app, [
             "send", "example.com", "--smtp-host", "127.0.0.1", "--smtp-port", str(self.smtp.port),
             "--smtp-user", "security@example.org", "--smtp-pass", "secret", "--from", "security@example.org",
+            # Named, so the placeholders are not what stops it (tests/test_send_message.py)
+            "--name", "Mario Rossi", "--role", "Security engineer", "--org", "Example",
         ])
         self.assertEqual(result.exit_code, 1)
         self.assertIn("Report not generated", result.output)

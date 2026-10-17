@@ -1,0 +1,12 @@
+{
+  "_derived": {
+    "from": "pgp_mit_edu_timeout.json",
+    "changed": "the recorded ReadTimeout of pgp.mit.edu's index for postmaster@pec.poste.it is filed under keyserver.ubuntu.com's index for security@example.com, the first question lookup_gpg(\"example.com\") asks there: what the test needs is a keyserver that does not answer, beside example.com's real DNS and keys.openpgp.org's real 404s"
+  },
+  "responses": [
+    {
+      "request": "GET https://keyserver.ubuntu.com/pks/lookup?op=index&search=security%40example.com&options=mr",
+      "error": "ReadTimeout after 15.4 s"
+    }
+  ]
+}

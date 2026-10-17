@@ -577,6 +577,19 @@ def send(
     from mailradar.reporter import generate_report
     from mailradar.sender import SMTPConfig, send_report
 
+    delivering = all([smtp_host, smtp_user, smtp_pass, from_email])
+    placeholders = [option for option, value, default in (
+        ("--name", sender_name, "[NOME]"), ("--role", sender_role, "[RUOLO]"),
+        ("--org", sender_org, "[ORGANIZZAZIONE]")) if value == default]
+    if delivering and placeholders:
+        # They went to a third party as the signature and the display name.
+        # Before the analysis, which costs keyserver lookups against a limit;
+        # a report printed for a manual send still takes them, to be edited.
+        console.print(f"[red]❌ Not sent: {', '.join(placeholders)} still "
+                      f"{'hold their placeholders' if len(placeholders) > 1 else 'holds its placeholder'}, "
+                      f"which would reach the recipient as written.[/red]")
+        raise typer.Exit(1)
+
     console.print(f"\n[dim]Analyzing [bold]{escape(domain)}[/bold]...[/dim]")
 
     with _status("[cyan]Running DNS checks...[/cyan]"):
@@ -584,6 +597,12 @@ def send(
 
     _print_report(analysis)
     _refuse_unverified(analysis)
+    if delivering and not analysis.gpg.found and analysis.gpg.error:
+        # "Not verified" is not "absent": a keyserver that did not answer may
+        # hold the recipient's key, and plaintext is what a key would prevent.
+        console.print(f"[red]❌ Not sent in plaintext: the GPG check is not verified "
+                      f"({escape(analysis.gpg.error)}), and a key may exist. Try again later.[/red]")
+        raise typer.Exit(1)
 
     # Generate report text
     report_text = generate_report(

@@ -39,6 +39,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **`send` built a message a mail server could refuse, signed with placeholders.** In a dry run on
+  2026-10-17 against a server on 127.0.0.1, the envelope said `MAIL FROM:<>` and the message had no
+  `Date` and no `Message-ID`: `From` was written as `f"{name} <{address}>"`, smtplib took the
+  envelope from it, and `[`/`]` are RFC 5322 specials — "[NOME] <a@b>" parsed to no address,
+  "Rossi, Mario <a@b>" to "Rossi". `From` is now `formataddr`, `Date` and `Message-ID` are set, and
+  the envelope sender is stated. With SMTP configured, `send` refuses to deliver "[NOME]",
+  "[RUOLO]", "[ORGANIZZAZIONE]", before any network lookup.
+- **A keyserver that did not answer let the report go out in plaintext.** Same dry run:
+  keys.openpgp.org answered 429, the GPG check said "not verified", and the report was sent in
+  clear. A key may exist where a keyserver did not answer, so `send` now sends nothing and exits 1;
+  with every keyserver answering and no key, plaintext stays the documented fallback.
 - **On a pull request, Security Posture called live exceptions unused.** CodeQL reports only what
   the change introduces on a pull request ref, so when it reported anything, an exception for a
   finding still open on main in an untouched file matched nothing and failed the gate
