@@ -76,8 +76,14 @@ def repo(tmp_path, monkeypatch):
     return work, remote
 
 
+# The bash on PATH, by name. On Windows a bare "bash" is looked up by CreateProcess, which
+# searches System32 before PATH and finds WSL's bash.exe: its git reads the remote
+# C:\...\remote.git as the ssh host "c" and every case failed from Git Bash.
+BASH = shutil.which("bash") or "bash"
+
+
 def _release(work, *args):
-    return subprocess.run(["bash", "release.sh", *args], cwd=work, capture_output=True, text=True,
+    return subprocess.run([BASH, "release.sh", *args], cwd=work, capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=60)
 
 
