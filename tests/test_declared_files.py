@@ -71,3 +71,22 @@ def test_every_path_the_image_copies_is_there():
     missing = [source for source in _copy_sources() if not (ROOT / source).exists()]
 
     assert not missing, f"the Dockerfile copies paths that are not there: {missing}"
+
+
+# What mutmut puts in mutants/ besides `source_paths` and `also_copy`, of its own accord.
+_MUTMUT_COPIES_ANYWAY = {"tests", "test", "setup.cfg", "pyproject.toml", "uv.lock"}
+
+
+def test_the_mutation_run_copies_what_these_tests_read():
+    """mutmut runs the suite inside mutants/, a copy of the tree that holds only what
+    it is told to hold. The two cases above read the root: the licence file and every
+    COPY source. Without them there the Saturday run stopped in its stats phase, before
+    a single mutant was tried, on 2026-10-10 and 2026-10-17 — LICENSE was not listed."""
+    mutmut = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["mutmut"]
+    copied = set(mutmut.get("source_paths", [])) | set(mutmut.get("also_copy", [])) | _MUTMUT_COPIES_ANYWAY
+    named = _licence_file_named_by_pyproject()
+    read = ["Dockerfile", *_copy_sources(), *([named] if named else [])]
+
+    missing = sorted({Path(p).parts[0] for p in read if Path(p).parts} - copied)
+
+    assert not missing, f"read by these tests and left out of the mutation run: {missing}"
