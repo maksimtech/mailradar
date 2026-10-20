@@ -12,6 +12,25 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`check` no longer turns a DNS failure into "domain not found", and no longer analyses
+  somebody else's domain instead.** Reported by a user: `asufc.sanita.fvg.it` (Azienda sanitaria
+  universitaria Friuli Centrale) came out as "not found in DNS", then as 0/100 with nothing
+  configured. Three faults in a row:
+  - `domain_exists` read any DNS error (a timeout over a slow resolver, a SERVFAIL) as "no such
+    domain", and a name with no A record as missing too. It now asks for A once: NXDOMAIN is a
+    missing name, NOERROR with no answer is a name that exists (`sanita.fvg.it` has MX and TXT,
+    no A), and a lookup that gets no answer raises `DNSLookupError`. `check` then says the domain
+    could not be checked and stops, exit code 1;
+  - the variants scan kept only the first label, so `asufc.sanita.fvg.it` became `asufc.com` and
+    `asufc.co.uk`. Variants are now tried only for a bare name or `name.tld`; a missing subdomain
+    gets "check the domain name". A variant the DNS does not answer for is left out;
+  - Enter alone at the variant prompt picked variant 1 and analysed it. The prompt has no default.
+
+  Tests on DNS answers recorded from 1.1.1.1 on 2026-10-20, timeouts played by the local DNS
+  server keeping silent; the two tests that patched `dns.resolver.resolve` are replaced by them.
+
 ## [2026.45] - 2026-10-17
 
 ### Added
