@@ -142,24 +142,29 @@ def domain_exists(domain: str) -> bool:
     if len(parts) < 2 or any(len(p) == 0 for p in parts):
         return False
 
+    # One A query is enough: NXDOMAIN is about the name, whatever the type
+    # asked for, and NOERROR with no answer (sanita.fvg.it: MX and TXT, no A)
+    # is a name that exists. A timeout or a SERVFAIL says nothing about the
+    # name: read as "no such domain", it sent the user to another domain.
     try:
         dns.resolver.resolve(domain, "A")
-        return True
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
-            dns.exception.DNSException):
-        pass
-    try:
-        dns.resolver.resolve(domain, "MX")
-        return True
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
-            dns.exception.DNSException):
-        pass
-    try:
-        dns.resolver.resolve(domain, "NS")
-        return True
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
-            dns.exception.DNSException):
+    except dns.resolver.NXDOMAIN:
         return False
+    except dns.resolver.NoAnswer:
+        return True
+    except dns.exception.DNSException as e:
+        raise DNSLookupError(f"DNS lookup for {domain} failed: {type(e).__name__}") from e
+    return True
+
+
+def variant_base(domain: str) -> str | None:
+    """The name to try other TLDs with: 'apple' for 'apple' or 'apple.con'.
+
+    Only a bare name or name.tld has one. A subdomain's first label is not the
+    organisation: asufc.sanita.fvg.it became asufc.com, somebody else's domain.
+    """
+    parts = domain.removesuffix(".").split(".")
+    return parts[0] if len(parts) <= 2 else None
 
 
 def find_domain_variants(domain: str) -> list[str]:
@@ -167,9 +172,9 @@ def find_domain_variants(domain: str) -> list[str]:
     Given a domain input, find all existing TLD variants.
     e.g. 'apple' -> ['apple.com', 'apple.it', 'apple.eu', ...]
     """
-    # The base name, without the TLD
-    parts = domain.split(".")
-    base = domain if len(parts) == 1 else parts[0]
+    base = variant_base(domain)
+    if base is None:
+        return []
 
     # TLD comuni da provare
     tlds = [
@@ -181,8 +186,12 @@ def find_domain_variants(domain: str) -> list[str]:
     found = []
     for tld in tlds:
         candidate = f"{base}.{tld}"
-        if domain_exists(candidate):
-            found.append(candidate)
+        try:
+            if domain_exists(candidate):
+                found.append(candidate)
+        except DNSLookupError:
+            # Not known to exist: it cannot be offered
+            continue
 
     return found
 

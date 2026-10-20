@@ -780,3 +780,38 @@ class TestDetailsColumn:
         dns_replay("proton_me")
         report = DomainReport(domain="proton.me", tls_rpt=check_tls_rpt("proton.me"))
         assert "https://reports.proton.me/reports/smtptls" in _row(report, "TLS-RPT")
+
+
+class TestCheckDomainExistence:
+    """`check` on names whose existence the DNS answers, or does not, on recorded DNS.
+
+    Reported by a user: asufc.sanita.fvg.it came out as "not found", then as
+    0/100 with nothing configured. A timed-out lookup was read as "no such
+    domain", the variants scan kept only "asufc", and Enter at the prompt
+    analysed asufc.com.
+    """
+
+    def test_a_lookup_that_gets_no_answer_is_not_a_missing_domain(self, dns_replay):
+        dns_replay("asufc_sanita_fvg_it_exists", silent=["asufc.sanita.fvg.it A"])
+        result = CliRunner().invoke(app, ["check", "asufc.sanita.fvg.it"])
+        assert result.exit_code == 1
+        assert "not found in DNS" not in result.output
+        assert "variant" not in result.output
+        assert "could not be checked" in result.output
+        assert "Analyzing" not in result.output
+
+    def test_a_missing_subdomain_is_not_swapped_for_another_domain(self, dns_replay):
+        dns_replay("asufc_sanita_fvg_it_exists")
+        result = CliRunner().invoke(app, ["check", "mailradar-nxdomain-test.sanita.fvg.it"])
+        assert result.exit_code == 1
+        assert "not found in DNS" in result.output
+        assert "Scanning TLD variants" not in result.output
+
+    def test_enter_at_the_variant_prompt_analyses_nothing(self, dns_replay):
+        """asufc.it does not exist; asufc.com and asufc.co.uk do (recorded).
+        Enter alone used to pick variant 1 and analyse somebody else's domain."""
+        dns_replay("asufc_variants")
+        result = CliRunner().invoke(app, ["check", "asufc.it"], input="\n")
+        assert "asufc.com" in result.output
+        assert "Analyzing" not in result.output
+        assert result.exit_code != 0

@@ -366,14 +366,23 @@ def check(
     Analyze the email security posture of a domain.
     If the domain does not exist, scan TLD variants and let you choose.
     """
-    from mailradar.checker import domain_exists, find_domain_variants
+    from mailradar.checker import DNSLookupError, domain_exists, find_domain_variants, variant_base
 
     # Does the domain exist at all
-    with _status(f"[cyan]Checking if {escape(domain)} exists...[/cyan]"):
-        exists = domain_exists(domain)
+    try:
+        with _status(f"[cyan]Checking if {escape(domain)} exists...[/cyan]"):
+            exists = domain_exists(domain)
+    except DNSLookupError as e:
+        # A timeout is not an answer: neither "not found" nor a guess at another domain
+        console.print(f"\n[red]❌ {escape(domain)} could not be checked: {escape(str(e))}. "
+                      "Try again, or with another DNS resolver.[/red]")
+        raise typer.Exit(1) from None
 
     if not exists:
         console.print(f"\n[yellow]⚠️  Domain [bold]{escape(domain)}[/bold] not found in DNS.[/yellow]")
+        if variant_base(domain) is None:
+            console.print("[red]❌ Check the domain name.[/red]")
+            raise typer.Exit(1)
         console.print("[dim]Scanning TLD variants...[/dim]\n")
 
         with _status("[cyan]Scanning variants...[/cyan]"):
@@ -388,11 +397,8 @@ def check(
             console.print(f"  [bold cyan]{i}[/bold cyan]. {escape(v)}")
 
         console.print()
-        choice = typer.prompt(
-            "Select domain to analyze (number)",
-            type=int,
-            default=1,
-        )
+        # No default: Enter alone analysed variant 1, a domain the user never named
+        choice = typer.prompt("Select domain to analyze (number)", type=int)
 
         if choice < 1 or choice > len(variants):
             console.print("[red]Invalid choice.[/red]")
