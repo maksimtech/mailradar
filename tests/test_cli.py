@@ -812,6 +812,10 @@ class TestCheckDomainExistence:
         Enter alone used to pick variant 1 and analyse somebody else's domain."""
         dns_replay("asufc_variants")
         result = CliRunner().invoke(app, ["check", "asufc.it"], input="\n")
-        assert "asufc.com" in result.output
+        # The offered list, compared line by line: a domain name tested as a
+        # substring reads to CodeQL as URL sanitisation (py/incomplete-url-
+        # substring-sanitization, alert #72), which this is not
+        offered = [line.strip() for line in result.output.splitlines()]
+        assert [line for line in offered if line[:2] in ("1.", "2.")] == ["1. asufc.com", "2. asufc.co.uk"]
         assert "Analyzing" not in result.output
         assert result.exit_code != 0
