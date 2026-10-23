@@ -12,6 +12,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+## [2026.46] - 2026-10-23
+
 ### Security
 
 - **certifi 2026.10.19** in `uv.lock` and `requirements-ci.txt`, from 2026.7.22. The older bundle trusts
@@ -965,7 +967,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.45...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.46...HEAD
+[2026.46]: https://github.com/maksimtech/mailradar/compare/v2026.45...v2026.46
 [2026.45]: https://github.com/maksimtech/mailradar/compare/v2026.44...v2026.45
 [2026.44]: https://github.com/maksimtech/mailradar/compare/v2026.43.1...v2026.44
 [2026.43.1]: https://github.com/maksimtech/mailradar/compare/v2026.43...v2026.43.1
