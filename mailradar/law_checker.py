@@ -13,17 +13,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+import httpx
+
 from mailradar import law_fetcher
 from mailradar.law_cache import Key, LawCache
-from mailradar.law_fetcher import GDPR, NIS2, Act, LawFetchError, Provision
+from mailradar.law_fetcher import DLGS_138_2024, GDPR, Act, LawFetchError, Provision
 
 # ─── Mapping: MailRadar findings → provisions ─────────────────────────────────
 
 # Finding → cited provisions, in report order
 FINDING_ARTICLES = {
-    "dmarc_missing": ((GDPR, "32"), (NIS2, "21")),
+    "dmarc_missing": ((GDPR, "32"), (DLGS_138_2024, "24")),
     "spf_dkim_weak": ((GDPR, "32"),),
-    "cleartext": ((GDPR, "32(1)(a)"), (NIS2, "21")),     # MTA-STS absent
+    "cleartext": ((GDPR, "32(1)(a)"), (DLGS_138_2024, "24")),     # MTA-STS absent
     "cleartext_testing": ((GDPR, "32(1)(a)"),),            # MTA-STS not enforced
     "gpg_missing": ((GDPR, "32"),),
 }
@@ -40,7 +42,7 @@ FINDING_TITLES = {
 ALSO_FETCH: dict = {}
 
 NIS2_SCOPE_NOTE = (
-    "NIS2 art. 21 binds essential and important entities (art. 3 of the directive): "
+    "D.Lgs. 138/2024 art. 24 binds essential and important entities (art. 3 of the decree): "
     "check that the domain holder falls within scope"
 )
 
@@ -109,10 +111,11 @@ class Citation:
 @dataclass(frozen=True)
 class ActStatus:
     act: Act
-    # "verified": downloaded now from the act's source (EUR-Lex or Normattiva);
-    # "cache": source unreachable, cached copy; "unavailable": no text at all
+    # "verified": downloaded now; "cache": source unreachable, cached copy; "unavailable": no text at all
     source: str
     error: str | None = None
+    # Where a verified text came from: "Cellar", "EUR-Lex" (the fallback) or "Normattiva"; None otherwise
+    origin: str | None = None
 
 
 @dataclass
@@ -133,6 +136,7 @@ def check(
     *,
     cache: LawCache | None = None,
     now: datetime | None = None,
+    client: httpx.Client | None = None,
     **context,
 ) -> LawCheckResult:
     """
@@ -158,13 +162,14 @@ def check(
     # Keyed by (celex, article) — the cache's key, not the fetcher's.
     fresh: dict[Key, Provision] = {}
     errors: dict[Act, str] = {}
+    origins: dict[Act, str] = {}
     for act in acts:
         # The articles cited ("32(1)(a)" is part of article 32) and ALSO_FETCH
         articles = tuple(dict.fromkeys(
             [ref.split("(")[0] for _, a, ref in cited if a == act] + list(ALSO_FETCH.get(act, ()))
         ))
         try:
-            by_article = law_fetcher.fetch_provisions(act, articles, now=now)
+            by_article, origins[act] = law_fetcher.fetch_provisions_from(act, articles, now=now, client=client)
         except LawFetchError as e:
             errors[act] = str(e)
         else:
@@ -182,7 +187,7 @@ def check(
     statuses = []
     for act in acts:
         if act not in errors:
-            statuses.append(ActStatus(act, "verified"))
+            statuses.append(ActStatus(act, "verified", origin=origins[act]))
         else:
             cached = any((act.celex, ref) in provisions for _, a, ref in cited if a == act)
             statuses.append(ActStatus(act, "cache" if cached else "unavailable", errors[act]))

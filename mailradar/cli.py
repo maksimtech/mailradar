@@ -320,7 +320,8 @@ def _print_law_check(law, out=None) -> None:
         act = status.act
         name, source = escape(act.name), escape(act.source)
         if status.source == "verified":
-            out.print(f"[dim]{name}: verified against {source} ({act.id_label} {escape(act.celex)})[/dim]")
+            origin = escape(status.origin or act.source)
+            out.print(f"[dim]{name}: verified against {origin} ({act.id_label} {escape(act.celex)})[/dim]")
         elif status.source == "cache":
             out.print(
                 f"[yellow]{name}: {source} unreachable, "
