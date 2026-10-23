@@ -1,0 +1,204 @@
+{
+ "_recorded": {
+  "date": "2026-10-20",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "check asufc.it: domain_exists(\"asufc.it\") and find_domain_variants(\"asufc.it\")",
+  "queried": [
+   "asufc.it. A",
+   "asufc.com. A",
+   "asufc.eu. A",
+   "asufc.org. A",
+   "asufc.net. A",
+   "asufc.io. A",
+   "asufc.co.uk. A",
+   "asufc.de. A",
+   "asufc.fr. A",
+   "asufc.es. A",
+   "asufc.nl. A",
+   "asufc.ch. A",
+   "asufc.gov.it. A",
+   "asufc.edu. A",
+   "asufc.info. A",
+   "asufc.biz. A"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.it. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "it. 3600 IN SOA dns.nic.it. hostmaster.nic.it. 2026102022 10800 900 604800 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.com. IN A",
+   ";ANSWER",
+   "asufc.com. 300 IN A 172.67.155.190",
+   "asufc.com. 300 IN A 104.21.40.174",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.eu. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "eu. 600 IN SOA si.dns.eu. tech.eurid.eu. 1129205058 3600 1800 3600000 600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.org. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "org. 3600 IN SOA a0.org.afilias-nst.info. hostmaster.donuts.email. 1792526824 7200 900 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.net. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "net. 900 IN SOA a.gtld-servers.net. nstld.verisign-grs.com. 1792527186 1800 900 604800 900",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.io. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "io. 3600 IN SOA a0.nic.io. hostmaster.donuts.email. 1792526783 7200 900 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.co.uk. IN A",
+   ";ANSWER",
+   "asufc.co.uk. 3600 IN A 217.160.0.49",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.de. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "de. 7200 IN SOA f.nic.de. dns-operations.denic.de. 1792527172 7200 7200 3600000 7200",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.fr. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "fr. 600 IN SOA a.nic.fr. dnsmaster.afnic.fr. 2247038694 3600 1800 1209600 600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.es. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "es. 3600 IN SOA ns1.nic.es. hostmaster.nic.es. 2026102012 7200 7200 2592000 86400",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.nl. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "nl. 600 IN SOA ns1.dns.nl. dns.sidn.nl. 2026102039 3600 600 1209600 600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.ch. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "ch. 900 IN SOA a.nic.ch. dns-operation.switch.ch. 2026102044 900 600 1209600 900",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.gov.it. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "gov.it. 3600 IN SOA dns.gov.it. hostmaster.gov.it. 2026102022 10800 900 604800 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.edu. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "edu. 900 IN SOA a.edu-servers.net. nstld.verisign-grs.com. 1792527186 1800 900 604800 900",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.info. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "info. 3600 IN SOA a0.info.afilias-nst.info. hostmaster.donuts.email. 1792527103 7200 900 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.biz. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "biz. 900 IN SOA a.gtld.biz. admin.tldns.godaddy. 1792526674 1800 300 604800 1800",
+   ";ADDITIONAL"
+  ]
+ ]
+}

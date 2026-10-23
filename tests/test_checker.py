@@ -10,6 +10,7 @@ import pytest
 
 from mailradar.checker import (
     DMARCResult,
+    DNSLookupError,
     SPFResult,
     _apply_dmarc_record,
     _apply_spf_verdict,
@@ -24,6 +25,7 @@ from mailradar.checker import (
     check_tls_rpt,
     dmarc_lookup_chain,
     domain_exists,
+    find_domain_variants,
     organizational_domain,
 )
 from tests.replay import recorded_txt
@@ -760,21 +762,54 @@ class TestDomainExists:
         result = domain_exists("apple")
         assert result is False
 
-    def test_domain_with_tld_exists(self):
-        mock_answer = [MagicMock()]
-        with patch('mailradar.checker.dns.resolver.resolve', return_value=mock_answer):
-            result = domain_exists("example.com")
-        assert result is True
-
-    def test_domain_nxdomain(self):
-        with patch('mailradar.checker.dns.resolver.resolve', side_effect=dns.resolver.NXDOMAIN):
-            result = domain_exists("thisdoesnotexist12345.com")
-        assert result is False
-
     def test_fqdn_with_trailing_dot_exists(self, dns_replay):
         """'example.com.' is a valid FQDN: with a positive DNS answer the domain exists."""
         dns_replay("example_com")
         assert domain_exists("example.com.") is True
+
+    # A user reported asufc.sanita.fvg.it (Azienda sanitaria universitaria
+    # Friuli Centrale) as "not existing, score 0/100": over a slow resolver the
+    # A lookup timed out, domain_exists read the timeout as "no such domain",
+    # and the check went on to offer asufc.com. One A query is enough to tell:
+    # NXDOMAIN is about the name, whatever the type asked for.
+
+    def test_a_name_with_an_address_exists(self, dns_replay):
+        server = dns_replay("asufc_sanita_fvg_it_exists")
+        assert domain_exists("asufc.sanita.fvg.it") is True
+        assert server.queries == ["asufc.sanita.fvg.it. A"]
+
+    def test_a_name_without_an_address_exists(self, dns_replay):
+        """sanita.fvg.it has MX and TXT and no A: NOERROR with no answer is a
+        name that exists, not one that does not."""
+        server = dns_replay("asufc_sanita_fvg_it_exists")
+        assert domain_exists("sanita.fvg.it") is True
+        assert server.queries == ["sanita.fvg.it. A"]
+
+    def test_a_name_that_does_not_exist(self, dns_replay):
+        server = dns_replay("asufc_sanita_fvg_it_exists")
+        assert domain_exists("mailradar-nxdomain-test.sanita.fvg.it") is False
+        assert server.queries == ["mailradar-nxdomain-test.sanita.fvg.it. A"]
+
+    def test_a_lookup_that_gets_no_answer_says_nothing_about_the_name(self, dns_replay):
+        dns_replay("asufc_sanita_fvg_it_exists", silent=["asufc.sanita.fvg.it A"])
+        with pytest.raises(DNSLookupError, match="asufc.sanita.fvg.it"):
+            domain_exists("asufc.sanita.fvg.it")
+
+
+class TestDomainVariants:
+
+    def test_a_subdomain_gets_no_variants(self, dns_replay):
+        """Keeping the first label and changing the rest turned the health
+        authority's asufc.sanita.fvg.it into asufc.com, somebody else's domain."""
+        server = dns_replay()
+        assert find_domain_variants("mailradar-nxdomain-test.sanita.fvg.it") == []
+        assert server.queries == []
+
+    def test_a_variant_the_dns_does_not_answer_for_is_left_out(self, dns_replay):
+        """asufc.com and asufc.co.uk exist (recorded); asufc.eu gets no answer:
+        it cannot be offered, and the others still are."""
+        dns_replay("asufc_variants", silent=["asufc.eu A"])
+        assert find_domain_variants("asufc.it") == ["asufc.com", "asufc.co.uk"]
 
 
 # ─── Full analysis ───────────────────────────────────────────────────────────
