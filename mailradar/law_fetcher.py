@@ -73,6 +73,14 @@ EPRIVACY = Act(
     "testo consolidato al 19.12.2009",
 )
 NIS2 = Act("NIS2 dir. 2022/2555", "32022L2555")
+# The directive binds the Member States; in Italy the duties of essential and important entities are in
+# d.lgs. 138/2024, which transposes it (art. 24: security measures; art. 3: scope).
+DLGS_138_2024 = Act(
+    "D.Lgs. 138/2024",
+    "urn:nir:stato:decreto.legislativo:2024-09-04;138",
+    "testo vigente",
+    source="Normattiva",
+)
 DIGITAL_CONTENT = Act("Contenuti digitali dir. 2019/770", "32019L0770")
 # Not on EUR-Lex, which lists Italian transposition measures without their text
 CONSUMER_CODE = Act(
@@ -541,22 +549,31 @@ def fetch_act_html(
     Both failures are reported together: an error that says only "unreachable"
     turns a five-minute diagnosis into an afternoon.
     """
+    return _fetch_act_page(act, lang, client=client, timeout=timeout)[0]
+
+
+def _fetch_act_page(
+    act: Act, lang: str, *, client: httpx.Client | None, timeout: float = 30.0
+) -> tuple[str, str]:
+    """(page, the source that served it): "Cellar", or "EUR-Lex" when only the fallback answered."""
     if act.source != "EUR-Lex":
         raise ValueError(f"{act.name} is published by {act.source}, which Cellar does not serve")
 
     language = CELLAR_LANGUAGES.get(lang.upper(), lang.lower())
     try:
-        return fetch_html(
+        page = fetch_html(
             CELLAR_URL.format(celex=act.celex),
             client=client,
             timeout=timeout,
             headers={"Accept": CELLAR_TYPE, "Accept-Language": language},
         )
+        return page, "Cellar"
     except LawFetchError as cellar_failed:
         try:
-            return fetch_html(
+            page = fetch_html(
                 SOURCE_URL.format(lang=lang, celex=act.celex), client=client, timeout=timeout
             )
+            return page, "EUR-Lex"
         except LawFetchError as page_failed:
             raise LawFetchError(f"{cellar_failed}; and {page_failed}") from page_failed
 
@@ -570,16 +587,33 @@ def fetch_provisions(
     client: httpx.Client | None = None,
 ) -> dict[str, Provision]:
     """Download `act` and return the provisions of `articles`, by reference."""
+    return fetch_provisions_from(act, articles, lang=lang, now=now, client=client)[0]
+
+
+def fetch_provisions_from(
+    act: Act,
+    articles: tuple[str, ...],
+    *,
+    lang: str = "IT",
+    now: datetime | None = None,
+    client: httpx.Client | None = None,
+) -> tuple[dict[str, Provision], str]:
+    """As fetch_provisions, with the source that served the text: "Cellar", "EUR-Lex" or "Normattiva".
+
+    A report names that source, not the act's publisher: the EU texts come from Cellar, and naming EUR-Lex
+    claimed a verification against a site the text did not come from.
+    """
     if act.source == "Normattiva":
         texts: dict[str, str] = {}
         for article in articles:
             html = fetch_html(NORMATTIVA_URL.format(urn=act.celex, article=article), client=client)
             texts.update(parse_articles(html, (article,)))
+        source = "Normattiva"
     else:
-        html = fetch_act_html(act, lang, client=client)
+        html, source = _fetch_act_page(act, lang, client=client)
         texts = parse_articles(html, articles)
     fetched_at = utc_stamp(now or datetime.now(UTC))
     return {
         ref: Provision.from_text(ref, text, fetched_at, act.celex)
         for ref, text in texts.items()
-    }
+    }, source

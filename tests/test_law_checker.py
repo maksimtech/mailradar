@@ -23,7 +23,7 @@ from mailradar.law_checker import (
     format_citation,
     notes_of,
 )
-from mailradar.law_fetcher import GDPR, NIS2, LawFetchError, Provision
+from mailradar.law_fetcher import DLGS_138_2024, GDPR, LawFetchError, Provision
 
 DAY1 = datetime(2026, 9, 19, 14, 0, tzinfo=UTC)
 DAY2 = datetime(2026, 10, 1, 9, 30, tzinfo=UTC)
@@ -52,7 +52,7 @@ def _fake_fetch(suffix=""):
         return {
             ref: Provision.from_text(ref, f"testo di {ref}{suffix}", stamp, act.celex)
             for ref in refs if ref.split("(")[0] in articles
-        }
+        }, "Cellar"
 
     fake.calls = calls
     return fake
@@ -66,7 +66,7 @@ def cache(tmp_path):
 @pytest.fixture
 def online(monkeypatch):
     fake = _fake_fetch()
-    monkeypatch.setattr(law_fetcher, "fetch_provisions", fake)
+    monkeypatch.setattr(law_fetcher, "fetch_provisions_from", fake)
     return fake.calls
 
 
@@ -74,9 +74,9 @@ def online(monkeypatch):
 
 def test_mapping():
     assert FINDING_ARTICLES == {
-        "dmarc_missing": ((GDPR, "32"), (NIS2, "21")),
+        "dmarc_missing": ((GDPR, "32"), (DLGS_138_2024, "24")),
         "spf_dkim_weak": ((GDPR, "32"),),
-        "cleartext": ((GDPR, "32(1)(a)"), (NIS2, "21")),
+        "cleartext": ((GDPR, "32(1)(a)"), (DLGS_138_2024, "24")),
         "cleartext_testing": ((GDPR, "32(1)(a)"),),
         "gpg_missing": ((GDPR, "32"),),
     }
@@ -135,7 +135,7 @@ def test_cleartext_without_mta_sts():
 
 
 def test_mta_sts_testing_is_cleartext_without_nis2():
-    # NIS2 is cited for MTA-STS absent; testing mode only for GDPR art. 32(1)(a)
+    # D.Lgs. 138/2024 is cited for MTA-STS absent; testing mode only for GDPR art. 32(1)(a)
     found = findings_of(_report(mta_sts=MTASTSResult(present=True, mode="testing")))
     assert found == {"cleartext_testing": ["MTA-STS in testing mode, not enforce"]}
 
@@ -183,14 +183,14 @@ def test_all_findings_cite_gdpr_and_nis2(cache, online):
 
     assert [(c.finding, c.law, c.article) for c in law.citations] == [
         ("dmarc_missing", "GDPR", "32"),
-        ("dmarc_missing", "NIS2 dir. 2022/2555", "21"),
+        ("dmarc_missing", "D.Lgs. 138/2024", "24"),
         ("spf_dkim_weak", "GDPR", "32"),
         ("cleartext", "GDPR", "32(1)(a)"),
-        ("cleartext", "NIS2 dir. 2022/2555", "21"),
+        ("cleartext", "D.Lgs. 138/2024", "24"),
         ("gpg_missing", "GDPR", "32"),
     ]
     # Each act is downloaded once, for all the findings citing it
-    assert online == [(GDPR, ("32",)), (NIS2, ("21",))]
+    assert online == [(GDPR, ("32",)), (DLGS_138_2024, ("24",))]
     assert [s.source for s in law.acts] == ["verified", "verified"]
     assert law.notes == [NIS2_SCOPE_NOTE]
     assert law.citations[0].version_date == "2026-09-19"
@@ -206,10 +206,10 @@ def test_second_audit_same_text_keeps_version_date(cache, online):
 
 
 def test_second_audit_changed_text(cache, monkeypatch):
-    monkeypatch.setattr(law_fetcher, "fetch_provisions", _fake_fetch())
+    monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch())
     first = check(_report(gpg=GPGResult(found=False)), cache=cache, now=DAY1)
 
-    monkeypatch.setattr(law_fetcher, "fetch_provisions", _fake_fetch(" (rettificato)"))
+    monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch(" (rettificato)"))
     law = check(_report(gpg=GPGResult(found=False)), cache=cache, now=DAY2)
 
     assert law.changed == {"GDPR art. 32": first.citations[0].sha256}
@@ -223,7 +223,7 @@ def test_offline_uses_cache(cache, online, monkeypatch):
     def offline(*args, **kwargs):
         raise LawFetchError("offline")
 
-    monkeypatch.setattr(law_fetcher, "fetch_provisions", offline)
+    monkeypatch.setattr(law_fetcher, "fetch_provisions_from", offline)
     law = check(_report(dmarc=DMARCResult(present=False)), cache=cache, now=DAY2)
 
     assert [(s.source, s.error) for s in law.acts] == [("cache", "offline"), ("cache", "offline")]

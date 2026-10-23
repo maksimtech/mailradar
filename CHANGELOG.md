@@ -21,6 +21,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **A missing DMARC record and MTA-STS now cite art. 24 of d.lgs. 138/2024, not art. 21 of the NIS2
+  directive.** The directive binds the Member States; in Italy the duty of essential and important
+  entities to take security measures is art. 24 of the decree that transposes it ("Obblighi in materia
+  di misure di gestione dei rischi per la sicurezza informatica"), downloaded from Normattiva. The scope
+  note now points to art. 3 of the decree.
+- **A verified text names the source it came from.** EU acts are downloaded from Cellar
+  (publications.europa.eu), with EUR-Lex only as the fallback, but the report said "verified against
+  EUR-Lex" whichever answered. It now says Cellar, EUR-Lex or Normattiva, as the case was;
+  `law_checker.check` takes an optional HTTP client, so the path can be tested on recorded answers.
 - **`check` no longer turns a DNS failure into "domain not found", and no longer analyses
   somebody else's domain instead.** Reported by a user: `asufc.sanita.fvg.it` (Azienda sanitaria
   universitaria Friuli Centrale) came out as "not found in DNS", then as 0/100 with nothing
