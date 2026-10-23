@@ -1,0 +1,47 @@
+{
+ "_recorded": {
+  "date": "2026-10-20",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+  "by": "domain_exists() on a name with an address, a name with no address (sanita.fvg.it has MX and TXT, no A) and a name that does not exist",
+  "queried": [
+   "asufc.sanita.fvg.it. A",
+   "sanita.fvg.it. A",
+   "mailradar-nxdomain-test.sanita.fvg.it. A"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "asufc.sanita.fvg.it. IN A",
+   ";ANSWER",
+   "asufc.sanita.fvg.it. 84273 IN A 193.43.177.50",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "sanita.fvg.it. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "sanita.fvg.it. 86400 IN SOA dns.regione.fvg.it. postmaster.sanita.fvg.it. 2026102000 86400 7200 604800 86400",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "mailradar-nxdomain-test.sanita.fvg.it. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "sanita.fvg.it. 86400 IN SOA dns.regione.fvg.it. postmaster.sanita.fvg.it. 2026102000 86400 7200 604800 86400",
+   ";ADDITIONAL"
+  ]
+ ]
+}
