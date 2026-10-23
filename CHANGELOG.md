@@ -12,6 +12,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Security
+
+- **certifi 2026.10.19** in `uv.lock` and `requirements-ci.txt`, from 2026.7.22. The older bundle trusts
+  emSign root CAs whose intermediate CA keys were compromised (GHSA-6q48-6c7w-9gw2, critical, published
+  2026-10-20); 2026.10.19 is the release the advisory names as fixed. The Security Posture gate stopped
+  every pull request on it.
+
 ### Fixed
 
 - **A missing DMARC record and MTA-STS now cite art. 24 of d.lgs. 138/2024, not art. 21 of the NIS2
