@@ -20,6 +20,7 @@ from mailradar.cli import app
 FIXTURES = Path(__file__).parent / "fixtures"
 FIXTURE = FIXTURES / "gdpr_it_excerpt.html"
 NIS2_PAGE = FIXTURES / "nis2_it_excerpt.html"
+ART_24_PAGE = FIXTURES / "normattiva_dlgs138_2024_art24_recorded.html"
 runner = CliRunner()
 
 
@@ -50,7 +51,7 @@ def eurlex(monkeypatch):
 
     def fake_fetch_html(url, **kwargs):
         calls.append(url)
-        page = NIS2_PAGE if "32022L2555" in url else FIXTURE
+        page = ART_24_PAGE if "normattiva.it" in url else NIS2_PAGE if "32022L2555" in url else FIXTURE
         return page.read_text(encoding="utf-8")
 
     monkeypatch.setattr(law_fetcher, "fetch_html", fake_fetch_html)
@@ -76,16 +77,20 @@ def test_check_cites_article_32(eurlex):
     assert "Version of: " in out.output
     assert eurlex == [
         "https://publications.europa.eu/resource/celex/32016R0679",
-        "https://publications.europa.eu/resource/celex/32022L2555",
+        "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2024-09-04;138~art24!vig=",
     ]
 
 
-def test_check_cites_nis2_for_dmarc_and_mta_sts(eurlex):
+def test_check_cites_the_italian_nis2_decree_for_dmarc_and_mta_sts(eurlex):
     out = _check(_report())
 
-    assert "Provision applied: NIS2 dir. 2022/2555 art. 21\n" in out.output
-    assert f"SHA256: {_sha('21', NIS2_PAGE)}" in out.output
-    assert "NIS2 dir. 2022/2555: verified against EUR-Lex (CELEX 32022L2555)" in out.output
+    assert "Provision applied: D.Lgs. 138/2024 art. 24\n" in out.output
+    assert f"SHA256: {_sha('24', ART_24_PAGE)}" in out.output
+    flat = " ".join(out.output.split())   # Rich wraps the long URN at 80 columns
+    assert ("D.Lgs. 138/2024: verified against Normattiva "
+            "(URN urn:nir:stato:decreto.legislativo:2024-09-04;138)") in flat
+    assert "GDPR: verified against Cellar (CELEX 32016R0679)" in out.output
+    assert "EUR-Lex" not in out.output
     assert "essential and important entities" in out.output
 
 
