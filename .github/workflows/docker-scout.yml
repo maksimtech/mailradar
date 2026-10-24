@@ -2,8 +2,13 @@ name: Docker Scout CVE Scan
 on:
   # The scan reads maksimtech/mailradar:latest from Docker Hub, so it is only
   # meaningful once a new image is published — which happens on a tag, not on a
-  # push to main. Without this, re-scanning after a release meant re-running an
-  # earlier run by hand.
+  # push to main. So it follows the workflow that pushes the image: until
+  # 2026-10-24 it did not, and after a release the scan, and the Security Posture
+  # gate that reads it, kept describing the image the release had replaced until
+  # somebody dispatched them by hand.
+  workflow_run:
+    workflows: ["Build and Push Docker Image"]
+    types: [completed]
   workflow_dispatch:
   push:
     branches: [ main ]
@@ -15,6 +20,8 @@ permissions:
 jobs:
   scout:
     name: Docker Scout
+    # After a push that failed, Docker Hub still has the old image: nothing to rescan.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-26.04
     steps:
       - name: Checkout
