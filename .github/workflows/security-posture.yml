@@ -20,6 +20,12 @@ on:
   # review date that passes while nobody pushes has to fail on its own.
   schedule:
     - cron: '0 6 * * 1'
+  # After Docker Scout has read a newly published image: the alerts it closes and
+  # opens are what main's verdict is about, and until 2026-10-24 that verdict
+  # waited for the next push or for somebody to run this by hand.
+  workflow_run:
+    workflows: ["Docker Scout CVE Scan"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
