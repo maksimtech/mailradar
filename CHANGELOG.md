@@ -12,6 +12,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docker Scout scans the image as soon as it is published, and Security Posture reads that scan.**
+  The scan reads `latest` from Docker Hub but ran only on a push to main, weekly or by hand: after the
+  2026.46 release the gate stayed red on the replaced image's old certifi until both were dispatched by
+  hand. `docker-scout.yml` now follows the image workflow (`workflow_run`, successful runs only) and
+  `security-posture.yml` follows the scan. `docs/nis2-compliance.md` already said the scan ran on every
+  image build; now it does, and `tests/test_scan_after_publish.py` holds the two together.
+
+## [2026.46] - 2026-10-23
+
 ### Security
 
 - **certifi 2026.10.19** in `uv.lock` and `requirements-ci.txt`, from 2026.7.22. The older bundle trusts
@@ -965,7 +976,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.45...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.46...HEAD
+[2026.46]: https://github.com/maksimtech/mailradar/compare/v2026.45...v2026.46
 [2026.45]: https://github.com/maksimtech/mailradar/compare/v2026.44...v2026.45
 [2026.44]: https://github.com/maksimtech/mailradar/compare/v2026.43.1...v2026.44
 [2026.43.1]: https://github.com/maksimtech/mailradar/compare/v2026.43...v2026.43.1
