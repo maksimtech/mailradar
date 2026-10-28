@@ -12,6 +12,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+## [2026.47] - 2026-10-28
+
 ### Security
 
 - **Every action in every workflow is pinned to a commit, with its release beside it.** Ten of the sixteen
@@ -1000,7 +1002,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.46...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.47...HEAD
+[2026.47]: https://github.com/maksimtech/mailradar/compare/v2026.46...v2026.47
 [2026.46]: https://github.com/maksimtech/mailradar/compare/v2026.45...v2026.46
 [2026.45]: https://github.com/maksimtech/mailradar/compare/v2026.44...v2026.45
 [2026.44]: https://github.com/maksimtech/mailradar/compare/v2026.43.1...v2026.44
