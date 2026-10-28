@@ -140,6 +140,7 @@ you to pick one of those that exist.
 | `0` | Grade EXCELLENT or GOOD |
 | `1` | Grade MODERATE or POOR, or the domain could not be resolved |
 | `2` | Grade CRITICAL |
+| `3` | No grade: a DNS lookup got no answer (timeout, SERVFAIL), so the analysis is incomplete |
 
 ### `batch`: analyze several domains
 
@@ -249,6 +250,13 @@ Each check awards points. The raw total (maximum 108) is scaled to 0–100.
 | 50–74 | 🟡 MODERATE | Authentication is present but has gaps |
 | 25–49 | 🟠 POOR | Authentication is partial or misconfigured |
 | 0–24 | 🔴 CRITICAL | No meaningful email authentication |
+
+When a DNS lookup gets no answer — a timeout, a SERVFAIL, a company network
+that lets no DNS out — the check is "not verified", and the analysis gets no
+score: `Score: N/A`, the checks that were not verified named beside it, exit
+code 3. Counting them as 0 points read as a domain measured at the bottom of
+the scale. A keyserver that does not answer is the exception: it withholds at
+most the 5 GPG points, and the GPG check says it was not verified.
 
 DMARC, SPF and DKIM account for 85 of the 108 points. They decide whether the
 domain can be spoofed. The other checks are hardening measures.

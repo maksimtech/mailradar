@@ -22,6 +22,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **No score without a measurement.** When a DNS lookup got no answer (timeout, SERVFAIL), the
+  checks were marked "not verified" but still counted 0 points, and `check` printed `0/100 CRITICAL`
+  with exit code 2 — reported behind a company resolver for asufc.sanita.fvg.it, which scores 19 from outside.
+  The analysis now has no score: `total_score` is `None`, the grade `N/A`, `check` names the checks
+  that were not verified and exits with 3, and `batch` lists the domain as N/A after the graded ones.
+  `DomainReport.unverified` names those checks. A keyserver that does not answer still leaves a score.
+
 - **Docker Scout scans the image as soon as it is published, and Security Posture reads that scan.**
   The scan reads `latest` from Docker Hub but ran only on a push to main, weekly or by hand: after the
   2026.46 release the gate stayed red on the replaced image's old certifi until both were dispatched by

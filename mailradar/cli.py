@@ -114,7 +114,9 @@ def _root(
     """📡 Email security posture analyzer — DMARC, SPF, DKIM, BIMI, VMC & GPG audit tool"""
 
 
-def _score_color(score: int) -> str:
+def _score_color(score: int | None) -> str:
+    if score is None:
+        return "yellow"
     if score >= 90:
         return "bright_green"
     elif score >= 75:
@@ -163,10 +165,16 @@ def _print_report(report: DomainReport) -> None:
     color = _score_color(report.total_score)
     emoji = _grade_emoji(report.grade)
 
+    if report.total_score is None:
+        # No number: every check a lookup did not answer would have counted 0
+        score = (f"[{color}]N/A — analysis incomplete, not verified: "
+                 f"{escape(', '.join(report.unverified))}[/{color}]")
+    else:
+        score = f"[{color}]{report.total_score}/100 — {emoji} {report.grade}[/{color}]"
     console.print()
     console.print(Panel(
         f"[bold]Domain:[/bold] {escape(report.domain)}\n"
-        f"[bold]Score:[/bold] [{color}]{report.total_score}/100 — {emoji} {report.grade}[/{color}]",
+        f"[bold]Score:[/bold] {score}",
         title="📡 MailRadar Report",
         border_style=color,
     ))
@@ -430,7 +438,10 @@ def check(
 
     _print_law_check(_law_check(report))
 
-    # Exit code based on grade
+    # Exit code based on grade. An incomplete analysis has a grade of its own:
+    # 2 told a script "measured and found bad" for lookups nobody answered.
+    if report.total_score is None:
+        raise typer.Exit(3)
     if report.grade == "CRITICAL":
         raise typer.Exit(2)
     elif report.grade in ("POOR", "MODERATE"):
@@ -489,11 +500,12 @@ def batch(
     summary.add_column("Score", justify="right")
     summary.add_column("Grade")
 
-    for r in sorted(results, key=lambda x: x.total_score):
+    # Worst first; the incomplete analyses after the graded ones, not among the zeros
+    for r in sorted(results, key=lambda x: (x.total_score is None, x.total_score or 0)):
         color = _score_color(r.total_score)
         summary.add_row(
             escape(r.domain),
-            f"[{color}]{r.total_score}[/{color}]",
+            f"[{color}]{'N/A' if r.total_score is None else r.total_score}[/{color}]",
             f"{_grade_emoji(r.grade)} {r.grade}"
         )
 
