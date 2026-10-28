@@ -34,16 +34,27 @@ jobs:
       - name: Docker Scout CVE scan
         uses: docker/scout-action@4bbf17a9da65a7b5497361bb407e88cc9548f69c # v1.28.0
         with:
-          # cves says what is broken in the image; recommendations says
-          # whether a base image exists that fixes it. On 2026-09-26 the first
-          # scan of exeradar found five HIGH CVEs, all of them in
-          # python:3.14-slim-trixie and none in this project's code — which is
-          # a fact nobody can act on without the second command.
-          command: cves,recommendations
+          # cves says what is broken in the image and feeds the Security tab;
+          # if this step fails, the job does.
+          command: cves
           image: maksimtech/mailradar:latest
           only-severities: critical,high
           exit-code: false
           sarif-file: scout-results.sarif
+      - name: Docker Scout base image recommendations
+        # recommendations says whether a base image exists that fixes those
+        # CVEs. On 2026-09-26 the first scan of exeradar found five HIGH CVEs,
+        # all of them in python:3.14-slim-trixie and none in this project's
+        # code — a fact nobody can act on without this command. It is advice:
+        # from 2026-10-24 the scout CLI crashed in it (nil pointer in
+        # recommendations/markdown.go) on python:3.12-slim-trixie images, and
+        # run together with cves it turned every scan red. A failure here
+        # shows in the log and fails nothing (tests/test_scout_steps.py).
+        continue-on-error: true
+        uses: docker/scout-action@4bbf17a9da65a7b5497361bb407e88cc9548f69c # v1.28.0
+        with:
+          command: recommendations
+          image: maksimtech/mailradar:latest
       - name: Upload Scout results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: always() && hashFiles('scout-results.sarif') != ''
