@@ -33,6 +33,12 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **Docker Scout no longer fails on its own base-image advice.** From 2026-10-24 every run of
+  `docker-scout.yml` failed and GitHub mailed it on each push to main: the CVE scan worked, then the scout
+  CLI crashed in the `recommendations` part (nil pointer in `recommendations/markdown.go`) on images built
+  on python:3.12-slim-trixie. The scan is now a step of its own that writes the SARIF and fails the job if it
+  fails; the recommendations are a second step with `continue-on-error`. `tests/test_scout_steps.py`
+  holds the two apart.
 - **No score without a measurement.** When a DNS lookup got no answer (timeout, SERVFAIL), the
   checks were marked "not verified" but still counted 0 points, and `check` printed `0/100 CRITICAL`
   with exit code 2 — reported behind a company resolver for asufc.sanita.fvg.it, which scores 19 from outside.
