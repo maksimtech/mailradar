@@ -74,7 +74,7 @@ jobs:
         # `always()` so the SARIF is published even when the scan step failed;
         # `hashFiles` so a scan that produced nothing does not fail the upload.
         if: ${{ always() && env.SNYK_ENABLED == 'true' && hashFiles('snyk-code.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: snyk-code.sarif
           category: snyk-code
@@ -199,7 +199,7 @@ jobs:
 
       - name: Upload Snyk Container results
         if: ${{ always() && env.SNYK_ENABLED == 'true' && hashFiles('snyk-container.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: snyk-container.sarif
           category: snyk-container
