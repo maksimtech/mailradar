@@ -855,6 +855,7 @@ class TestNoScoreWithoutMeasure:
         domains.write_text("example.com\n", encoding="utf-8")
         result = CliRunner().invoke(app, ["batch", str(domains)])
         assert result.exception is None, result.output
-        row = next(line for line in result.output.splitlines() if line.strip().startswith("example.com"))
-        assert "N/A" in row
-        assert "CRITICAL" not in row
+        # The summary row is the one whose first cell is the domain, compared whole
+        cells = next(line.split() for line in result.output.splitlines() if line.split()[:1] == ["example.com"])
+        assert cells[1] == "N/A"
+        assert "CRITICAL" not in cells
