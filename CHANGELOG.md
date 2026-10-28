@@ -14,6 +14,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Security
 
+- **Every action in every workflow is pinned to a commit, with its release beside it.** Ten of the sixteen
+  workflows named moving tags (`actions/setup-python@v7`, `actions/checkout@v7`, the Docker actions) and
+  publish.yml, which holds the PyPI OIDC token, a branch: `pypa/gh-action-pypi-publish@release/v1`. Whoever
+  moves a tag changes what these jobs run without a pull request here — `setup-python@v7` already ran
+  7.1.0, released six days earlier. Each is now a full commit with `# vX.Y.Z`, the release its tag pointed
+  to, or the one the other workflows already used where that was younger than two weeks; pypi-publish
+  1.14.3 and scout-action 1.28.0 stay, being security releases. `tests/test_actions_pinned.py` holds all
+  sixteen to it; tests/test_ci_contract.py held test.yml alone.
+
 - **dnspython 2.9.0** in `uv.lock`, from 2.8.0. `dns.name.from_wire_parser()` before 2.9.0 can be made to
   use excessive CPU by a crafted name in a DNS message (GHSA-45c3-73f7-pv4m, CVE-2026-114605, high,
   published 2026-10-27); mailradar parses the answers of whatever resolver it is given. 2.9.0 is the
