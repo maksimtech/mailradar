@@ -39,7 +39,7 @@ jobs:
           pip install -e ".[dev]"  # NOSONAR - trusted internal project
           pip install pytest-codspeed --only-binary :all:
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@821a40cd6c80e3cfe387caf55668287addd808da # v5
+        uses: CodSpeedHQ/action@821a40cd6c80e3cfe387caf55668287addd808da # v5.5.0
         with:
           mode: simulation
           run: pytest tests/benchmarks/ --codspeed
