@@ -121,8 +121,21 @@ class DomainReport:
     mta_sts: MTASTSResult = field(default_factory=MTASTSResult)
     tls_rpt: TLSRPTResult = field(default_factory=TLSRPTResult)
     gpg: GPGResult = field(default_factory=GPGResult)
-    total_score: int = 0
+    # None, with grade "N/A", when a DNS lookup got no answer: a check that was
+    # not verified scored 0, and the total read as a measured bottom of scale.
+    total_score: int | None = 0
     grade: str = "F"
+
+    @property
+    def unverified(self) -> list[str]:
+        """The checks whose DNS lookup got no answer (timeout, SERVFAIL), in report order.
+
+        GPG is not among them: a keyserver that rate-limits withholds at most its
+        5 points and says so in its own issue, as `report` and `send` already treat it.
+        """
+        checks = (("DMARC", self.dmarc), ("SPF", self.spf), ("DKIM", self.dkim),
+                  ("BIMI", self.bimi), ("MTA-STS", self.mta_sts), ("TLS-RPT", self.tls_rpt))
+        return [name for name, check in checks if check.error]
 
 
 def domain_exists(domain: str) -> bool:
@@ -955,6 +968,12 @@ def analyze_domain(domain: str) -> DomainReport:
     # GPG lookup
     from mailradar.gpg import lookup_gpg
     report.gpg = lookup_gpg(domain)
+
+    if report.unverified:
+        # Nothing to grade: "could not tell" is not "bad"
+        report.total_score = None
+        report.grade = "N/A"
+        return report
 
     raw_score = sum(getattr(report, check).score for check in MAX_SCORES)
     report.total_score = min(100, round(raw_score * 100 / MAX_RAW_SCORE))

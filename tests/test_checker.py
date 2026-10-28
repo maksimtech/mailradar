@@ -9,6 +9,7 @@ import dns.resolver
 import pytest
 
 from mailradar.checker import (
+    DKIM_SELECTORS,
     DMARCResult,
     DNSLookupError,
     SPFResult,
@@ -920,13 +921,17 @@ from mailradar.checker import MAX_RAW_SCORE, MAX_SCORES
 
 
 def _mock_checks(**scores):
-    """Patch every check_* to return a result with the given score."""
+    """Patch every check_* to return a verified result with the given score.
+
+    `error=""` says so: a MagicMock's own `error` is a truthy MagicMock, which
+    reads as a lookup that got no answer and leaves the analysis without a score.
+    """
     from contextlib import ExitStack
     stack = ExitStack()
     for check in MAX_SCORES:
         target = "mailradar.gpg.lookup_gpg" if check == "gpg" else f"mailradar.checker.check_{check}"
         stack.enter_context(patch(
-            target, return_value=MagicMock(score=scores.get(check, 0), issues=[])
+            target, return_value=MagicMock(score=scores.get(check, 0), issues=[], error="")
         ))
     return stack
 
@@ -991,6 +996,51 @@ class TestScoreNormalization:
         with _mock_checks(**{k: v * 2 for k, v in MAX_SCORES.items()}):
             report = analyze_domain("example.com")
         assert report.total_score == 100
+
+
+class TestNoScoreWithoutMeasure:
+    """A check whose DNS lookup got no answer leaves the analysis without a score.
+
+    Reported behind a company resolver: asufc.sanita.fvg.it came out 0/100
+    CRITICAL. The resolver did not answer for the records, every check ended
+    "not verified" and was counted as 0 points, so the total read as a
+    measured bottom of the scale. From outside, the same domain scores 19.
+    "Bad" and "could not tell" are different answers: the score is None and
+    the grade N/A, and the report names what was not verified.
+    """
+
+    def test_an_unanswered_lookup_leaves_no_score(self, dns_replay, http_replay):
+        dns_replay("example_com", "example_com_mta_sts", "example_com_dkim_more_selectors",
+                   silent=["_dmarc.example.com TXT"])
+        http_replay("example_com", "example_com_mta_sts_404", "keyservers_example_com")
+        report = analyze_domain("example.com")
+        assert report.dmarc.error
+        assert report.total_score is None
+        assert report.grade == "N/A"
+        assert report.unverified == ["DMARC"]
+
+    def test_every_check_unanswered_is_not_critical(self, dns_replay, http_replay):
+        dns_replay("example_com", silent=[
+            "_dmarc.example.com TXT", "example.com TXT", "_mta-sts.example.com TXT",
+            "_smtp._tls.example.com TXT", "default._bimi.example.com TXT",
+            *(f"{s}._domainkey.example.com TXT" for s in DKIM_SELECTORS),
+        ])
+        http_replay("example_com", "example_com_mta_sts_404", "keyservers_example_com")
+        report = analyze_domain("example.com")
+        assert report.total_score is None
+        assert report.grade != "CRITICAL"
+        assert report.unverified == ["DMARC", "SPF", "DKIM", "BIMI", "MTA-STS", "TLS-RPT"]
+
+    def test_a_keyserver_that_does_not_answer_still_leaves_a_score(self, dns_replay, http_replay):
+        """GPG is the exception, as for `report` and `send`: keys.openpgp.org allows one
+        lookup a minute, and a batch would otherwise be all N/A. Its 5 points are the
+        only ones a keyserver can withhold, and the check says it was not verified."""
+        dns_replay("example_com", "example_com_dkim_more_selectors")
+        http_replay("example_com", "keys_openpgp_org_example_com_contacts", "keyserver_ubuntu_example_com_no_answer")
+        report = analyze_domain("example.com")
+        assert report.gpg.error
+        assert isinstance(report.total_score, int)
+        assert report.unverified == []
 
 
 class TestDKIMSelectors:

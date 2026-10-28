@@ -819,3 +819,43 @@ class TestCheckDomainExistence:
         assert [line for line in offered if line[:2] in ("1.", "2.")] == ["1. asufc.com", "2. asufc.co.uk"]
         assert "Analyzing" not in result.output
         assert result.exit_code != 0
+
+
+class TestNoScoreWithoutMeasure:
+    """`check` and `batch` on an analysis whose DNS lookups got no answer: no score is printed.
+
+    Reported behind a company resolver: asufc.sanita.fvg.it came out "0/100 CRITICAL"
+    with exit code 2 — what a script reads as a domain measured and found bad —
+    because every lookup timed out and each check counted 0 points.
+    """
+
+    def _replay(self, dns_replay, http_replay):
+        dns_replay("example_com", "example_com_mta_sts", "example_com_dkim_more_selectors",
+                   silent=["_dmarc.example.com TXT"])
+        http_replay("example_com", "example_com_mta_sts_404", "keyservers_example_com")
+
+    def test_check_prints_no_score_and_names_what_was_not_verified(self, dns_replay, http_replay):
+        self._replay(dns_replay, http_replay)
+        result = CliRunner().invoke(app, ["check", "example.com"])
+        out = " ".join(result.output.split())
+        assert "Score: N/A" in out
+        assert "/100" not in out
+        assert "CRITICAL" not in out
+        assert "not verified: DMARC" in out
+
+    def test_check_exits_3_not_2(self, dns_replay, http_replay):
+        """2 is "grade CRITICAL"; an analysis that could not be completed has its own code."""
+        self._replay(dns_replay, http_replay)
+        result = CliRunner().invoke(app, ["check", "example.com"])
+        assert result.exit_code == 3, result.output
+
+    def test_batch_summary_shows_n_a(self, dns_replay, http_replay, tmp_path):
+        self._replay(dns_replay, http_replay)
+        domains = tmp_path / "domains.txt"
+        domains.write_text("example.com\n", encoding="utf-8")
+        result = CliRunner().invoke(app, ["batch", str(domains)])
+        assert result.exception is None, result.output
+        # The summary row is the one whose first cell is the domain, compared whole
+        cells = next(line.split() for line in result.output.splitlines() if line.split()[:1] == ["example.com"])
+        assert cells[1] == "N/A"
+        assert "CRITICAL" not in cells
