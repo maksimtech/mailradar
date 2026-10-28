@@ -12,6 +12,14 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Security
+
+- **dnspython 2.9.0** in `uv.lock`, from 2.8.0. `dns.name.from_wire_parser()` before 2.9.0 can be made to
+  use excessive CPU by a crafted name in a DNS message (GHSA-45c3-73f7-pv4m, CVE-2026-114605, high,
+  published 2026-10-27); mailradar parses the answers of whatever resolver it is given. 2.9.0 is the
+  release the advisory names as fixed, published 2026-10-09; the Security Posture gate stopped every
+  pull request on Trivy's alert for it.
+
 ### Fixed
 
 - **Docker Scout scans the image as soon as it is published, and Security Posture reads that scan.**
