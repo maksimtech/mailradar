@@ -28,3 +28,61 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+
+  # The image a pull request builds, before it is merged. Docker Scout reads
+  # `latest` only once it has been published, so until 2026-11-02 this was Snyk
+  # Container's job, and the only part of snyk.yml that worked
+  # (tests/test_workflow_set.py, RETIRED). Report only, like the files above:
+  # Security Posture is what refuses.
+  image:
+    name: Trivy image
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The name must stay fixed. Snyk wrote the image reference into its SARIF's
+      # automation id, and tagged with the commit it minted a code-scanning
+      # configuration per run — apkradar reached 32 of them.
+      - name: Build the image for scanning
+        id: build
+        if: ${{ hashFiles('Dockerfile') != '' }}
+        run: docker build -t "trivy-scan:ci" .
+      - name: Scan the image
+        if: ${{ steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: 'trivy-scan:ci'
+          format: 'sarif'
+          output: 'trivy-image.sarif'
+          severity: 'CRITICAL,HIGH'
+          # Without it the SARIF carries every severity whatever `severity` says:
+          # Snyk counted 107 low findings in apkradar's base image on 2026-11-02.
+          limit-severities-for-sarif: true
+      # The SARIF goes to code scanning, where an alert reads "library/trivy-scan:1"
+      # and not which package it is in. The log says it, for whoever has to write
+      # the exception or the fix.
+      - name: List the image findings
+        if: always() && hashFiles('trivy-image.sarif') != ''
+        run: |
+          python3 - trivy-image.sarif <<'LIST'
+          import json, sys
+          found = set()
+          for run in json.load(open(sys.argv[1], encoding="utf-8"))["runs"]:
+              for result in run["results"]:
+                  fields = dict(line.split(": ", 1) for line in result["message"]["text"].splitlines() if ": " in line)
+                  found.add((result["ruleId"], fields.get("Package", "?"), fields.get("Installed Version", "?"),
+                             fields.get("Severity", "?"), fields.get("Fixed Version", "") or "no fix"))
+          for row in sorted(found):
+              print("  ".join(row))
+          print(f"{len(found)} finding(s)")
+          LIST
+      # A category of its own, written down rather than derived from the job's
+      # name: renaming a job would otherwise start a new configuration and leave
+      # the old one's alerts open with nothing left to close them.
+      - name: Upload the image findings to the GitHub Security tab
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: always() && hashFiles('trivy-image.sarif') != ''
+        with:
+          sarif_file: 'trivy-image.sarif'
+          category: trivy-image
