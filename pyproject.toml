@@ -10,7 +10,7 @@ readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Massimo Moretti", email = "massimo.moretti@maksimtech.com"},
+    {name = "Massimo Moretti", email = "github@maksimtech.com"},
 ]
 keywords = ["dmarc", "spf", "dkim", "bimi", "email-security", "privacy", "gdpr", "security-audit"]
 classifiers = [
