@@ -14,6 +14,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **Dependabot proposes a release once it is 14 days old, and actions arrive as one pull request.**
+  The Radar take a dependency at least 14 days after its release unless a known vulnerability makes the
+  older version the risk; without a cooldown Dependabot opened twelve pull requests across the Radar on
+  2026-10-29 and 2026-11-02 for releases two to thirteen days old. `.github/dependabot.yml` now sets a
+  14-day cooldown on every ecosystem — Dependabot's security updates are not subject to it — and groups
+  the GitHub Actions updates into one weekly pull request. `tests/test_dependabot_config.py` holds both.
+
 - **Trivy scans the image a pull request builds; Snyk is gone.** As in maksimtech/apkradar#54: of what
   `snyk.yml` ran, only the container scan worked. Snyk Open Source stopped on `SNYK-OS-PYTHON-0013`
   ("Missing required packages") here too, so its check on new dependency issues let everything through;
