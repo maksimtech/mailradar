@@ -12,6 +12,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Changed
+
+- **The author address published on PyPI is the project alias, github@maksimtech.com.** It was a
+  personal mailbox, which PyPI shows to anyone and bulk senders harvest: on 2026-10-31 a cold "patch
+  offer" from a mass-mailing account reached it. Releases already published keep the old address;
+  the next one carries the alias. `tests/test_package_metadata.py` keeps it that way.
+
 ## [2026.47] - 2026-10-28
 
 ### Security
