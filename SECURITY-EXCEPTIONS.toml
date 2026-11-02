@@ -197,3 +197,233 @@ review_by = "2026-12-31"
 # pcre2, and this one is not an acceptance at all.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# What Trivy's image scan reported on its first run here, 2026-11-02, the day
+# Snyk was retired (maksimtech/apkradar#54). The same Debian packages of the
+# python slim-trixie base image apkradar's first scan reported, none with a fix
+# in trixie and none in code mailradar runs. The maintainer decided on 2026-11-02
+# that they wait for Debian's fixes, which the next release's rebuild picks up;
+# the Debian positions were read for apkradar that day and are the same
+# packages at the same versions here. The container runs as the unprivileged
+# user `mailradar` (Dockerfile, USER) and its entrypoint is mailradar itself.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-54369"
+source = "Trivy"
+where = "acl 2.3.2-2+b1 (libacl1), python slim-trixie base image"
+why = """
+Debian bug 1141110: fixed in unstable and forky (acl 2.4.0-1), no-dsa for trixie \
+with the fix scheduled for a point release. Debian's note says why it cannot be \
+backported piecemeal — the fix adds the `acl_*_at()` ABI of 2.4.0. Reported by \
+Snyk until it was retired on 2026-11-02; Trivy's image scan names it by CVE, and \
+the reason has not changed.
+
+The fix is scheduled, not absent, so the only thing to do is rebuild after the \
+next trixie point release. The date below is set for that. A local TOCTOU in \
+recursive setfacl/chacl; mailradar calls neither.
+"""
+review_by = "2026-11-30"
+
+[[exception]]
+id = "CVE-2026-76642"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+libmount does not check the mount helper's exit status before running \
+post-mount hooks (X-mount.idmap, X-mount.owner), so an unprivileged user may run \
+privileged operations on existing filesystems. Debian tracker: no-dsa for trixie, \
+"Minor issue"; fixed in forky and sid (2.42.3-1); bookworm not affected (as read \
+for apkradar on 2026-11-02).
+
+Needs a local user running `mount` inside the container. mailradar never mounts \
+anything. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-78408"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+`nsenter --join-cgroup` opens cgroup.procs as root and keeps the descriptor \
+open across namespace, credential and execve() changes (Ubuntu's summary). Local.
+
+mailradar never runs nsenter. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-78409"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+The X-mount.subdir fast path on Linux 6.15+ passes the subdirectory to \
+open_tree() with AT_SYMLINK_NOFOLLOW, which does not stop intermediate symlink \
+traversal (Ubuntu's summary). Local, high attack complexity.
+
+mailradar never mounts anything. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-78410"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+Restricted bind mounts read the source path from fstab without pinning it before \
+the privileged mount, so a local user who can replace the source or a writable \
+ancestor may exploit it (Ubuntu's summary). Local.
+
+mailradar never mounts anything and the image has no fstab entries of its own. \
+Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2025-69720"
+source = "Trivy"
+where = "ncurses 6.5+20250216-2 (libncursesw6, libtinfo6, ncurses-base, ncurses-bin), python slim-trixie base image"
+why = """
+A stack buffer overflow in `analyze_string` of the `infocmp` program (NVD), \
+fixed upstream in 6.5-20251213; trixie carries 6.5+20250216. Local, and it needs \
+someone to run infocmp on a crafted terminal description.
+
+mailradar never runs infocmp; the libraries are in the image because Debian's own \
+tools link them. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-16742"
+source = "Trivy"
+where = "systemd 257.13-1~deb13u1 (libsystemd0, libudev1), python slim-trixie base image"
+why = """
+A local privilege escalation in systemd-homed: a logged-in, homed-managed user \
+can be added to arbitrary system groups. Debian tracker: no-dsa for trixie, \
+"Minor issue"; fixed in forky (262-1) and sid.
+
+The image holds two systemd libraries and not systemd-homed, and no init system \
+runs in the container: the flaw's component is not there. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-9538"
+source = "Trivy"
+where = "perl 5.40.1-6+deb13u1 (perl-base), python slim-trixie base image"
+why = """
+A crafted file can crash perl — a denial of service (Ubuntu USN-8684-1, which \
+fixes it; BellSoft fixes it in 5.40.4). Trixie has no fix per Trivy.
+
+perl-base is Essential in Debian — dpkg depends on it — and cannot be removed; \
+mailradar is Python and never runs perl. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-24882"
+source = "Trivy"
+where = "gnupg2 2.4.7-21+deb13u1+b5 (gpg, gpg-agent, gpgconf), installed by the Dockerfile"
+why = """
+GnuPG before 2.5.17: a stack-based buffer overflow in tpm2daemon, in the handling \
+of the PKDECRYPT command for TPM-backed RSA and ECC keys (OSV, 2026-11-02). \
+Trixie has no fix per Trivy.
+
+mailradar installs gpg on purpose and runs it — sender.py calls gpg --import, \
+--encrypt and --clearsign — but never with a TPM-backed key, and the container \
+has no TPM: the code the flaw is in is not reached. The maintainer decided on \
+2026-11-02 that it waits for Debian like the base-image findings: `apt-get \
+upgrade` runs at build time, so the release after Debian ships a fix carries \
+it, and the review date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-119373"
+source = "Trivy"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: an FTS5 heap buffer overflow in fts5MergeRowidLists() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+Docker Scout reports it too (below).
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# sqlite3 as Docker Scout reports it on main, from 2026-11-02: three of the
+# eleven issues the Debian package tracker lists as open in trixie and sid.
+# The maintainer decided on 2026-11-02 that the sqlite3 findings wait for
+# Debian, on every Radar (apkradar#55 first).
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-119373"
+source = "Docker Scout"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: an FTS5 heap buffer overflow in fts5MergeRowidLists() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+The flaw recorded above under Trivy, reported by the other scanner.
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-119374"
+source = "Docker Scout"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: an FTS5 heap buffer overflow in fts5DoSecureDelete() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+Reported by Docker Scout on the published image.
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-119379"
+source = "Docker Scout"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: a heap buffer overflow in the Session Extension, sessionUpdateFind() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+Reported by Docker Scout on the published image.
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"
