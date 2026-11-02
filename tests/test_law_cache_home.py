@@ -1,6 +1,6 @@
 """Where the law cache goes when the environment says so.
 
-Snyk flags four lines here as path traversal: PACKAGE_HOME flows into a path
+Snyk flagged four lines here as path traversal: PACKAGE_HOME flows into a path
 that is then written, renamed and unlinked. As a vulnerability that does not
 hold — the variable is set by whoever runs the tool, against their own files,
 with their own privileges — but looking at why it was flagged turned up three

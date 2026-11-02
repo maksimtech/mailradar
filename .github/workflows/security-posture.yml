@@ -1,13 +1,12 @@
 name: Security Posture
-# The gate that refuses. Every other security workflow here reports: snyk.yml
-# carries `continue-on-error` so a pull request is not blocked by findings that
-# were already there, CodeQL and Docker Scout upload SARIF, and SonarCloud
-# evaluates its quality gate after its job has finished succeeding. On 2026-09-28
-# all of them were green while thirteen high-severity alerts were open and the
-# Sonar gate was red.
+# The gate that refuses. Every other security workflow here reports: Trivy,
+# Bandit, CodeQL and Docker Scout upload SARIF, and SonarCloud evaluates its
+# quality gate after its job has finished succeeding. On 2026-09-28 all of them
+# (Snyk too, retired on 2026-11-02) were green while thirteen high-severity alerts
+# were open and the Sonar gate was red.
 #
 # This job reads what they published — GitHub's code scanning alerts, which is
-# where all four end up — and fails when a blocking finding has nobody's name
+# where the scanners' findings end up — and fails when a blocking finding has nobody's name
 # against it. `SECURITY-EXCEPTIONS.toml` holds the accepted ones, each with a
 # reason and a review date; tools/security_exceptions.py is the rule, and its
 # tests are in tests/test_security_exceptions.py.
@@ -63,7 +62,7 @@ jobs:
           # there, which no scanner run carries, so the wait used to find nothing
           # pending and stop at once (mailradar #39, two seconds, 2026-10-11).
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          UPLOADERS: Bandit Security Scan,CodeQL,Docker Scout CVE Scan,Build and Push Docker Image,Snyk,Trivy Security Scan
+          UPLOADERS: Bandit Security Scan,CodeQL,Docker Scout CVE Scan,Build and Push Docker Image,Trivy Security Scan
         run: |
           # The counting is done in Python and not in `--jq`: gh's own jq takes a
           # filter and not `--arg`, so the commit and the names would have to be

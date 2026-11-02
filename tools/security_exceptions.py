@@ -2,7 +2,7 @@
 
 On 2026-09-28 every workflow of this repository was green while SonarCloud's
 quality gate was red and thirteen high-severity alerts were open in code
-scanning. Nothing was broken. `snyk.yml` carries `continue-on-error` so a pull
+scanning. Nothing was broken. `snyk.yml` carried `continue-on-error` so a pull
 request is not blocked by findings that were already there, and Sonar evaluates
 its gate after the job has finished succeeding. The pipeline reported and never
 refused.
@@ -231,8 +231,8 @@ def review(alerts: list[dict], exceptions: list[Exception_], *,
     ]
     # `covers` is reused unchanged, so a closed alert has to match the entry's
     # source as well as its rule: Scout going quiet says nothing about whether
-    # Snyk still reports the same CVE, and the two disagree about these packages
-    # routinely.
+    # Trivy still reports the same CVE, and scanners disagree about these packages
+    # routinely (Scout and Snyk did, until Snyk was retired on 2026-11-02).
     settled = [entry for entry in orphaned
                if any(entry.covers(a) for a in closed)]
     unused = [entry for entry in orphaned if entry not in settled]

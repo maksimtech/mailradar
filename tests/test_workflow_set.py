@@ -27,16 +27,15 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 CORE = {
     "quality",      # ruff and mypy
     "sonarcloud",   # quality gate and coverage
-    "snyk",         # dependencies
     "codeql",       # code scanning
     "bandit",       # Python security lint
-    "trivy",        # filesystem CVEs
+    "trivy",        # CVEs in the files, and in the image when there is a Dockerfile
     "licenses",     # no GPL/AGPL/LGPL creeping in
     "mutation",     # do the tests actually test
     "publish",      # PyPI
     "release",      # GitHub release from a tag
-    # The gate that refuses. Every other security workflow reports: snyk
-    # carries continue-on-error, CodeQL and Docker Scout upload SARIF, and
+    # The gate that refuses. Every other security workflow reports: Trivy,
+    # Bandit, CodeQL and Docker Scout upload SARIF, and
     # SonarCloud decides its gate after the job has already succeeded. This
     # one reads what they published and fails when a blocking finding has
     # nobody's name against it. It belongs here and not in CAPABILITY: the
@@ -58,6 +57,19 @@ CAPABILITY = {
 }
 
 KNOWN_GAPS = {
+}
+
+# Taken out of every Radar on purpose, with the reason. A retired workflow that
+# comes back is a decision being undone without anyone saying so.
+RETIRED = {
+    # Measured on apkradar on 2026-11-02, the last thirty runs from 2026-10-17:
+    # Snyk Open Source stopped on every one with SNYK-OS-PYTHON-0013 ("Missing
+    # required packages"), on the base branch and on the pull request, so the check
+    # of it that could fail a build let everything through. Snyk Code repeated
+    # CodeQL, Bandit and SonarCloud. Snyk Container was the only scan of the image
+    # a pull request builds, and trivy.yml does that now, with no token and no
+    # monthly test quota shared by the five Radar.
+    "snyk": "replaced by the image job in trivy.yml",
 }
 
 
@@ -92,6 +104,11 @@ def test_every_known_gap_is_still_a_gap():
         assert not present(name), (
             f"{name}.yml exists now — remove it from KNOWN_GAPS"
         )
+
+
+@pytest.mark.parametrize("name", sorted(RETIRED))
+def test_a_retired_workflow_stays_retired(name):
+    assert not present(name), f"{name}.yml is back — it was {RETIRED[name]}"
 
 
 def test_no_workflow_is_here_without_being_accounted_for():
