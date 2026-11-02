@@ -272,7 +272,6 @@ SCANNERS = {
     "CodeQL": "codeql",
     "Bandit": "bandit",
     "Trivy": "trivy",
-    "Snyk": "snyk",
     "Docker Scout": "docker-scout",
     "SonarCloud": "sonarcloud",
     "Security Posture": "security-posture",
@@ -288,6 +287,17 @@ def test_every_scanner_named_has_its_workflow_and_none_is_left_out(doc):
         assert (WORKFLOWS / f"{SCANNERS[name]}.yml").is_file(), f"{name} has no workflow"
     present = {n for n, w in SCANNERS.items() if (WORKFLOWS / f"{w}.yml").is_file()}
     assert present <= named, f"workflows the document does not name: {sorted(present - named)}"
+
+
+def test_trivy_is_said_to_read_the_image_a_pull_request_builds(doc):
+    """Since 2026-11-02 the only scan of that image before it is merged: Docker
+    Scout reads `latest` once it is published, and Snyk, which read it before, is
+    gone."""
+    text = (WORKFLOWS / "trivy.yml").read_text(encoding="utf-8")
+    assert "scan-type: 'image'" in text or "scan-type: image" in text
+    row = next(line for line in section(doc, "scanners").splitlines() if line.startswith("| `Trivy`"))
+    assert "immagine costruita dal Dockerfile" in row
+    assert "Snyk" not in doc
 
 
 def test_security_md_answers_the_fourth_question():

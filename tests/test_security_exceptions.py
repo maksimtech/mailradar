@@ -3,7 +3,7 @@ MailRadar — a green pipeline must mean a clean product.
 
 On 2026-09-28 every workflow was green while SonarCloud's quality gate was red
 and thirteen high-severity alerts were open in code scanning. Nothing was
-broken: `snyk.yml` carries `continue-on-error` by design so a pull request is not
+broken: `snyk.yml` carried `continue-on-error` by design so a pull request is not
 blocked by pre-existing findings, and Sonar evaluates its gate after the job has
 already succeeded. The result is a pipeline that reports and never refuses.
 

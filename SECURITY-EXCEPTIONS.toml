@@ -31,6 +31,14 @@
 #   attr, acl    already fixed in unstable, filed no-dsa for trixie *because the
 #                fix comes in a point release*. That waiting ends at a dated
 #                event: rebuild after it.
+#
+# attr has no entry since 2026-11-02, and not because it was fixed: Snyk was the
+# only scanner reporting CVE-2026-54371 (Debian bug 1141107, fixed in unstable
+# and forky at 1:2.6.0-1, a symlink traversal in recursive getfattr/setfattr,
+# which mailradar never runs), and Snyk was retired that day
+# (tests/test_workflow_set.py, RETIRED). It is still in the image until the
+# trixie point release. acl is reported by Trivy now; its entry is in the Trivy
+# block at the end of this file, with the reason it had under Snyk's id.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [[exception]]
@@ -48,13 +56,6 @@ image and is rebuilt at every release. An out-of-bounds write reached through \
 gzprintf; mailradar touches zlib only through Python's own module, for HTTP \
 decompression of responses it requested.
 """
-review_by = "2026-12-31"
-
-[[exception]]
-id = "SNYK-DEBIAN13-ZLIB-19520500"
-source = "Snyk Container"
-where = "zlib, python slim-trixie base image"
-why = "The same zlib flaw as CVE-2026-85091 above, reported by the other scanner."
 review_by = "2026-12-31"
 
 [[exception]]
@@ -78,37 +79,6 @@ the reporting changed. Deleting a flaw that is demonstrably present because a \
 scanner fell silent is the one direction this file must not drift in.
 """
 review_by = "2026-12-31"
-
-[[exception]]
-id = "SNYK-DEBIAN13-ATTR-17678182"
-source = "Snyk Container"
-where = "attr 1:2.5.2-3, python slim-trixie base image"
-why = """
-CVE-2026-54371, and not "no fix available" as the one-line report implies: \
-Debian has fixed it in unstable and forky (attr 1:2.6.0-1) and filed it no-dsa \
-for trixie with the note "Will be fixed first in unstable, then point release \
-update; not to be backported by individual patches" — Debian bug 1141107.
-
-The fix is scheduled, not absent, so the only thing to do is rebuild after the \
-next trixie point release. The date below is set for that: if the point release \
-has happened and this is still reported, the rebuild did not happen. The flaw is \
-a symlink traversal in recursive getfattr/setfattr, which mailradar never runs.
-"""
-review_by = "2026-11-30"
-
-[[exception]]
-id = "SNYK-DEBIAN13-ACL-17677866"
-source = "Snyk Container"
-where = "acl 2.3.2-2, python slim-trixie base image"
-why = """
-CVE-2026-54369, Debian bug 1141110, in the same position as attr above: fixed in \
-unstable and forky (acl 2.4.0-1), no-dsa for trixie with the fix scheduled for a \
-point release. Debian's note says why it cannot be backported piecemeal — the \
-fix adds the `acl_*_at()` ABI of 2.4.0.
-
-A local TOCTOU in recursive setfacl/chacl; mailradar calls neither.
-"""
-review_by = "2026-11-30"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CodeQL `py/incomplete-url-substring-sanitization`, five alerts across two test
@@ -156,44 +126,12 @@ takes. Same reasoning as tests/test_reporter.py above.
 review_by = "2026-12-31"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Arrived on 2026-09-30, after 2026.41 was prepared: two advisories published
-# overnight against the base image, which the gate refused before the tag. That
-# is the gate working — not a defect introduced here — and the two are in
-# different situations, read out of the Debian security tracker with
-# `patchradar debian` rather than from the scanners' one-line summaries.
-# ─────────────────────────────────────────────────────────────────────────────
-
-[[exception]]
-id = "SNYK-DEBIAN13-GCC14-20335537"
-source = "Snyk Container"
-where = "gcc-14 / libstdc++6 14.2.0-19, python slim-trixie base image"
-why = """
-CVE-2026-102010. Open in trixie for both gcc-12 (12.4.0-5) and gcc-14 \
-(14.2.0-19), with no fixed version in any suite and no Debian bug recorded — \
-checked with `patchradar debian CVE-2026-102010`. So there is nothing to wait for \
-and nothing to ask for: what moves a flaw in this state is evidence on the \
-tracker page, https://security-tracker.debian.org/tracker/CVE-2026-102010.
-
-Nor is it removable. Snyk names the source package `gcc-14`, and what is actually \
-installed is `libstdc++6`, the C++ runtime that a long list of packages in the \
-base image link against. Removing it is not an option the way the full `perl` \
-would have been.
-
-Since 2026-10-07T20:07:42Z Snyk Container has stopped reporting it, which is why \
-the gate lists this entry as settled. It is kept, and the reason is not how long \
-the silence has lasted: `patchradar debian CVE-2026-102010` on 2026-10-15 still \
-reports gcc-14 no-dsa in trixie at 14.2.0-19, with the fix only in sid \
-(14.4.0-3). The package named in `where` is still unfixed in trixie and only the \
-reporting changed. Deleting a flaw that is demonstrably present because a \
-scanner fell silent is the one direction this file must not drift in.
-"""
-review_by = "2026-12-31"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# gcc, reported on 2026-10-02 by both scanners under different ids. The gate
-# matches by id, so one flaw needs an entry per scanner — zlib has been in that
-# position since September.
+# gcc. CVE-2026-102010 arrived on 2026-09-30, after 2026.41 was prepared,
+# published overnight against the base image, and the gate refused it before
+# the tag — the gate working, not a defect introduced here. CVE-2026-95619
+# followed on 2026-10-02. Until 2026-11-02 each had a second entry under Snyk's
+# id (SNYK-DEBIAN13-GCC14-20335537, -20386241); Snyk was retired that day, and
+# what those entries said lives on in the Docker Scout entries below.
 #
 # Positions read with `patchradar debian` rather than from the scanners' one line:
 # CVE-2026-102010 and CVE-2026-95619 are both open in trixie for gcc-12 (12.4.0-5)
@@ -201,7 +139,7 @@ review_by = "2026-12-31"
 # recorded. Nothing to wait for and nothing to ask for; evidence goes on the
 # tracker page.
 #
-# What Snyk names is the *source* package gcc-14, and Debian's gcc source produces
+# What the scanners name is the *source* package gcc-14, and Debian's gcc source produces
 # both the compiler and libstdc++6. A flaw in cc1 needs something to compile and
 # nothing in this image compiles anything; which binary package is installed is a
 # measurement and not an assumption, which is why tests/docker/inspect.sh prints
@@ -213,10 +151,15 @@ id = "CVE-2026-102010"
 source = "Docker Scout"
 where = "gcc-14 / libstdc++6 14.2.0-19, python slim-trixie base image"
 why = """
-The flaw also reported as SNYK-DEBIAN13-GCC14-20335537, under the other scanner's \
-id. Open in trixie for gcc-12 and gcc-14, no fixed version in any suite, no Debian \
-bug — `patchradar debian CVE-2026-102010`. Evidence goes on \
+Open in trixie for gcc-12 (12.4.0-5) and gcc-14 (14.2.0-19), no fixed version in \
+any suite, no Debian bug — `patchradar debian CVE-2026-102010`. Evidence goes on \
 https://security-tracker.debian.org/tracker/CVE-2026-102010.
+
+Nor is it removable. The scanners name the source package `gcc-14`, and what is \
+actually installed is `libstdc++6`, the C++ runtime that a long list of packages \
+in the base image link against. Removing it is not an option the way the full \
+`perl` would have been. Recorded from 2026-09-30 under Snyk's id \
+SNYK-DEBIAN13-GCC14-20335537 too, until Snyk was retired on 2026-11-02.
 
 Since 2026-10-12T13:04:03Z Docker Scout has stopped reporting it, which is why \
 the gate lists this entry as settled. It is kept, and the reason is not how long \
@@ -229,31 +172,16 @@ scanner fell silent is the one direction this file must not drift in.
 review_by = "2026-12-31"
 
 [[exception]]
-id = "SNYK-DEBIAN13-GCC14-20386241"
-source = "Snyk Container"
+id = "CVE-2026-95619"
+source = "Docker Scout"
 where = "gcc-14 / libstdc++6 14.2.0-19, python slim-trixie base image"
 why = """
 CVE-2026-95619, an integer overflow in gcc-14, published on 2026-10-02. Read with \
 `patchradar debian CVE-2026-95619`: open in trixie for gcc-12 (12.4.0-5) and \
 gcc-14 (14.2.0-19), no fixed version in any suite, no Debian bug recorded. \
-Evidence goes on https://security-tracker.debian.org/tracker/CVE-2026-95619.
-
-Since 2026-10-08T14:34:39Z Snyk Container has stopped reporting it, which is why \
-the gate lists this entry as settled. It is kept, and the reason is not how long \
-the silence has lasted: `patchradar debian CVE-2026-95619` on 2026-10-15 still \
-reports gcc-14 no-dsa in trixie at 14.2.0-19, with the fix only in sid \
-(14.4.0-3). The package named in `where` is still unfixed in trixie and only the \
-reporting changed. Deleting a flaw that is demonstrably present because a \
-scanner fell silent is the one direction this file must not drift in.
-"""
-review_by = "2026-12-31"
-
-[[exception]]
-id = "CVE-2026-95619"
-source = "Docker Scout"
-where = "gcc-14 / libstdc++6 14.2.0-19, python slim-trixie base image"
-why = """
-The same flaw as SNYK-DEBIAN13-GCC14-20386241 above, under the other scanner's id.
+Evidence goes on https://security-tracker.debian.org/tracker/CVE-2026-95619. \
+Recorded under Snyk's id SNYK-DEBIAN13-GCC14-20386241 too, until Snyk was retired \
+on 2026-11-02.
 
 Since 2026-10-12T13:04:03Z Docker Scout has stopped reporting it, which is why \
 the gate lists this entry as settled. It is kept, and the reason is not how long \
@@ -269,3 +197,233 @@ review_by = "2026-12-31"
 # pcre2, and this one is not an acceptance at all.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# What Trivy's image scan reported on its first run here, 2026-11-02, the day
+# Snyk was retired (maksimtech/apkradar#54). The same Debian packages of the
+# python slim-trixie base image apkradar's first scan reported, none with a fix
+# in trixie and none in code mailradar runs. The maintainer decided on 2026-11-02
+# that they wait for Debian's fixes, which the next release's rebuild picks up;
+# the Debian positions were read for apkradar that day and are the same
+# packages at the same versions here. The container runs as the unprivileged
+# user `mailradar` (Dockerfile, USER) and its entrypoint is mailradar itself.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-54369"
+source = "Trivy"
+where = "acl 2.3.2-2+b1 (libacl1), python slim-trixie base image"
+why = """
+Debian bug 1141110: fixed in unstable and forky (acl 2.4.0-1), no-dsa for trixie \
+with the fix scheduled for a point release. Debian's note says why it cannot be \
+backported piecemeal — the fix adds the `acl_*_at()` ABI of 2.4.0. Reported by \
+Snyk until it was retired on 2026-11-02; Trivy's image scan names it by CVE, and \
+the reason has not changed.
+
+The fix is scheduled, not absent, so the only thing to do is rebuild after the \
+next trixie point release. The date below is set for that. A local TOCTOU in \
+recursive setfacl/chacl; mailradar calls neither.
+"""
+review_by = "2026-11-30"
+
+[[exception]]
+id = "CVE-2026-76642"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+libmount does not check the mount helper's exit status before running \
+post-mount hooks (X-mount.idmap, X-mount.owner), so an unprivileged user may run \
+privileged operations on existing filesystems. Debian tracker: no-dsa for trixie, \
+"Minor issue"; fixed in forky and sid (2.42.3-1); bookworm not affected (as read \
+for apkradar on 2026-11-02).
+
+Needs a local user running `mount` inside the container. mailradar never mounts \
+anything. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-78408"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+`nsenter --join-cgroup` opens cgroup.procs as root and keeps the descriptor \
+open across namespace, credential and execve() changes (Ubuntu's summary). Local.
+
+mailradar never runs nsenter. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-78409"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+The X-mount.subdir fast path on Linux 6.15+ passes the subdirectory to \
+open_tree() with AT_SYMLINK_NOFOLLOW, which does not stop intermediate symlink \
+traversal (Ubuntu's summary). Local, high attack complexity.
+
+mailradar never mounts anything. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-78410"
+source = "Trivy"
+where = "util-linux 2.41.5-0+deb13u1 (bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux), python slim-trixie base image"
+why = """
+Restricted bind mounts read the source path from fstab without pinning it before \
+the privileged mount, so a local user who can replace the source or a writable \
+ancestor may exploit it (Ubuntu's summary). Local.
+
+mailradar never mounts anything and the image has no fstab entries of its own. \
+Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2025-69720"
+source = "Trivy"
+where = "ncurses 6.5+20250216-2 (libncursesw6, libtinfo6, ncurses-base, ncurses-bin), python slim-trixie base image"
+why = """
+A stack buffer overflow in `analyze_string` of the `infocmp` program (NVD), \
+fixed upstream in 6.5-20251213; trixie carries 6.5+20250216. Local, and it needs \
+someone to run infocmp on a crafted terminal description.
+
+mailradar never runs infocmp; the libraries are in the image because Debian's own \
+tools link them. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-16742"
+source = "Trivy"
+where = "systemd 257.13-1~deb13u1 (libsystemd0, libudev1), python slim-trixie base image"
+why = """
+A local privilege escalation in systemd-homed: a logged-in, homed-managed user \
+can be added to arbitrary system groups. Debian tracker: no-dsa for trixie, \
+"Minor issue"; fixed in forky (262-1) and sid.
+
+The image holds two systemd libraries and not systemd-homed, and no init system \
+runs in the container: the flaw's component is not there. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-9538"
+source = "Trivy"
+where = "perl 5.40.1-6+deb13u1 (perl-base), python slim-trixie base image"
+why = """
+A crafted file can crash perl — a denial of service (Ubuntu USN-8684-1, which \
+fixes it; BellSoft fixes it in 5.40.4). Trixie has no fix per Trivy.
+
+perl-base is Essential in Debian — dpkg depends on it — and cannot be removed; \
+mailradar is Python and never runs perl. Like every finding in this block, it waits for Debian: `apt-get upgrade` runs at \
+build time, so the release after Debian ships a fix carries it, and the review \
+date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-24882"
+source = "Trivy"
+where = "gnupg2 2.4.7-21+deb13u1+b5 (gpg, gpg-agent, gpgconf), installed by the Dockerfile"
+why = """
+GnuPG before 2.5.17: a stack-based buffer overflow in tpm2daemon, in the handling \
+of the PKDECRYPT command for TPM-backed RSA and ECC keys (OSV, 2026-11-02). \
+Trixie has no fix per Trivy.
+
+mailradar installs gpg on purpose and runs it — sender.py calls gpg --import, \
+--encrypt and --clearsign — but never with a TPM-backed key, and the container \
+has no TPM: the code the flaw is in is not reached. The maintainer decided on \
+2026-11-02 that it waits for Debian like the base-image findings: `apt-get \
+upgrade` runs at build time, so the release after Debian ships a fix carries \
+it, and the review date is when to look at whether it has.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-119373"
+source = "Trivy"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: an FTS5 heap buffer overflow in fts5MergeRowidLists() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+Docker Scout reports it too (below).
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# sqlite3 as Docker Scout reports it on main, from 2026-11-02: three of the
+# eleven issues the Debian package tracker lists as open in trixie and sid.
+# The maintainer decided on 2026-11-02 that the sqlite3 findings wait for
+# Debian, on every Radar (apkradar#55 first).
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-119373"
+source = "Docker Scout"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: an FTS5 heap buffer overflow in fts5MergeRowidLists() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+The flaw recorded above under Trivy, reported by the other scanner.
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-119374"
+source = "Docker Scout"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: an FTS5 heap buffer overflow in fts5DoSecureDelete() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+Reported by Docker Scout on the published image.
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"
+
+[[exception]]
+id = "CVE-2026-119379"
+source = "Docker Scout"
+where = "sqlite3 3.46.1-7+deb13u2 (libsqlite3-0), python slim-trixie base image"
+why = """
+SQLite before 3.54.0: a heap buffer overflow in the Session Extension, sessionUpdateFind() (OSV, 2026-11-02). One of the eleven sqlite3 \
+issues the Debian package tracker lists as open in both trixie and sid, so there is \
+no fixed version in any suite yet; the +deb13u2 in the image did not close it. \
+Reported by Docker Scout on the published image.
+
+libsqlite3-0 is in the image as a dependency of util-linux (liblastlog2-2) and of \
+Python's own sqlite3 module; no module of mailradar imports sqlite3 (its source tree, \
+checked on 2026-11-02). It waits for Debian, and the release after Debian \
+ships a fix carries it.
+"""
+review_by = "2026-12-31"

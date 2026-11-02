@@ -62,6 +62,16 @@ def test_the_wait_knows_every_workflow_that_uploads_alerts(wait):
             assert name in uploaders, f"{path.name} ({name}) uploads alerts and is not waited for"
 
 
+def test_every_name_it_waits_for_is_a_workflow_that_still_exists(wait):
+    """The other direction. A name with no workflow behind it has no run to wait
+    for, so it costs nothing on the day — and it is how a retired scanner stays
+    on the list as if it still spoke. Written when snyk.yml was retired, on
+    2026-11-02."""
+    names = {yaml.safe_load(path.read_text(encoding="utf-8"))["name"] for path in WORKFLOWS.glob("*.yml")}
+    for uploader in wait["env"]["UPLOADERS"].split(","):
+        assert uploader in names, f"{uploader} is waited for and no workflow has that name"
+
+
 def test_the_open_alerts_are_those_of_the_ref_under_review(collect):
     """github.ref is refs/pull/N/merge on a pull request and refs/heads/main on a
     push, a schedule or a dispatch: the same call serves both."""
