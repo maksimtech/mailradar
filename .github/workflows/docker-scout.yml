@@ -32,7 +32,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Docker Scout CVE scan
-        uses: docker/scout-action@4bbf17a9da65a7b5497361bb407e88cc9548f69c # v1.28.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa # v1.29.0
         with:
           # cves says what is broken in the image and feeds the Security tab;
           # if this step fails, the job does.
@@ -51,7 +51,7 @@ jobs:
         # run together with cves it turned every scan red. A failure here
         # shows in the log and fails nothing (tests/test_scout_steps.py).
         continue-on-error: true
-        uses: docker/scout-action@4bbf17a9da65a7b5497361bb407e88cc9548f69c # v1.28.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa # v1.29.0
         with:
           command: recommendations
           image: maksimtech/mailradar:latest
