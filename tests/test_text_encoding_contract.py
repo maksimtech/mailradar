@@ -81,9 +81,13 @@ def _offenders(path: pathlib.Path) -> list[str]:
             found.append(f"{path.name}:{node.lineno}: .{name}() with no encoding=")
 
         # builtin open() in text mode
-        elif name == "open" and isinstance(node.func, ast.Name):
-            if not _is_binary(node) and _kwarg(node, "encoding") is None:
-                found.append(f"{path.name}:{node.lineno}: open() in text mode with no encoding=")
+        elif (
+            name == "open"
+            and isinstance(node.func, ast.Name)
+            and not _is_binary(node)
+            and _kwarg(node, "encoding") is None
+        ):
+            found.append(f"{path.name}:{node.lineno}: open() in text mode with no encoding=")
 
     return found
 
