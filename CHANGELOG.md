@@ -14,6 +14,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **The sqlite3 findings say what Debian decided, and Trivy's two new ones are recorded.** On
+  2026-11-09 Trivy began reporting CVE-2026-119374 and CVE-2026-119379, which only Docker Scout had
+  reported, and Security Posture failed on main. Both now have a Trivy entry beside the Scout one.
+  The sqlite3 entries also said there was no fixed version anywhere and that they waited for Debian:
+  Debian has since fixed the three CVEs in sid (3.54.1-1) and marked them no-dsa for trixie, so no
+  trixie update will come. They stay accepted on the ground they already gave, that no code of the
+  project reaches the flawed parts of SQLite, until 2026-12-31, when the question becomes a base
+  image with a fixed sqlite3.
+
 - **Dependabot proposes a release once it is 14 days old, and actions arrive as one pull request.**
   The Radar take a dependency at least 14 days after its release unless a known vulnerability makes the
   older version the risk; without a cooldown Dependabot opened twelve pull requests across the Radar on
