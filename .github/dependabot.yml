@@ -6,6 +6,10 @@ updates:
       interval: weekly
       day: monday
       time: "06:00"
+    # Taken at least 14 days after release (tests/test_dependabot_config.py);
+    # Dependabot's security updates are not subject to the cooldown.
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 10
     labels:
       - dependencies
@@ -17,6 +21,10 @@ updates:
       interval: weekly
       day: monday
       time: "06:00"
+    # Taken at least 14 days after release (tests/test_dependabot_config.py);
+    # Dependabot's security updates are not subject to the cooldown.
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 5
     labels:
       - dependencies
@@ -35,3 +43,7 @@ updates:
       codeql-action:
         patterns:
           - "github/codeql-action*"
+      # Every other action in the same weekly pull request, not one per action.
+      github-actions:
+        patterns:
+          - "*"
