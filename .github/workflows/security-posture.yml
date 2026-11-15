@@ -108,8 +108,19 @@ jobs:
           ALERT_REF: ${{ github.ref }}
         run: |
           echo "Reading the alerts of ${ALERT_REF}"
-          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100&ref=${ALERT_REF}" \
-               > alerts.json 2>api-error.txt; then
+          # Every page. The API returns at most a hundred alerts per call, and this
+          # image carries more: on 2026-11-13 cookieradar #68 had 123 open on its ref
+          # and main 142. Reading one page, three exceptions whose findings sat further
+          # down read as matching nothing and failed the gate, and an unexplained alert
+          # there would not have been seen at all. No pipe: the step runs without
+          # pipefail, and a failed read has to fail here, so that an unreadable list
+          # is not taken for an empty one.
+          alerts() {
+            gh api --paginate --slurp "$1" > "$2.pages" || return 1
+            python -c 'import json, sys; json.dump([a for page in json.load(open(sys.argv[1])) for a in page], open(sys.argv[2], "w"))' "$2.pages" "$2"
+          }
+          if alerts "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100&ref=${ALERT_REF}" \
+               alerts.json 2>api-error.txt; then
             echo "count=$(python -c 'import json;print(len(json.load(open("alerts.json"))))')" >> "$GITHUB_OUTPUT"
           else
             echo "readable=false" >> "$GITHUB_OUTPUT"
@@ -126,17 +137,17 @@ jobs:
           # exception main holds as settled would read as unused there and fail
           # every pull request. Measured on all six Radar on 2026-10-11 with the
           # real tool: this union gives the verdict main gives.
-          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100&ref=${ALERT_REF}" \
-            > closed-ref.json 2>/dev/null || echo "[]" > closed-ref.json
-          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100&ref=refs/heads/main" \
-            > closed-main.json 2>/dev/null || echo "[]" > closed-main.json
+          alerts "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100&ref=${ALERT_REF}" \
+            closed-ref.json 2>/dev/null || echo "[]" > closed-ref.json
+          alerts "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=closed&per_page=100&ref=refs/heads/main" \
+            closed-main.json 2>/dev/null || echo "[]" > closed-main.json
           # And main's open alerts: on a pull request ref CodeQL reports only what
           # the change introduces, so an exception for a finding still open on main
           # in an untouched file read as unused as soon as CodeQL reported anything
           # else (cookieradar #37, 2026-10-12). They are history the entry may match,
           # not alerts of this ref: blocking is decided on alerts.json alone.
-          gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100&ref=refs/heads/main" \
-            > open-main.json 2>/dev/null || echo "[]" > open-main.json
+          alerts "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100&ref=refs/heads/main" \
+            open-main.json 2>/dev/null || echo "[]" > open-main.json
           python -c 'import json, sys; json.dump([a for f in sys.argv[1:-1] for a in json.load(open(f))], open(sys.argv[-1], "w"))' \
             closed-ref.json closed-main.json open-main.json closed.json
 

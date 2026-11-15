@@ -48,6 +48,19 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   offer" from a mass-mailing account reached it. Releases already published keep the old address;
   the next one carries the alias. `tests/test_package_metadata.py` keeps it that way.
 
+### Fixed
+
+- **Security Posture reads every page of alerts.** The code scanning API returns at most a hundred
+  alerts per call, and the gate read one page of each list. Found in cookieradar on 2026-11-13
+  (cookieradar #70): a pull request with 123 open alerts and main with 142, three exceptions whose
+  findings sat past the hundredth read as matching nothing, and the gate failed on a product whose every
+  alert was explained; read the other way, an unexplained alert past the hundredth would not have been
+  seen at all. This repository had 55 open on main on 2026-11-15, so its gate had not met the limit yet.
+  Each of the four reads now goes through `gh api --paginate --slurp` and joins the pages; a failed read
+  still fails, so an unreadable list is not taken for an empty one.
+  `tests/test_security_posture_workflow.py` runs the step's own function against a stand-in `gh` that
+  answers in two pages.
+
 ## [2026.47] - 2026-10-28
 
 ### Security
