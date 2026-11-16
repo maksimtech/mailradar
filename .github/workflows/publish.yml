@@ -48,8 +48,11 @@ jobs:
       # and after the upload — where a slow index delays a check instead of failing a
       # build that had nothing to do with it.
       #
-      # No margin: the grace in that script is for two resolvers, the runner and the
-      # buildx container. There is only the runner in this job.
+      # No margin, and the install is asked again instead, by install_from_pypi.sh.
+      # A poll that has just been answered does not mean the next request will be: on
+      # apkradar 2026.48 the wait saw the version and the install three seconds later,
+      # on the same runner, was refused it. A grace would not have saved it —
+      # releaseradar lost on v2026.4 with 45 s.
       - name: Extract version
         id: version
         env:
@@ -69,5 +72,5 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           python -m venv "${RUNNER_TEMP}/verify"
-          "${RUNNER_TEMP}/verify/bin/pip" install --no-cache-dir "mailradar==${VERSION}"
+          bash .github/scripts/install_from_pypi.sh "${RUNNER_TEMP}/verify" mailradar "$VERSION" 10 30
           "${RUNNER_TEMP}/verify/bin/mailradar" --version
