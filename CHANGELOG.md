@@ -61,6 +61,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   `tests/test_security_posture_workflow.py` runs the step's own function against a stand-in `gh` that
   answers in two pages.
 
+- **A release no longer goes red because the index answered the check before it had caught up.** After
+  the upload, *Publish to PyPI* installs the new version into a fresh venv to prove it installs.
+  That was a single `pip install`, given no retry on the ground that the job has one resolver.
+  apkradar 2026.48 disproved it on 2026-11-16: the wait saw the version at 15:04:30 and the install
+  three seconds later, on the same runner, was told it did not exist, on a release that was fine.
+  The install now goes through `.github/scripts/install_from_pypi.sh`, which asks again (ten
+  attempts, 30 s apart) until it succeeds or names the version it could not install: the same
+  script, and the same `tests/test_install_from_pypi.py`, in all six Radar. It installs the wheel
+  only (`--only-binary :all:`), as apkradar and patchradar already did: the check is about the file
+  that was uploaded, not a build of the sdist.
+
 ## [2026.47] - 2026-10-28
 
 ### Security
