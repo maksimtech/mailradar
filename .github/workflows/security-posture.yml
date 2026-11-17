@@ -35,6 +35,13 @@ permissions:
 jobs:
   posture:
     name: Security Posture
+    # Only after a scan that succeeded. A failed one read nothing: on 2026-11-16
+    # Docker Scout stopped on a 403 while downloading its own binary, before
+    # scanning (exeradar run 43925337119), and this gate ran on it anyway and went
+    # green on the previous scan's alerts. Skipped, it gives no verdict; the failed
+    # scan stays red where it is seen, and the gate speaks again when the scan
+    # is rerun and succeeds, or on the next push or schedule.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-26.04
     steps:
       - name: Checkout

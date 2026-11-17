@@ -78,3 +78,19 @@ def test_the_customer_document_says_when_the_image_is_scanned():
     doc = (WORKFLOWS.parent.parent / "docs" / "nis2-compliance.md").read_text(encoding="utf-8")
     row = next(line for line in doc.splitlines() if line.startswith("| `Docker Scout` |"))
     assert "ogni build dell'immagine" in row
+
+
+def test_a_failed_scan_triggers_no_verdict(posture):
+    """A scan that failed read nothing, so the alerts are still the previous scan's.
+
+    On 2026-11-16 Docker Scout failed on exeradar's main before scanning (a 403 while it
+    downloaded its own binary, run 43925337119), and the gate ran on that `workflow_run`
+    all the same and went green, a verdict that looked fresh and was not. This Radar had
+    the same trigger with no condition. Skipped instead: the failed scan stays red where it
+    can be seen, and the gate speaks again when the scan is rerun and succeeds, or on the
+    next push or schedule. As in exeradar#39.
+    """
+    for job in posture["jobs"].values():
+        condition = " ".join(str(job.get("if", "")).split())
+        assert "github.event.workflow_run.conclusion == 'success'" in condition
+        assert "github.event_name != 'workflow_run'" in condition
