@@ -58,6 +58,7 @@ class SPFResult:
     # Set when a DNS lookup failed: the check then says nothing either way
     error: str = ""
     issues: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass

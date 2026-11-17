@@ -47,7 +47,9 @@ def _batch(path):
         report.grade = "EXCELLENT"
         return report
 
-    with patch("mailradar.cli.analyze_domain", side_effect=analysed):
+    # The names exist as far as these tests go: batch asks DNS first, and the real one is not theirs to ask
+    with patch("mailradar.checker.domain_exists", return_value=True), \
+            patch("mailradar.cli.analyze_domain", side_effect=analysed):
         return runner.invoke(app, ["batch", str(path)])
 
 

@@ -27,7 +27,6 @@ FINDING_ARTICLES = {
     "spf_dkim_weak": ((GDPR, "32"),),
     "cleartext": ((GDPR, "32(1)(a)"), (DLGS_138_2024, "24")),     # MTA-STS absent
     "cleartext_testing": ((GDPR, "32(1)(a)"),),            # MTA-STS not enforced
-    "gpg_missing": ((GDPR, "32"),),
 }
 
 FINDING_TITLES = {
@@ -35,11 +34,18 @@ FINDING_TITLES = {
     "spf_dkim_weak": "SPF/DKIM weak",
     "cleartext": "Cleartext delivery possible",
     "cleartext_testing": "Cleartext delivery possible",
-    "gpg_missing": "GPG not available",
 }
 
 # Articles downloaded and cached even when not cited, by act
 ALSO_FETCH: dict = {}
+
+# No published GPG key is a suggestion, not a gap: GDPR art. 32 asks for
+# measures appropriate to the risk, and none of them is a key on a keyserver
+# (owner's decision, 2026-11-17). Until then it was cited as art. 32.
+GPG_SUGGESTION = (
+    "No public GPG key for the domain's contact addresses: publishing one (keys.openpgp.org) lets "
+    "security reports reach it encrypted — a suggestion, not a legal requirement"
+)
 
 NIS2_SCOPE_NOTE = (
     "D.Lgs. 138/2024 art. 24 binds essential and important entities (art. 3 of the decree): "
@@ -85,16 +91,16 @@ def findings_of(report) -> dict[str, list[str]]:
     elif report.mta_sts.mode != "enforce":
         found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce"]
 
-    # A keyserver that did not answer (rate limit, timeout) proved nothing
-    if not report.gpg.found and not report.gpg.error:
-        found["gpg_missing"] = ["no public key on the keyservers"]
-
     return {finding: found[finding] for finding in FINDING_ARTICLES if finding in found}
 
 
 def notes_of(report) -> list[str]:
     cites_nis2 = not report.dmarc.present or not report.mta_sts.present
-    return [NIS2_SCOPE_NOTE] if cites_nis2 else []
+    notes = [NIS2_SCOPE_NOTE] if cites_nis2 else []
+    # A keyserver that did not answer (rate limit, timeout) proved nothing
+    if not report.gpg.found and not report.gpg.error:
+        notes.append(GPG_SUGGESTION)
+    return notes
 
 
 # ─── Citations ────────────────────────────────────────────────────────────────

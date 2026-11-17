@@ -3,6 +3,7 @@ MailRadar — GPG public key lookup on keyservers.
 """
 
 import re
+import time
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
@@ -49,6 +50,9 @@ class GPGResult:
     # Set when some address got no answer from any keyserver (HTTP 429, 5xx,
     # timeout): the check then says nothing either way
     error: str = ""
+    # The keyservers that did not answer before the key was found: when one of
+    # them verifies addresses, a verified key may exist beside the one found
+    unanswered: str = ""
     issues: list[str] = field(default_factory=list)
 
 
@@ -74,11 +78,16 @@ def _machine_readable(text: str, email: str) -> str:
     wanted = email.lower()
     fingerprint = ""
     usable = False
+    now = time.time()
     for line in text.splitlines():
         fields = line.split(":")
         if fields[0] == "pub" and len(fields) >= 7:
             fingerprint = fields[1]
-            usable = not set(fields[6].lower()) & {"r", "d", "e"}
+            # The expiration date too: a keyserver does not always set `e` on
+            # a key past it, and gpg cannot encrypt to one
+            expires = fields[5].strip()
+            expired = expires.isdigit() and int(expires) <= now
+            usable = not expired and not set(fields[6].lower()) & {"r", "d", "e"}
         elif fields[0] == "uid" and len(fields) >= 2 and usable and fingerprint:
             uid = fields[1].lower()
             address = re.search(r"<([^<>]+)>", uid)
@@ -163,6 +172,16 @@ def _lookup(emails: list[str], keyservers: list[str]) -> GPGResult:
                             f"GPG key for {email} found on {_host(result.keyserver)}, which does not verify "
                             f"addresses — anyone can publish a key there under any name; confirm fingerprint "
                             f"{result.fingerprint} with the domain before relying on it"
+                        )
+                    # A 429 from the keyserver that verifies addresses used to
+                    # vanish here, once the other one answered with its key
+                    result.unanswered = "; ".join(down.values())
+                    verifying_down = [error for keyserver, error in down.items()
+                                      if _host(keyserver) in VERIFYING_KEYSERVERS]
+                    if verifying_down and not result.verified:
+                        result.issues.append(
+                            f"{'; '.join(verifying_down)} — the keyserver that verifies addresses did not answer: "
+                            "a verified key may exist"
                         )
                     return result
     if down:

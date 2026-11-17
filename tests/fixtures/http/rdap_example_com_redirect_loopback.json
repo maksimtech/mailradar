@@ -1,0 +1,17 @@
+{
+  "_derived": {
+    "from": "http/rdap_example_com.json, GET https://rdap.org/domain/example.com (recorded 2026-10-07): 302 to https://rdap.verisign.com/com/v1/domain/example.com",
+    "changed": "Location replaced by http://127.0.0.1:8080/admin: what a server on the path, or a hostile page, would answer to point the tool at the network it runs from"
+  },
+  "responses": [
+    {
+      "request": "GET https://rdap.org/domain/example.com",
+      "status": 302,
+      "headers": {
+        "content-type": "text/html",
+        "location": "http://127.0.0.1:8080/admin"
+      },
+      "body": ""
+    }
+  ]
+}

@@ -372,11 +372,19 @@ class SMTPServer:
 
     AUTH is offered only once TLS is up, as real servers do, and any AUTH is
     accepted: what the tests look at is whether the client ever sent one.
+
+    `replies` replaces the answer to a verb ({"AUTH": b"535 5.7.8 ...\\r\\n"}:
+    a wrong password; {"QUIT": b"250 ...\\r\\n"}: a server that answers QUIT
+    with something other than 221), and `refused` lists the recipients RCPT
+    answers 550 for: the codes RFC 5321 gives those situations.
     """
 
-    def __init__(self, mode: str, context: ssl.SSLContext | None = None):
+    def __init__(self, mode: str, context: ssl.SSLContext | None = None,
+                 replies: dict[str, bytes] | None = None, refused: Iterable[str] = ()):
         self.mode = mode
         self.context = context
+        self.replies = {verb.upper(): reply for verb, reply in (replies or {}).items()}
+        self.refused = {address.lower() for address in refused}
         self.connections = 0
         self.commands: list[str] = []
         self.messages: list[bytes] = []
@@ -430,7 +438,9 @@ class SMTPServer:
                 connection, tls = wrapped, True
                 reader = connection.makefile("rb", buffering=0)
             elif verb == "AUTH" and tls:
-                connection.sendall(b"235 2.7.0 Authentication successful\r\n")
+                connection.sendall(self.replies.get("AUTH", b"235 2.7.0 Authentication successful\r\n"))
+            elif verb == "RCPT" and command.partition(":")[2].strip().strip("<>").lower() in self.refused:
+                connection.sendall(b"550 5.1.1 No such user here\r\n")
             elif verb in ("MAIL", "RCPT"):
                 connection.sendall(b"250 2.1.0 OK\r\n")
             elif verb == "DATA":
@@ -441,7 +451,7 @@ class SMTPServer:
                 self.messages.append(data)
                 connection.sendall(b"250 2.0.0 OK\r\n")
             elif verb == "QUIT":
-                connection.sendall(b"221 2.0.0 Bye\r\n")
+                connection.sendall(self.replies.get("QUIT", b"221 2.0.0 Bye\r\n"))
                 return
             else:
                 connection.sendall(b"502 5.5.2 Command not recognised\r\n")
