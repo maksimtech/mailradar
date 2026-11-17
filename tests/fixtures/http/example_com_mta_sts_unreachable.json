@@ -1,0 +1,12 @@
+{
+ "_derived": {
+  "from": "http/example_com_mta_sts_404.json, GET https://mta-sts.example.com/.well-known/mta-sts.txt (derived from ecosia.org's, recorded 2026-10-07)",
+  "changed": "the connection is closed without an answer in place of the 404, as a timeout or a reset on the scanner's own network looks to httpx"
+ },
+ "responses": [
+  {
+   "request": "GET https://mta-sts.example.com/.well-known/mta-sts.txt",
+   "error": "connection closed without an answer"
+  }
+ ]
+}

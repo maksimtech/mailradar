@@ -280,18 +280,26 @@ fails SPF and DKIM checks. It is the single most important record.
 A missing DMARC record means the domain is spoofable. The ✅ status is shown
 only for `p=reject`.
 
-Multi-level domains are resolved the way RFC 7489 §6.6.3 prescribes: if
-`_dmarc.<domain>` has no record, one label is removed at a time up to the
-organizational domain, which comes from the [Public Suffix
-List](https://publicsuffix.org/) shipped with the package. For
-`asufc.sanita.fvg.it` that means `_dmarc.asufc.sanita.fvg.it`, then
+Subdomains are resolved the way RFC 7489 §6.6.3 prescribes: if
+`_dmarc.<domain>` has no record, the record of the organizational domain
+applies, and no name in between is asked. The organizational domain comes from
+the [Public Suffix List](https://publicsuffix.org/) shipped with the package.
+For `asufc.sanita.fvg.it` that means `_dmarc.asufc.sanita.fvg.it`, then
 `_dmarc.sanita.fvg.it`: `fvg.it` is itself on the list, like `it`, `co.uk` or
-`co.at`. The public suffix itself is never queried — a record on it is not the
-domain's policy. Two DMARC records on the same name are reported as such:
-receivers then apply no DMARC policy at all. An inherited record is marked
-`via <parent domain>` in the table and listed under Issues found, since the
-subdomain has no policy of its own; where the parent publishes `sp=`, that is
-the policy scored for the subdomain.
+`co.at`. For `sub.a.example.com` it means `_dmarc.sub.a.example.com`, then
+`_dmarc.example.com`: a record on `a.example.com` is not consulted. The public
+suffix itself is never queried — a record on it is not the domain's policy.
+Two DMARC records on the same name are reported as such: receivers then apply
+no DMARC policy at all. An inherited record is marked `via <organizational
+domain>` in the table and listed under Issues found, since the subdomain has no
+policy of its own; where that record publishes `sp=`, that is the policy scored
+for the subdomain.
+
+A `p=` or `sp=` that is not `none`, `quarantine` or `reject` (or a record with
+no `p=`) is never shown as the policy. As §6.6.3 says, such a record acts as
+`p=none` when its `rua=` names a valid URI, and otherwise no DMARC applies; the
+issue names the value. `rua=` and `ruf=` count only for entries that are URIs:
+`rua=dmarc@example.com` is an address without `mailto:` and turns no reports on.
 
 ### SPF (up to 20 points)
 
@@ -345,6 +353,19 @@ RSA | selector2: 2048-bit RSA`). An Ed25519 key (`k=ed25519`, RFC 8463) scores
 like a 2048-bit RSA key. An empty `p=` is a revoked key (RFC 6376 §3.6.1): it
 does not count, and the revocation is reported if no active key is found.
 
+Only `v=DKIM1` records, or records without `v=` that carry DKIM's own tags, are
+read as keys: a DMARC record published under a selector is not one. The key
+size is read from the key itself, never estimated from the length of `p=`. A key
+that does not decode as the type it declares (SubjectPublicKeyInfo or PKCS#1 for
+RSA, 32 bytes for Ed25519), a `k=` no RFC defines, or a record with no `p=` at all
+is reported as malformed — signatures cannot be verified with it — and scores 0.
+A key with `t=y` is in testing mode, and RFC 6376 §3.6.1 tells verifiers to treat
+its mail as unsigned: it is reported and scores 0 too. Either kind decides the
+score only when no other key works; a domain with one malformed or testing
+selector beside a working key is scored by the working key. A domain so long
+that every `<selector>._domainkey.<domain>` passes 255 octets can publish no
+key, and is told so.
+
 | Key size | Points |
 |----------|--------|
 | 2048 bits or more | 15 |
@@ -362,8 +383,14 @@ organization's logo. MailRadar checks that the SVG logo is reachable (2
 points) and whether a Verified Mark Certificate is referenced (8 points, or 3
 without a VMC). The logo is downloaded only from an `https://` URL that does
 not name a private or loopback address, since the URL comes from the analysed
-domain's DNS. `v=BIMI1; l=; a=;` declines BIMI and scores 0. BIMI is a trust and branding feature, not a protection
-against spoofing by itself.
+domain's DNS; that includes the IPv4 forms `getaddrinfo` accepts on Linux
+(`127.1`, `2130706433`, `0x7f000001`, `0177.0.0.1`), and a host made of numbers
+alone that is no address at all. A logo or VMC URL that cannot be parsed is
+reported as malformed, and `a=` counts as a VMC only if it is an `https://` URL.
+`v=BIMI1; l=; a=;` declines BIMI and scores 0. Mail clients show a BIMI logo
+only for a domain whose DMARC policy is `quarantine` or `reject`: beside
+`p=none`, or no DMARC, BIMI scores 0 and the issue says why. BIMI is a trust
+and branding feature, not a protection against spoofing by itself.
 
 ### MTA-STS (up to 5 points)
 
@@ -372,10 +399,19 @@ MTA-STS (`_mta-sts.<domain>` plus the policy file at
 deliver mail to the domain over verified TLS. `enforce` mode scores 5 points,
 `testing` mode 2.
 
+Both parts are read as senders read them (RFC 8461 §3.1 and §3.2). Only a TXT
+record that begins with `v=STSv1` counts; with two of them, or one without a
+valid `id=`, senders look for no policy, and none is fetched. The policy file
+needs `version: STSv1`, a `mode`, `max_age`, and an `mx` line in `enforce` or
+`testing` mode: a file that lacks any of them is no policy, scores 0, and the
+issue names what is missing.
+
 ### TLS-RPT (up to 3 points)
 
 TLS-RPT (`_smtp._tls.<domain>`) asks other servers to report TLS delivery
-failures. The table shows where the reports are sent.
+failures. The table shows where the reports are sent. As RFC 8460 §3 has it,
+the record needs a `rua=` with at least one `mailto:` or `https:` URI, and with
+two `v=TLSRPTv1` records senders assume there is none: either scores 0.
 
 ### GPG (up to 5 points)
 
@@ -401,7 +437,13 @@ analysis and leaves the check "not verified", which is not "no key".
 - DKIM detection depends on the list of common selectors (see above).
 - A DNS lookup that fails (timeout, SERVFAIL) leaves that check "not
   verified": it scores 0 but is not reported as missing, and `report` and
-  `send` refuse to produce a report from an incomplete analysis.
+  `send` refuse to produce a report from an incomplete analysis. So does an
+  MTA-STS policy fetch or a BIMI logo fetch that gets no answer (a timeout, a
+  reset, a refused connection to a host that DNS gives an address): that says
+  something about the network the scan runs from. An HTTP status such as 404,
+  or a policy host that DNS does not know, is the domain's answer and is scored.
+- A domain that is not a valid DNS name (a label past 63 octets, a name past
+  255, invalid IDNA) is reported as such, not as a DNS failure.
 - SPF macros (`%{d}` and the like) are not expanded, so an `include:` or
   `redirect=` that uses one is counted but not followed: the lookup count is
   then "at least N", and a verdict handed to such a `redirect=` is reported as

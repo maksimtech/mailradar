@@ -1,0 +1,44 @@
+{
+ "_derived": {
+  "from": "http/fastmail_com.json, GET https://mta-sts.fastmail.com/.well-known/mta-sts.txt (recorded 2026-10-07): \"version: STSv1\\nmode: testing\\nmx: *.messagingengine.com\\nmax_age: 86400\\n\"",
+  "changed": "answered for mta-sts.<case>.example.com: mode-only is \"mode: enforce\\n\" alone; stsv2 has \"version: STSv2\" and mode enforce; no-mx has mode enforce and no mx line; valid has mode enforce and CRLF line ends (RFC 8461 §3.2 allows both); unreachable closes the connection without an answer, as a timeout or a reset on the scanner's own network looks to httpx"
+ },
+ "responses": [
+  {
+   "request": "GET https://mta-sts.mode-only.example.com/.well-known/mta-sts.txt",
+   "status": 200,
+   "headers": {
+    "content-type": "text/plain"
+   },
+   "body": "mode: enforce\n"
+  },
+  {
+   "request": "GET https://mta-sts.stsv2.example.com/.well-known/mta-sts.txt",
+   "status": 200,
+   "headers": {
+    "content-type": "text/plain"
+   },
+   "body": "version: STSv2\nmode: enforce\nmx: *.messagingengine.com\nmax_age: 86400\n"
+  },
+  {
+   "request": "GET https://mta-sts.no-mx.example.com/.well-known/mta-sts.txt",
+   "status": 200,
+   "headers": {
+    "content-type": "text/plain"
+   },
+   "body": "version: STSv1\nmode: enforce\nmax_age: 86400\n"
+  },
+  {
+   "request": "GET https://mta-sts.valid.example.com/.well-known/mta-sts.txt",
+   "status": 200,
+   "headers": {
+    "content-type": "text/plain"
+   },
+   "body": "version: STSv1\r\nmode: enforce\r\nmx: *.messagingengine.com\r\nmax_age: 86400\r\n"
+  },
+  {
+   "request": "GET https://mta-sts.unreachable.example.com/.well-known/mta-sts.txt",
+   "error": "connection closed without an answer"
+  }
+ ]
+}

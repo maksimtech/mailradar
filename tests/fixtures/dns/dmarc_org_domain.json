@@ -1,0 +1,41 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, _dmarc.example.com. TXT (recorded 2026-10-07): \"v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s\"; the NXDOMAIN shape is the same file's",
+  "changed": "_dmarc.sub.a.example.com is NXDOMAIN and _dmarc.a.example.com publishes \"v=DMARC1; p=none\": a record on an intermediate name, which RFC 7489 §6.6.3 does not consult"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_dmarc.sub.a.example.com. IN TXT",
+   ";ANSWER",
+   ";AUTHORITY",
+   "example.com. 1800 IN SOA elliott.ns.cloudflare.com. dns.cloudflare.com. 2416374680 10000 2400 604800 1800",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_dmarc.a.example.com. IN TXT",
+   ";ANSWER",
+   "_dmarc.a.example.com. 300 IN TXT \"v=DMARC1; p=none\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_dmarc.example.com. IN TXT",
+   ";ANSWER",
+   "_dmarc.example.com. 300 IN TXT \"v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

@@ -126,6 +126,53 @@ class TestCheckDMARC:
         assert result.ruf is False
 
 
+class TestDMARCInvalidValues:
+    """RFC 7489 §6.6.3: a record with no valid p, or an sp that is not valid, acts as p=none
+    when its rua names a valid URI, and otherwise no DMARC applies. The value was shown as
+    the policy: p=rejected as 'rejected', an empty p= as '', an inherited sp=bogus as 'bogus'."""
+
+    def test_an_invalid_p_with_a_rua_acts_as_none(self, dns_replay):
+        dns_replay("dmarc_invalid_values")
+        result = check_dmarc("p-typo.example.com")
+        assert result.present is True
+        assert result.policy == "none"
+        assert result.score < 15
+        assert any("p=rejected" in issue for issue in result.issues)
+
+    def test_a_missing_p_with_a_rua_acts_as_none(self, dns_replay):
+        dns_replay("dmarc_invalid_values")
+        result = check_dmarc("p-missing.example.com")
+        assert result.policy == "none"
+        assert any("no p=" in issue for issue in result.issues)
+
+    def test_an_empty_p_without_a_rua_applies_no_dmarc(self, dns_replay):
+        """Discovery ends there: the organizational domain is not asked (the fixture has no answer for it)."""
+        dns_replay("dmarc_invalid_values")
+        result = check_dmarc("p-empty.example.com")
+        assert result.present is False
+        assert result.policy != ""
+        assert result.score == 0
+        assert result.found_at == "p-empty.example.com"
+        assert any("p=" in issue and "no DMARC" in issue for issue in result.issues)
+        assert not any("No DMARC record found" in issue for issue in result.issues)
+
+    def test_an_inherited_invalid_sp_is_not_the_policy(self, dns_replay):
+        dns_replay("dmarc_invalid_values")
+        result = check_dmarc("mail.example.net")
+        assert result.policy != "bogus"
+        assert result.present is False
+        assert result.score == 0
+        assert any("sp=bogus" in issue for issue in result.issues)
+
+    def test_a_rua_without_mailto_is_no_report_address(self, dns_replay):
+        """rua=dmarc@example.com is no URI (RFC 7489 §6.4): it earned the 3 points of reports configured."""
+        dns_replay("dmarc_invalid_values")
+        result = check_dmarc("rua-no-mailto.example.com")
+        assert result.rua is False
+        assert result.policy == "reject"
+        assert any("dmarc@example.com" in issue and "mailto:" in issue for issue in result.issues)
+
+
 def dmarc_record_of(fixture: str) -> DMARCResult:
     """_apply_dmarc_record on the _dmarc.example.com record a fixture holds: the text alone, no DNS."""
     [record] = recorded_txt(fixture, "_dmarc.example.com")
@@ -210,6 +257,10 @@ class TestDMARCLookupChain:
     def test_chain_apex_domain_is_single_step(self):
         assert dmarc_lookup_chain("example.com") == ["example.com"]
 
+    def test_chain_skips_the_names_between_the_domain_and_its_organizational_domain(self):
+        """RFC 7489 §6.6.3: the domain, then the organizational domain; no label-by-label walk."""
+        assert dmarc_lookup_chain("a.b.c.example.com") == ["a.b.c.example.com", "example.com"]
+
     @pytest.mark.parametrize("domain,forbidden", [
         ("asufc.sanita.fvg.it", "it"),
         ("asufc.sanita.fvg.it", "fvg.it"),
@@ -247,6 +298,17 @@ class TestCheckDMARCTreeWalk:
             "_dmarc.sanita.fvg.it. TXT",
         ]
         assert any("sanita.fvg.it" in issue for issue in result.issues)
+
+    def test_a_record_on_an_intermediate_name_is_not_the_policy(self, dns_replay):
+        """RFC 7489 §6.6.3 asks _dmarc.<domain> and then _dmarc.<organizational domain>.
+        For sub.a.example.com the p=none on _dmarc.a.example.com was reported, while a
+        receiver applies example.com's p=reject."""
+        server = dns_replay("dmarc_org_domain")
+        result = check_dmarc("sub.a.example.com")
+        assert result.policy == "reject"
+        assert result.found_at == "example.com"
+        assert result.inherited is True
+        assert server.queries == ["_dmarc.sub.a.example.com. TXT", "_dmarc.example.com. TXT"]
 
     def test_stops_at_the_first_parent_that_answers(self):
         zone = {
@@ -533,23 +595,13 @@ class TestCheckDKIM:
         assert result.score == 15
         assert result.issues == []
 
-    def test_dkim_1024(self):
-        # Chiave 1024-bit simulata — lunghezza base64 corta
-        key = (
-            "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC7fmTaeGQi0HcKC1r+aVWwlPSKMjLFiUiCnkp2xGXh8Bk0r9qeMJkCwOUv1gaSfBRb"
-            "UbvHyC0lBhWEFQJO6qqc+9k7rWMmXEZ0g6DfnQaTHGY2rNtVbZ6BKzHpFGi7XHJ8GS5yzZ7pGilWmqX/zYvKqxEJoKPX3nAsTbxjwIDA"
-            "QAB"
-        )
-        txt = f"v=DKIM1; p={key}"
-
-        def mock_resolve(name, rtype):
-            if "selector1._domainkey" in name:
-                return make_txt_answer([txt])
-            raise dns.resolver.NXDOMAIN
-
-        with patch('mailradar.checker.dns.resolver.resolve', side_effect=mock_resolve):
-            result = check_dkim("example.com", selectors=["selector1"])
+    def test_dkim_1024(self, dns_replay):
+        # polimi.it's selector1, as recorded: a real 1024-bit key. The one this
+        # test made up did not decode, and scored 10 only by its length.
+        dns_replay("polimi_it")
+        result = check_dkim("polimi.it", selectors=["selector1"])
         assert result.present is True
+        assert result.key_bits == 1024
         assert result.score == 10
         assert any("1024" in issue for issue in result.issues)
 
@@ -593,6 +645,65 @@ class TestCheckDKIM:
         result = check_dkim("example.com", selectors=["s1", "s2"])
         assert result.selector == "s2"
         assert not any("revok" in issue.lower() for issue in result.issues)
+
+
+class TestDKIMKeysThatCannotBeUsed:
+    """A key that does not decode as the type it declares verifies no signature (RFC 6376 §3.6.1).
+
+    Each was scored by the length of p=: a 2048-bit key cut at 255 characters
+    as 1024-bit (10 points), 400 'A' as 2048-bit (15), no p= at all as a weak
+    0-bit key (3), an RSA key under k=ecdsa as 2048-bit (15).
+    """
+
+    @pytest.mark.parametrize("selector", ["truncated", "zeros", "nop", "ecdsa"])
+    def test_a_key_that_cannot_be_used_scores_nothing(self, dns_replay, selector):
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=[selector])
+        assert result.score == 0
+        assert result.key_bits == 0
+        assert any("malformed" in issue and "cannot be verified" in issue and selector in issue
+                   for issue in result.issues)
+        assert not any("1024" in issue or "weak" in issue for issue in result.issues)
+        assert "malformed" in result.keys[selector]
+
+    def test_a_dmarc_record_under_a_selector_is_no_dkim_key(self, dns_replay):
+        """'v=DMARC1;p=reject…' holds 'p=': it was read as a 512-bit RSA key."""
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["dmarc"])
+        assert result.present is False
+        assert result.keys == {}
+        assert not any("512" in issue for issue in result.issues)
+
+    def test_a_pkcs1_key_is_a_key(self, dns_replay):
+        """RFC 6376 §3.6.1 names RSAPublicKey (PKCS#1); SubjectPublicKeyInfo is what most publish."""
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["pkcs1"])
+        assert (result.key_bits, result.score) == (2048, 15)
+
+    def test_a_usable_key_decides_beside_a_malformed_one(self, dns_replay):
+        """A malformed key verifies nothing, so it lets nobody forge either: the posture is the
+        weakest key that works, and the broken one is reported on its own."""
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["truncated", "active"])
+        assert result.selector == "active"
+        assert result.score == 15
+        assert any("truncated" in issue and "malformed" in issue for issue in result.issues)
+
+    def test_a_key_in_testing_mode_counts_as_unsigned(self, dns_replay):
+        """RFC 6376 §3.6.1, t=y: verifiers MUST NOT treat mail from a signer in testing mode
+        differently from unsigned mail. A 2048-bit key there earned the full 15 points."""
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["testing"])
+        assert result.present is True
+        assert result.score == 0
+        assert any("testing" in issue and "t=y" in issue for issue in result.issues)
+
+    def test_a_key_in_testing_mode_beside_an_active_one(self, dns_replay):
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["testing", "active"])
+        assert result.selector == "active"
+        assert result.score == 15
+        assert any("testing" in issue and "under testing" in issue for issue in result.issues)
 
 
 # ─── BIMI ───────────────────────────────────────────────────────────────────
@@ -660,6 +771,56 @@ class TestCheckBIMI:
         result = check_bimi("icloud.com")
         assert result.score == 0
 
+    @pytest.mark.parametrize("case", ["malformed-l", "malformed-port"])
+    def test_a_logo_url_that_cannot_be_parsed_is_an_issue_not_a_crash(self, dns_replay, http_replay, case):
+        """urlsplit raises ValueError on l=https://[::1/logo.svg, and .port on a port past 65535:
+        it escaped check_bimi and ended the whole analysis. The URL comes from the domain's DNS."""
+        dns_replay("bimi_malformed_url")
+        proxy = http_replay()
+        result = check_bimi(f"{case}.example.com")
+        assert result.present is True
+        assert any("logo URL is malformed" in issue for issue in result.issues)
+        assert result.svg_valid is False
+        assert proxy.requests == []
+
+    def test_a_vmc_url_that_cannot_be_parsed_is_no_vmc(self, dns_replay, http_replay):
+        """a=https://[::1/vmc.pem names no certificate anyone could fetch: it earns no VMC points."""
+        dns_replay("bimi_malformed_url")
+        proxy = http_replay()
+        result = check_bimi("malformed-a.example.com")
+        assert result.vmc_present is False
+        assert result.score < 8
+        assert any("VMC URL is malformed" in issue for issue in result.issues)
+        assert proxy.requests == []
+
+    @pytest.mark.parametrize("case", ["https-short", "https-decimal", "https-hex", "https-octal",
+                                      "https-hex-dotted", "https-private-short"])
+    def test_bimi_does_not_fetch_an_ipv4_literal_in_a_form_inet_aton_reads(self, dns_replay, http_replay, case):
+        """glibc's getaddrinfo, in the Docker image, reads 127.1, 2130706433, 0x7f000001 and
+        0177.0.0.1 as 127.0.0.1: ipaddress does not, so they passed as host names."""
+        dns_replay("bimi_ssrf_ipv4_forms")
+        proxy = http_replay()
+        result = check_bimi(f"{case}.example.com")
+        assert proxy.requests == []
+        assert result.svg_valid is False
+        assert any("not a public https:// URL" in issue for issue in result.issues)
+
+    @pytest.mark.parametrize("url,fetchable", [
+        ("https://amplify.valimail.com/bimi/logo.svg", True),
+        ("https://192.0.2.1/logo.svg", False),           # TEST-NET-1 is not global
+        ("https://134744072/logo.svg", True),             # 8.8.8.8 written as one number: global
+        ("https://0x08080808/logo.svg", True),
+        ("https://08.0.0.1/logo.svg", False),             # numeric, and no address: nothing to fetch
+        ("https://4294967296/logo.svg", False),           # past 32 bits
+        ("https://127.0.0.1./logo.svg", False),           # the trailing dot of a FQDN
+        ("https://[2001:db8::1]/logo.svg", False),
+        ("https://[::ffff:127.0.0.1]/logo.svg", False),
+        ("https://0x7f.example/logo.svg", True),          # a host name whose first label looks hex
+    ])
+    def test_which_hosts_are_fetched(self, url, fetchable):
+        from mailradar.checker import _fetchable
+        assert _fetchable(url) is fetchable
+
 
 # ─── MTA-STS ────────────────────────────────────────────────────────────────
 
@@ -705,6 +866,114 @@ class TestCheckMTASTS:
         assert any("none" in issue for issue in result.issues)
 
 
+class TestMTASTSValidity:
+    """RFC 8461 §3.1 and §3.2: what senders accept as a policy, and what they ignore.
+
+    Each case below scored 5 with mode enforce.
+    """
+
+    @pytest.mark.parametrize("case,named", [
+        ("mode-only", ["version", "max_age", "mx"]),
+        ("stsv2", ["STSv2"]),
+        ("no-mx", ["mx"]),
+    ])
+    def test_an_invalid_policy_file_is_no_policy(self, dns_replay, http_replay, case, named):
+        dns_replay("mta_sts_invalid")
+        http_replay("mta_sts_invalid")
+        result = check_mta_sts(f"{case}.example.com")
+        assert result.score == 0
+        assert result.mode != "enforce"
+        issue = next(issue for issue in result.issues if "policy is invalid" in issue)
+        for word in named:
+            assert word in issue
+
+    @pytest.mark.parametrize("case,said", [
+        ("two-records", "Multiple MTA-STS records"),
+        ("no-id", "id="),
+        ("not-first", "begin with v=STSv1"),
+    ])
+    def test_a_txt_record_senders_do_not_accept_announces_no_policy(self, dns_replay, http_replay, case, said):
+        """Senders discard a record that does not begin with v=STSv1, and with zero or several
+        left, or one without a valid id=, look for no policy: the file is not even fetched."""
+        dns_replay("mta_sts_invalid")
+        proxy = http_replay("mta_sts_invalid")
+        result = check_mta_sts(f"{case}.example.com")
+        assert result.present is False
+        assert result.score == 0
+        assert any(said in issue for issue in result.issues)
+        assert proxy.requests == []
+
+    def test_a_valid_policy_with_crlf_line_ends_is_enforced(self, dns_replay, http_replay):
+        """§3.2 ends policy lines with CRLF or LF."""
+        dns_replay("mta_sts_invalid")
+        http_replay("mta_sts_invalid")
+        result = check_mta_sts("valid.example.com")
+        assert (result.present, result.mode, result.score) == (True, "enforce", 5)
+        assert result.issues == []
+
+
+def _no_proxy_answers(monkeypatch) -> None:
+    """httpx goes through a proxy on a 127.0.0.1 port nobody listens on: every request
+    ends in a real ConnectError, as when the host has no address to connect to."""
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    for variable in ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"):
+        monkeypatch.setenv(variable, f"http://127.0.0.1:{port}")
+    for variable in ("ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(variable, raising=False)
+
+
+class TestHTTPFailures:
+    """Not measured is not zero, for HTTP as for DNS since 2026.47: a request that got no
+    answer leaves its check not verified. An answer from the domain's server, a 404
+    included, is a finding."""
+
+    def test_an_mta_sts_policy_fetch_with_no_answer_is_not_verified(self, dns_replay, http_replay):
+        dns_replay("mta_sts_invalid")
+        http_replay("mta_sts_invalid")
+        result = check_mta_sts("unreachable.example.com")
+        assert "mta-sts.unreachable.example.com" in result.error
+        assert any("MTA-STS not verified" in issue for issue in result.issues)
+        assert not any("not accessible" in issue for issue in result.issues)
+
+    def test_an_http_status_from_the_policy_host_is_a_finding(self, dns_replay, http_replay):
+        dns_replay("ecosia_org")
+        http_replay("ecosia_org")
+        result = check_mta_sts("ecosia.org")
+        assert result.error == ""
+        assert any("HTTP 404" in issue for issue in result.issues)
+
+    def test_a_policy_host_dns_does_not_know_is_a_finding(self, dns_replay, monkeypatch):
+        """The connection fails, and mta-sts.<domain> is NXDOMAIN: no server could have
+        answered, so that is what the domain publishes, not a failure of the scanner's network."""
+        dns_replay("mta_sts_invalid")
+        _no_proxy_answers(monkeypatch)
+        result = check_mta_sts("no-host.example.com")
+        assert result.error == ""
+        assert result.score == 0
+        assert any("mta-sts.no-host.example.com" in issue and "does not exist" in issue
+                   for issue in result.issues)
+
+    def test_a_connection_that_fails_to_a_host_that_exists_is_not_verified(self, dns_replay, monkeypatch):
+        """example.com has addresses (recorded): a ConnectError to it says nothing about the domain."""
+        dns_replay("bimi_example_com", "amplify_valimail_com_a")
+        _no_proxy_answers(monkeypatch)
+        result = check_bimi("example.com")
+        assert "amplify.valimail.com" in result.error
+        assert any("BIMI not verified" in issue for issue in result.issues)
+
+    def test_a_bimi_logo_fetch_with_no_answer_is_not_verified(self, dns_replay, http_replay):
+        dns_replay("bimi_example_com")
+        http_replay("bimi_logo_unreachable")
+        result = check_bimi("example.com")
+        assert "amplify.valimail.com" in result.error
+        assert result.score == 0
+        assert not any("timeout or error" in issue for issue in result.issues)
+
+
 # ─── TLS-RPT ────────────────────────────────────────────────────────────────
 
 class TestCheckTLSRPT:
@@ -721,6 +990,27 @@ class TestCheckTLSRPT:
             result = check_tls_rpt("example.com")
         assert result.present is False
         assert result.score == 0
+
+    @pytest.mark.parametrize("case,said", [
+        ("no-rua", "rua"),
+        ("rua-no-scheme", "mailto: or https:"),
+        ("two-records", "Multiple TLS-RPT records"),
+    ])
+    def test_a_record_senders_cannot_use_scores_nothing(self, dns_replay, case, said):
+        """RFC 8460 §3: rua is required, its URIs are mailto: or https:, and with more than one
+        v=TLSRPTv1 record senders assume the domain does not implement TLS-RPT. Each scored 3."""
+        dns_replay("tls_rpt_invalid")
+        result = check_tls_rpt(f"{case}.example.com")
+        assert result.present is False
+        assert result.score == 0
+        assert any(said in issue for issue in result.issues)
+
+    def test_rua_is_read_as_a_tag_not_as_the_last_rua_in_the_text(self, dns_replay):
+        """rua=https://x.example/?rua=1; was read as rua='1', from the 'rua=' inside the URI."""
+        dns_replay("tls_rpt_invalid")
+        result = check_tls_rpt("rua-in-url.example.com")
+        assert result.rua == "https://x.example/?rua=1"
+        assert result.score == 3
 
 
 # ─── DNS lookup failures ────────────────────────────────────────────────────
@@ -802,6 +1092,64 @@ class TestDomainExists:
             domain_exists("asufc.sanita.fvg.it")
 
 
+def _long_domain(length: int) -> str:
+    """A valid name under example.com, `length` characters long (labels of at most 63)."""
+    labels, left = [], length - len(".example.com")
+    while left > 0:
+        size = min(63, left - 1 if left > 63 else left)
+        labels.append("a" * size)
+        left -= size + 1
+    domain = ".".join(labels) + ".example.com"
+    assert len(domain) == length
+    return domain
+
+
+class TestInvalidNames:
+    """dnspython raises LabelTooLong, NameTooLong and IDNAException as DNSException: they
+    became DNSLookupError, "DNS lookup failed", and the CLI said to try again or use
+    another resolver, for a name no resolver can ever answer about."""
+
+    @pytest.mark.parametrize("name,reason", [
+        ("a" * 64 + ".example.com", "63 octets"),
+        (".".join(["a" * 63] * 4) + ".example.com", "255 octets"),
+        ("☃☃.example.com", "IDNA"),
+    ])
+    def test_domain_exists_says_the_name_is_not_valid(self, dns_replay, name, reason):
+        from mailradar.checker import InvalidDomainError
+
+        server = dns_replay()
+        with pytest.raises(InvalidDomainError, match=reason) as raised:
+            domain_exists(name)
+        assert "not a valid domain name" in str(raised.value)
+        assert "failed" not in str(raised.value)
+        assert server.queries == []
+
+    def test_a_check_on_a_name_that_is_not_valid_says_so(self, dns_replay):
+        server = dns_replay()
+        result = check_dmarc("a" * 64 + ".example.com")
+        assert "not a valid domain name" in result.error
+        assert not any("failed" in issue for issue in result.issues)
+        assert server.queries == []
+
+    def test_dkim_under_a_domain_too_long_for_any_selector(self, dns_replay):
+        """240 characters: every <selector>._domainkey.<domain> passes 255 octets, so no key
+        can be published there. That is an answer, not a lookup to try again for ever."""
+        server = dns_replay()
+        result = check_dkim(_long_domain(240))
+        assert result.error == ""
+        assert result.present is False
+        assert any("No DKIM selector can be checked" in issue for issue in result.issues)
+        assert server.queries == []
+
+    def test_dmarc_of_a_domain_too_long_for_its_own_record_is_the_organizational_one(self, dns_replay):
+        """_dmarc.<domain> cannot exist at 247 characters; example.com's record still applies."""
+        dns_replay("example_com")
+        result = check_dmarc(_long_domain(247))
+        assert result.error == ""
+        assert result.found_at == "example.com"
+        assert result.policy == "reject"
+
+
 class TestDomainVariants:
 
     def test_a_subdomain_gets_no_variants(self, dns_replay):
@@ -873,6 +1221,25 @@ class TestAnalyzeDomain:
         ]
         assert report.gpg.uid == "security@example.com"
 
+    def test_bimi_beside_a_dmarc_policy_that_does_not_enforce_earns_nothing(self, dns_replay, http_replay):
+        """Mail clients show a BIMI logo only under DMARC quarantine or reject: with p=none
+        the logo and its VMC are never displayed, and they scored 10 of 10 with no issue."""
+        dns_replay("example_com", "example_com_dkim_more_selectors", "bimi_without_enforcement")
+        http_replay("example_com", "keyservers_example_com", "bimi_logo")
+        report = analyze_domain("example.com")
+        assert report.dmarc.policy == "none"
+        assert (report.bimi.vmc_present, report.bimi.svg_valid) == (True, True)
+        assert report.bimi.score == 0
+        assert any("quarantine or reject" in issue for issue in report.bimi.issues)
+
+    def test_bimi_beside_dmarc_reject_keeps_its_points(self, dns_replay, http_replay):
+        dns_replay("example_com", "example_com_dkim_more_selectors", "bimi_example_com")
+        http_replay("example_com", "keyservers_example_com", "bimi_logo")
+        report = analyze_domain("example.com")
+        assert report.dmarc.policy == "reject"
+        assert report.bimi.score == 10
+        assert not any("quarantine or reject" in issue for issue in report.bimi.issues)
+
     def test_scoring_boundaries(self):
         """Test score boundary conditions."""
         result = DMARCResult()
@@ -930,13 +1297,15 @@ def _mock_checks(**scores):
 
     `error=""` says so: a MagicMock's own `error` is a truthy MagicMock, which
     reads as a lookup that got no answer and leaves the analysis without a score.
+    `policy="reject"`: BIMI's points count only beside a DMARC policy that enforces.
     """
     from contextlib import ExitStack
     stack = ExitStack()
     for check in MAX_SCORES:
         target = "mailradar.gpg.lookup_gpg" if check == "gpg" else f"mailradar.checker.check_{check}"
         stack.enter_context(patch(
-            target, return_value=MagicMock(score=scores.get(check, 0), issues=[], error="")
+            target, return_value=MagicMock(score=scores.get(check, 0), issues=[], error="",
+                                           present=True, policy="reject")
         ))
     return stack
 
@@ -969,7 +1338,7 @@ class TestScoreNormalization:
                 return make_txt_answer([records[name]])
             raise dns.resolver.NXDOMAIN
 
-        http = MagicMock(status_code=200, text="version: STSv1\nmode: enforce\n")
+        http = MagicMock(status_code=200, text="version: STSv1\nmode: enforce\nmx: mail.example.com\nmax_age: 604800\n")
         with patch('mailradar.checker.dns.resolver.resolve', side_effect=resolve), \
              patch('mailradar.checker.httpx.get', return_value=http):
             assert check_dmarc("example.com").score == MAX_SCORES["dmarc"]
@@ -1035,6 +1404,16 @@ class TestNoScoreWithoutMeasure:
         assert report.total_score is None
         assert report.grade != "CRITICAL"
         assert report.unverified == ["DMARC", "SPF", "DKIM", "BIMI", "MTA-STS", "TLS-RPT"]
+
+    def test_an_unanswered_policy_fetch_leaves_no_score(self, dns_replay, http_replay):
+        """The same holds for HTTP: _mta-sts present and the policy fetch getting no answer
+        (ConnectTimeout, a reset) graded MTA-STS 0 with "policy file not accessible"."""
+        dns_replay("example_com", "example_com_mta_sts", "example_com_dkim_more_selectors")
+        http_replay("example_com", "example_com_mta_sts_unreachable", "keyservers_example_com")
+        report = analyze_domain("example.com")
+        assert report.unverified == ["MTA-STS"]
+        assert report.total_score is None
+        assert not any("not accessible" in issue for issue in report.mta_sts.issues)
 
     def test_a_keyserver_that_does_not_answer_still_leaves_a_score(self, dns_replay, http_replay):
         """GPG is the exception, as for `report` and `send`: keys.openpgp.org allows one

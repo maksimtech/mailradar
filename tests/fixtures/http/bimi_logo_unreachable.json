@@ -1,0 +1,12 @@
+{
+ "_derived": {
+  "from": "the BIMI logo URL of dns/cnn_com.json (recorded 2026-10-07)",
+  "changed": "the connection is closed without an answer, as a timeout or a reset on the scanner's own network looks to httpx"
+ },
+ "responses": [
+  {
+   "request": "GET https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.svg",
+   "error": "connection closed without an answer"
+  }
+ ]
+}

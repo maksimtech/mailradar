@@ -126,6 +126,86 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   of their own. `21(3-bis)` and `21(4-bis)` now exist, as do -ter, -quater and the later Latin
   numbers (every one after quater ends in -ies), with their lettered points.
 
+### Fixed
+
+- **A malformed BIMI URL no longer ends the analysis.** `default._bimi` publishing
+  `l=https://[::1/logo.svg` made `urlsplit` raise `ValueError: Invalid IPv6 URL`, and a port past
+  65535 did the same on `.port`; nothing caught either, so `analyze_domain` stopped for the whole
+  domain. A logo URL that cannot be parsed is now a BIMI issue ("logo URL is malformed") and is not
+  fetched. `a=` was counted as a VMC whatever it held: it now has to be a well-formed `https://` URL,
+  or it earns no VMC points and says why.
+
+- **The BIMI logo filter catches every IPv4 literal `getaddrinfo` reads.** `https://127.1/`,
+  `https://2130706433/`, `https://0x7f000001/` and `https://0177.0.0.1/` passed as host names, since
+  `ipaddress` reads only dotted quads, while glibc's `inet_aton`, which `getaddrinfo` tries before
+  DNS, reads all of them as 127.0.0.1: in the Docker image the logo fetch reached the loopback. A host
+  made of numbers alone is now parsed the way `inet_aton` parses it (one to four parts, decimal, octal
+  or hex) and fetched only if that gives a global address; numbers that give no address are not
+  fetched either. Host names are still not resolved before the fetch, as the README says.
+
+- **DKIM scores a key only once it decodes as one.** The key size used to fall back to the length of
+  `p=`: a 2048-bit key cut at 255 characters scored as 1024-bit (10 points), `p=` plus 400 `A` as
+  2048-bit (15), `v=DKIM1; k=rsa` with no `p=` as a weak 0-bit key (3), an RSA key under `k=ecdsa` as
+  2048-bit (15), and a DMARC record under a selector, matched because it holds `p=`, as 512-bit RSA.
+  A key that does not decode as its declared type (SubjectPublicKeyInfo or PKCS#1 for RSA, 32 bytes
+  for Ed25519), an unknown `k=`, or a record with no `p=` (RFC 6376 §3.6.1 requires it; an empty `p=`
+  is still a revoked key) is now "malformed — signatures cannot be verified" and scores 0. Only
+  `v=DKIM1` records, or records without `v=` that carry DKIM tags, are read as keys. A malformed key
+  verifies nothing and lets nobody forge, so beside a working key it is reported without setting the
+  score: the posture is the weakest key that works. `DKIMResult.keys` names it `malformed RSA key`.
+
+- **A DKIM key in testing mode is no longer full marks.** RFC 6376 §3.6.1: verifiers must not treat
+  mail from a signer with `t=y` differently from unsigned mail. Such a key is reported, and scores 0
+  unless another key without `t=y` works; `DKIMResult.keys` marks it `(testing, t=y)`.
+
+- **MTA-STS reads the record and the policy as senders do (RFC 8461 §3.1, §3.2).** A policy file
+  holding only `mode: enforce`, one with `version: STSv2`, two `v=STSv1` records and a record with no
+  `id=` each scored 5 with mode enforce, and any record containing `v=STSv1` counted. Now only
+  records that begin with `v=STSv1` count; none, several, or one without a valid `id=` mean no policy,
+  and the file is not fetched. The policy needs `version: STSv1`, `mode`, `max_age` and, in enforce or
+  testing mode, an `mx`: without them it is no policy, scores 0, and the issue names what is missing.
+  `MTASTSResult.mode` is set only from a valid policy.
+
+- **TLS-RPT follows RFC 8460 §3.** `v=TLSRPTv1;` with no `rua` scored 3, so did two TLS-RPT records
+  (senders then assume none), and `rua=https://x.example/?rua=1;` was read as `rua='1'`, from the last
+  `rua=` in the text. The record is now parsed as tags, needs a `rua` with at least one `mailto:` or
+  `https:` URI, and several records count as none.
+
+- **DMARC discovery asks the domain and its organizational domain, nothing in between.** RFC 7489
+  §6.6.3 queries `_dmarc.<domain>` and, if it has no record, `_dmarc.<organizational domain>` (from the
+  Public Suffix List). MailRadar removed one label at a time: for `sub.a.example.com` it reported the
+  `p=none` of `_dmarc.a.example.com`, while receivers apply `example.com`'s `p=reject`. The
+  intermediate names are no longer queried, and `found_at` shows where the record was found.
+
+- **An invalid DMARC `p=` or `sp=` is no longer shown as the policy.** `p=rejected` became
+  `policy='rejected'`, an empty `p=` became `''`, an inherited `sp=bogus` became `'bogus'`. As §6.6.3
+  says, a record with no valid `p` (or an `sp` that is not valid) acts as `p=none` when its `rua`
+  names a valid URI, and otherwise no DMARC applies; the issue names the value. `rua=a@example.com`,
+  an address without `mailto:`, earned the 3 points of reports configured: entries that are not URIs
+  now count for nothing and are reported.
+
+- **A name DNS cannot hold is no longer reported as a DNS failure.** dnspython raises `LabelTooLong`,
+  `NameTooLong` and `IDNAException` as `DNSException`s, so they became `DNSLookupError`, "DNS lookup
+  failed", and `check` suggested trying again or another resolver. `domain_exists` and the checks now
+  raise `InvalidDomainError` (a `DNSLookupError`, so existing callers still catch it) saying the name
+  is not a valid domain name and why, without asking a resolver. A domain so long that every
+  `<selector>._domainkey.<domain>` passes 255 octets is told that no DKIM selector can be checked,
+  rather than left not verified for ever; `_dmarc.<domain>` past the limit falls back to the
+  organizational domain.
+
+- **BIMI earns nothing while DMARC does not enforce.** Mail clients show a BIMI logo only under DMARC
+  quarantine or reject, and `p=none` beside a logo and a VMC scored 10 of 10 with no issue.
+  `analyze_domain` now withholds BIMI's points when the DMARC policy that applies is neither, and says
+  so; the dependency lives there, where the two results meet.
+
+- **An HTTP request that gets no answer leaves its check not verified.** As for DNS since 2026.47,
+  "not measured is not zero": a policy fetch that timed out scored MTA-STS 0 with "policy file not
+  accessible", and graded the domain. A transport error (timeout, reset, a refused connection) on the
+  MTA-STS policy or the BIMI logo now sets the check's `error`, so `total_score` is None and `report`
+  and `send` refuse. An HTTP status such as 404 is the domain's server answering and stays a finding;
+  so does a connection that fails because DNS has no address for the host (`mta-sts.<domain>` never
+  set up), which is checked with one A/AAAA query after the failure.
+
 ## [2026.47.1] - 2026-11-17
 
 ### Changed

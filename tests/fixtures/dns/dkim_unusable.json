@@ -1,0 +1,96 @@
+{
+ "_derived": {
+  "from": "dns/startpage_com.json, google._domainkey.startpage.com. TXT (recorded 2026-10-07): \"v=DKIM1; k=rsa; p=MIIBIjANBgkq…\", a 2048-bit RSA key in SubjectPublicKeyInfo form; and dns/example_com.json, _dmarc.example.com. TXT (recorded 2026-10-07): \"v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s\"",
+  "changed": "published under <case>._domainkey.example.com, one selector per case: active is the record as recorded; truncated keeps the first 255 characters of p=; zeros has p= followed by 400 'A' (base64 of zero bytes); nop drops p= altogether; ecdsa declares k=ecdsa, a key type RFC 6376 does not define, over the same key; dmarc is example.com's DMARC record, which holds 'p='; testing adds t=y; pkcs1 has the same key as a bare PKCS#1 RSAPublicKey (RFC 3447 A.1.1), the SubjectPublicKeyInfo wrapper removed"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "active._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "active._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mjYh\" \"lVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJDQs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "truncated._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "truncated._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mjYh\" \"lVbbRgyRlhOlRDYrs0\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "zeros._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "zeros._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\" \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "nop._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "nop._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "ecdsa._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "ecdsa._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=ecdsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mj\" \"YhlVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJDQs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "dmarc._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "dmarc._domainkey.example.com. 3600 IN TXT \"v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "testing._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "testing._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; t=y; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE\" \"8mjYhlVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJDQs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "pkcs1._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "pkcs1._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mjYhlVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJD\" \"Qs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
