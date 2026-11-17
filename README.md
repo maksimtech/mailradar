@@ -308,15 +308,28 @@ the domain. What matters most is how it ends:
 The record is read term by term, as RFC 7208 defines it: `all` with no
 qualifier is `+all`, names are case-insensitive (`-ALL` is `-all`), and a
 record without `all` follows its `redirect=`; with neither, the result is
-neutral. Two SPF records on the domain, or more than 10 DNS lookups once
-`include:` and `redirect=` are followed, are a permerror: receivers apply no
-SPF, and the check scores 0. MailRadar also flags `+a` and `+mx` mechanisms as
-too permissive.
+neutral. These are a permerror, for which receivers apply no SPF and the check
+scores 0: two SPF records on the domain; more than 10 DNS lookups once
+`include:` and `redirect=` are followed; an `include:` or `redirect=` whose
+target has no SPF record, or two; and a syntax error anywhere in the record or
+in one it pulls in, named in the issue: an unknown mechanism (`foo:bar`), a typo
+of `all` (`-al`, `-all;`), `redirect=` twice, or an `ip4:`/`ip6:` value outside
+the RFC 7208 grammar (a netmask, `/027`, a prefix length past 32 or 128, a zone
+id). A modifier with an unknown name (`foo=bar`) is allowed, as the RFC says. A
+passing range of length 0 (`ip4:0.0.0.0/0`, `ip6:::/0`) lets any server pass
+and scores as `+all`.
 
-Three more findings change no points: a record at exactly 10 lookups, which the
-next `include:` breaks; an `ip4:` or `ip6:` range written from an address inside
-it (`ip4:192.0.2.98/27` authorises all of `192.0.2.96/27`, 32 addresses); and a
-range the domain lists although one of its own `include:` already authorises it.
+Three more findings change no points and are reported as notes, not issues: a
+record at exactly 10 lookups, which the next `include:` breaks (or "at least N"
+when an `include:` or `redirect=` uses a macro, which is counted but not
+followed); an `ip4:` or `ip6:` range written from an address inside it
+(`ip4:192.0.2.98/27` authorises all of `192.0.2.96/27`, 32 addresses, and
+`-ip4:` denies all of it); and a range the domain lists although a record it
+pulls in already authorises it. That one is said only when the evaluation
+reaches the other range first for every address: not when it comes after an
+`all`, or after a term that may fail or softfail those addresses first, or
+through an `include:` that does not pass. The note names the domain's own
+`include:` or `redirect=`, and the records in between.
 
 ### DKIM (up to 15 points)
 
@@ -390,8 +403,10 @@ analysis and leaves the check "not verified", which is not "no key".
   verified": it scores 0 but is not reported as missing, and `report` and
   `send` refuse to produce a report from an incomplete analysis.
 - SPF macros (`%{d}` and the like) are not expanded, so an `include:` or
-  `redirect=` that uses one is counted but not followed, and the limit of two
-  void lookups is not checked.
+  `redirect=` that uses one is counted but not followed: the lookup count is
+  then "at least N", and a verdict handed to such a `redirect=` is reported as
+  not checked. The limit of two void lookups is not checked either, nor are
+  the domain names in SPF terms against the grammar, only that they are there.
 - The BIMI logo host name is not checked for resolving to a private address,
   and the VMC is not downloaded or validated: "VMC" means that `a=` names one.
 - A key keyserver.ubuntu.com publishes for the address is reported as "not

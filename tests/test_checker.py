@@ -390,11 +390,16 @@ class TestCheckSPF:
         assert result.score == 0
 
     def test_spf_permissive_mechanisms(self):
+        """`+a` and `+mx` authorise the domain's own A and MX hosts: that is what
+        most records mean to do, not a weakness. RFC 7208 §4.6.2 makes `+` the
+        default qualifier, so `+a` is the same term as a bare `a`, which was never
+        flagged: the "too permissive" warning judged the spelling, not the record."""
         txt = "v=spf1 +a +mx -all"
         with patch('mailradar.checker.dns.resolver.resolve', return_value=make_txt_answer([txt])):
             result = check_spf("example.com")
-        assert result.permissive is True
-        assert any("+a" in issue or "+mx" in issue for issue in result.issues)
+        assert result.permissive is False
+        assert result.score == 20
+        assert result.issues == []
 
     def test_bare_all_is_plus_all(self, dns_replay):
         """RFC 7208 §4.6.2: 'all' with no qualifier is '+all', a pass for anyone."""
@@ -405,7 +410,7 @@ class TestCheckSPF:
 
     def test_dash_all_inside_a_host_name_is_not_a_hardfail(self, dns_replay):
         """'-all' inside 'include:spf-all.example.net' is not the all mechanism: the final ~all is."""
-        dns_replay("spf_dash_all_in_host", "example_net")
+        dns_replay("spf_dash_all_in_host")
         result = check_spf("example.com")
         assert result.all_mechanism == "~all"
         assert result.score == 10

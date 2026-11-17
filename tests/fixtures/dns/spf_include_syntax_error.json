@@ -1,0 +1,30 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "SPF record replaced by \"v=spf1 include:bad.example.net -all\", and bad.example.net's record has an unknown mechanism (foo:bar), a syntax error that makes the included record a permerror (RFC 7208 §4.6), and with it the include (§5.2); documentation addresses (RFC 5737)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 include:bad.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "bad.example.net. IN TXT",
+   ";ANSWER",
+   "bad.example.net. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 foo:bar -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

@@ -17,15 +17,61 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 - **SPF says what its ranges authorise and how many lookups it spends.** Seen in qnap.com's record on
   2026-11-16: `ip4:113.196.74.98/27` is written from an address inside the range, and RFC 7208 §5.6
   compares only the first 27 bits, so all 32 addresses of 113.196.74.96/27 are authorised; the same
-  range is listed again in `include:_ac.qnap.com`. Both are now reported, with the range actually
-  authorised and the include that already holds it. The address written is compared with the
-  network's first, not the text, so an aligned range spelled otherwise (`2001:DB8::/64`) raises
-  nothing; and only an include that passes makes a range redundant, since `?include:`, `~include:`
-  and `-include:` match with their own qualifier (§5.2), as a `-ip4:` inside an include denies
-  rather than repeats. The lookup count, compared with the limit and then dropped, is kept in
-  `SPFResult.lookups` (None when not counted) and a record at 10 of 10 is reported: the next include
-  breaks it. The includes are compared with the record from the queries the count already makes, so
-  no DNS query is added. No score changes.
+  range is listed again in `include:_ac.qnap.com`. Both are now reported as notes, in the new
+  `SPFResult.notes`, not as issues: the letter prints "SPF — Action required" whenever `issues` is not
+  empty, and a record that works needs no action. The note says what the qualifier does to the whole
+  range: `ip4:` authorises it, `-ip4:` denies it, `~ip4:` softfails it, `?ip4:` marks it neutral. The
+  address written is compared with the network's first, not the text, so an aligned range spelled
+  otherwise (`2001:DB8::/64`) raises nothing. A range is called redundant only when the evaluation
+  reaches the other range first for every address it covers (§4.6.2, §5.1: the first match decides,
+  nothing after `all` is tested): not when that range comes after an `all`, or after a term that may
+  fail, softfail or neutralise those addresses first, in the record that lists it or in any record
+  above it on the way, nor through an include that does not pass, at any depth, since `?include:`,
+  `~include:` and `-include:` match with their own qualifier (§5.2). When in doubt, nothing is
+  claimed. The note names the term of the domain's own record (`include:a.example.net`, or its
+  `redirect=`), with the records in between (`through b.example.net`). The lookup count, compared with
+  the limit and then dropped, is kept in `SPFResult.lookups` (None when not counted), and a record at
+  10 of 10 gets a note: the next include breaks it. An `include:` or `redirect=` whose target is a
+  macro is counted and not followed, so the count is then a lower bound: `SPFResult.lookups_partial`
+  says so, and the note reads "at least N". The included records are compared from the queries the
+  count already makes, each asked once, so no DNS query is added. No score changes.
+
+### Changed
+
+- **`+a` and `+mx` are no longer called too permissive.** They authorise the domain's own A and MX
+  hosts, which is what most records mean to do, and RFC 7208 §4.6.2 makes `+` the default qualifier:
+  `+a` is the same term as a bare `a`, which was never flagged. The warning judged the spelling, not
+  the record, and marked as permissive a `-all` record that is not.
+
+### Fixed
+
+- **An SPF syntax error is a permerror, and the issue shows the term.** RFC 7208 §4.6: a syntax error
+  anywhere in the record makes receivers return permerror and apply no SPF. MailRadar dropped the
+  term and scored the rest, so `v=spf1 ip4:192.0.2.0/24 foo:bar -all` got the full 20 points, and a
+  typo of `all` (`-al`, `-all;`) read as "SPF has no all mechanism". Now an unknown mechanism
+  (`foo:bar`, `1x`), a typo of `all`, `redirect=` or `exp=` twice or with no domain, a qualifier on a
+  modifier, a known mechanism in a form §5 does not allow (`a/33`, `mx;`, `include:` with no domain),
+  and an `ip4:`/`ip6:` value outside the grammar of §5.6 are a permerror scored 0. Python's
+  `ip_network` accepted a netmask, a hostmask, a leading zero (`/027`) and an IPv6 zone id, none of
+  which is SPF. A modifier with an unknown name (`foo=bar`) stays allowed (§6). The same holds for a
+  record an `include:` or `redirect=` pulls in.
+
+- **An `include:` whose target has no SPF record is a permerror.** RFC 7208 §5.2 makes it one
+  whenever the include is evaluated, as it does for a target with two records. It is a common
+  leftover after a change of provider, and it scored 20 without a word. The issue names the include,
+  and the check scores 0, as for a `redirect=` to such a name. An include that gets no answer stays
+  "not verified", not a permerror.
+
+- **A passing range of every address scores as `+all`.** `ip4:0.0.0.0/0`, `ip6:::/0`, or any passing
+  range of prefix length 0, lets every server of the family pass, and before `-all` it scored 20. It
+  now scores 0 and is reported as `+all` is, also in a record a `redirect=` hands the verdict to.
+
+- **A `redirect=` with a macro counts towards the 10 lookups.** It was left out of the count because
+  its target could not be named, so `v=spf1 a mx`, seven `a:` and `redirect=%{d}.r.example.net` was
+  counted 9, not 10, and a record one lookup past the limit passed as valid. A record whose verdict
+  is handed to such a `redirect=` was also told "SPF has no all mechanism — the default result is
+  neutral", although the redirect applies; the issue now says the verdict is the macro target's,
+  which is not checked. The score of that case is unchanged.
 
 ### Fixed
 

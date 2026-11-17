@@ -53,11 +53,15 @@ class SPFResult:
     # DNS lookups the evaluation needs (§4.6.4), past the limit when permerror
     # says so; None when they were not counted, which is not 0
     lookups: int | None = None
+    # True when an include: or redirect= target holds a macro (%{d}): it is
+    # counted, not followed, so `lookups` is a lower bound, "at least N"
+    lookups_partial: bool = False
     raw: str = ""
     score: int = 0
     # Set when a DNS lookup failed: the check then says nothing either way
     error: str = ""
     issues: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -530,19 +534,20 @@ _SPF_LOOKUP_TERMS = frozenset({"include", "a", "mx", "ptr", "exists", "redirect"
 SPF_MAX_LOOKUPS = 10
 
 
-def _spf_domain(rest: str) -> str:
-    """The domain after `include:` or `redirect=`; "" if it holds a macro."""
-    target = rest[1:].split("/")[0]
-    return "" if "%" in target else target
+def _spf_macro(target: str) -> bool:
+    """`target` holds a macro (RFC 7208 §7): the name depends on the message,
+    so it cannot be looked up here."""
+    return "%" in target
 
 
 def _spf_redirect(terms: list[tuple[str, str, str]]) -> str:
-    """The target of `redirect=`, ignored when the record has `all` (§6.1)."""
+    """The target of `redirect=` as written, macro or not; "" when there is
+    none, or when the record has `all`, which makes redirect= ignored (§6.1)."""
     if _spf_all(terms):
         return ""
     for _, name, rest in terms:
         if name == "redirect" and rest.startswith("="):
-            return _spf_domain(rest)
+            return rest[1:]
     return ""
 
 
@@ -552,64 +557,242 @@ def _spf_record_of(name: str) -> str | None:
     return records[0] if len(records) == 1 else None
 
 
+# RFC 7208 §5.6: an ip4-network is four qnum, none with a leading zero; the
+# prefix length after it has no leading zero either, and none at all means
+# the single address
+_SPF_QNUM = r"(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])"
+_SPF_IP4 = re.compile(rf"{_SPF_QNUM}(?:\.{_SPF_QNUM}){{3}}")
+_SPF_CIDR = re.compile(r"(?P<address>[^/]+)(?:/(?P<length>0|[1-9][0-9]{0,2}))?")
+
+
 def _spf_network(name: str, rest: str) -> tuple[str, IPNetwork] | None:
-    """`ip4:`/`ip6:` as (the value as written, the network it authorises).
+    """`ip4:`/`ip6:` as (the value as written, the network it covers).
 
     RFC 7208 §5.6 compares only the first prefix-length bits, so a value
-    written from an inner address authorises the whole network around it:
+    written from an inner address covers the whole network around it:
     `strict=False` is the receiver's reading. None for any other term, and
-    for a value that is not an address of that family.
+    for a value the ABNF of §5.6 does not allow: ip_network also takes a
+    netmask, a hostmask, `/027` and a zone id (`2001:db8::1%eth0`), which a
+    receiver answers with a permerror.
     """
     if name not in ("ip4", "ip6") or not rest.startswith(":"):
         return None
     value = rest[1:]
-    try:
-        network = ipaddress.ip_network(value, strict=False)
-    except ValueError:
+    match = _SPF_CIDR.fullmatch(value)
+    if not match:
         return None
-    if network.version != (4 if name == "ip4" else 6):
+    address, length = match["address"], match["length"]
+    if name == "ip4":
+        if not _SPF_IP4.fullmatch(address):
+            return None
+        maximum = 32
+    else:
+        # RFC 4291 §2.2 text, which has no zone id
+        if "%" in address:
+            return None
+        try:
+            ipaddress.IPv6Address(address)
+        except ValueError:
+            return None
+        maximum = 128
+    if length is not None and int(length) > maximum:
         return None
-    return value, network
+    prefix = maximum if length is None else int(length)
+    return value, ipaddress.ip_network(f"{address}/{prefix}", strict=False)
 
 
-def _spf_lookups(record: str, count: int = 0,
-                 nested_networks: list[tuple[str, IPNetwork]] | None = None) -> int:
+_SPF_MECHANISMS = frozenset({"all", "include", "a", "mx", "ptr", "ip4", "ip6", "exists"})
+# RFC 7208 §6: a modifier is `name=value`, with no qualifier
+_SPF_MODIFIER = re.compile(r"([a-z][a-z0-9_.-]*)=(.*)", re.IGNORECASE)
+# `a` and `mx`: an optional domain, then the dual-cidr-length of §5.3
+_SPF_A_MX = re.compile(
+    r"(?::[^/]+)?(?:/(?P<ip4>0|[1-9][0-9]?))?(?://(?P<ip6>0|[1-9][0-9]{0,2}))?"
+)
+
+
+def _spf_mechanism_valid(name: str, rest: str) -> bool:
+    """What follows a known mechanism's name is what RFC 7208 §5 allows.
+
+    The domain-spec is only required to be there: macros are not expanded,
+    and a domain this cannot judge is not called an error.
     """
-    DNS lookups the evaluation of `record` needs, including those of the
-    records it pulls in. It stops as soon as the limit is passed, which is
-    also what ends an include loop.
+    if name == "all":
+        return not rest
+    if name in ("include", "exists"):
+        return rest.startswith(":") and len(rest) > 1
+    if name == "ptr":
+        return not rest or (rest.startswith(":") and len(rest) > 1)
+    if name in ("a", "mx"):
+        match = _SPF_A_MX.fullmatch(rest)
+        if match is None:
+            return False
+        return int(match["ip4"] or 0) <= 32 and int(match["ip6"] or 0) <= 128
+    return _spf_network(name, rest) is not None
 
-    `nested_networks`, when given, collects the ranges that pass in the
-    records pulled in, with the include or redirect that holds them: the
-    records are fetched here for the count already, so the comparison with
-    the top record costs no query of its own. Only through an include that
-    passes: `?include:`, `~include:` and `-include:` match with their own
-    qualifier (RFC 7208 §5.2), so what they list authorises nothing, and
-    neither does anything further down them.
+
+def _spf_syntax_errors(record: str) -> list[tuple[str, str]]:
     """
-    terms = _spf_terms(record)
-    redirect = _spf_redirect(terms)
-    for qualifier, name, rest in terms:
-        if name not in _SPF_LOOKUP_TERMS or (name == "redirect" and not redirect):
+    The terms of `record` that RFC 7208 §4.6.1 and §6 do not allow, as (term,
+    what is wrong). Any one of them makes the whole record a permerror (§4.6):
+    receivers do not skip a bad term and read the rest. A modifier with an
+    unknown name is allowed (§6) and is not one of them.
+    """
+    errors = []
+    seen: dict[str, str] = {}
+    for term in record.split()[1:]:
+        modifier = _SPF_MODIFIER.fullmatch(term)
+        if modifier:
+            name = modifier[1].lower()
+            if name in ("redirect", "exp"):
+                if not modifier[2]:
+                    errors.append((term, "names no domain"))
+                elif name in seen:
+                    errors.append((term, f"repeats {seen[name]}: {name}= may appear only once"))
+                seen.setdefault(name, term)
             continue
-        count += 1
-        if count > SPF_MAX_LOOKUPS:
-            return count
-        target = _spf_domain(rest) if name in ("include", "redirect") else ""
-        nested = _spf_record_of(target) if target else None
-        if nested:
-            passes = name == "redirect" or qualifier in ("", "+")
-            collected = nested_networks if passes else None
-            if collected is not None:
-                via = f"{name}{':' if name == 'include' else '='}{target}"
-                for term_qualifier, term, term_rest in _spf_terms(nested):
-                    found = _spf_network(term, term_rest) if term_qualifier in ("", "+") else None
-                    if found:
-                        collected.append((via, found[1]))
-            count = _spf_lookups(nested, count, collected)
-            if count > SPF_MAX_LOOKUPS:
-                return count
-    return count
+        match = _SPF_TERM.fullmatch(term)
+        if not match:
+            errors.append((term, "is not an SPF term"))
+            continue
+        name, rest = match[2].lower(), match[3]
+        if name not in _SPF_MECHANISMS:
+            if rest.startswith("="):
+                errors.append((term, "puts a qualifier on a modifier"))
+            else:
+                hint = " (a typo of all?)" if name.startswith("al") else ""
+                errors.append((term, f"is not an SPF mechanism{hint}"))
+        elif not _spf_mechanism_valid(name, rest):
+            errors.append((term, f"is not valid {name} syntax (RFC 7208 §5)"))
+    return errors
+
+
+@dataclass
+class _SPFRange:
+    """A pass range in a record the domain's record pulls in, which the
+    evaluation reaches for the addresses it covers."""
+    # The domain's own term that leads to it (include:x, redirect=x), and the
+    # names in between, outermost first: the owner can act only on the first
+    term: str
+    through: tuple[str, ...]
+    network: IPNetwork
+    # Ranges that fail, softfail or are neutral, tested before this one on its
+    # path: an address inside one of them never reaches it
+    denied: tuple[IPNetwork, ...]
+
+
+@dataclass
+class _SPFWalk:
+    """What following the domain's include: and redirect= finds, in one pass
+    that asks for each record once."""
+    lookups: int = 0
+    # The include:/redirect= terms whose target holds a macro: counted, not
+    # followed, so `lookups` is a lower bound
+    unexpanded: list[str] = field(default_factory=list)
+    ranges: list[_SPFRange] = field(default_factory=list)
+    # Permerrors in the records pulled in (RFC 7208 §5.2, §6.1)
+    errors: list[str] = field(default_factory=list)
+    records: dict[str, str | None] = field(default_factory=dict)
+
+    @property
+    def over_limit(self) -> bool:
+        return self.lookups > SPF_MAX_LOOKUPS
+
+    def record_of(self, name: str) -> str | None:
+        if name not in self.records:
+            self.records[name] = _spf_record_of(name)
+        return self.records[name]
+
+
+def _spf_walk(terms: list[tuple[str, str, str]]) -> _SPFWalk:
+    """
+    DNS lookups the evaluation of the domain's record needs, including those
+    of the records it pulls in; the permerrors in those records; and the
+    ranges they authorise for the domain. The walk stops as soon as the limit
+    is passed, which is also what ends an include loop.
+
+    The records are fetched here for the count already, so comparing their
+    ranges with the domain's own costs no query of its own.
+    """
+    walk = _SPFWalk()
+    _spf_visit(walk, terms, "", (), (), True)
+    return walk
+
+
+def _spf_visit(walk: _SPFWalk, terms: list[tuple[str, str, str]], top_term: str,
+               through: tuple[str, ...], denied: tuple[IPNetwork, ...], authorising: bool) -> None:
+    """
+    One record's terms in evaluation order: the first mechanism that matches
+    decides, nothing after `all` is tested (RFC 7208 §4.6.2, §5.1), and
+    redirect= comes after every mechanism (§6.1).
+
+    `top_term` is the domain's own term that leads here, "" in the domain's
+    record. A pass range here authorises for the domain only while
+    `authorising` holds: every include on the path passes, and nothing tested
+    before it may match with another result. `?include:`, `~include:` and
+    `-include:` match with their own qualifier (§5.2), so nothing below them
+    authorises; a `-exists:` or `~a` may match any address first. When in
+    doubt nothing is collected: a "redundant" note must hold for every
+    address of the range. Ranges with another result are kept in `denied`,
+    and only exclude the addresses they cover.
+    """
+    denied_here = list(denied)
+    for qualifier, name, rest in terms:
+        passes = qualifier in ("", "+")
+        if name == "all":
+            authorising = False
+            continue
+        if name in ("ip4", "ip6"):
+            found = _spf_network(name, rest)
+            if found and authorising:
+                if not passes:
+                    denied_here.append(found[1])
+                elif top_term:
+                    walk.ranges.append(_SPFRange(top_term, through, found[1], tuple(denied_here)))
+            continue
+        if name not in _SPF_LOOKUP_TERMS or name == "redirect":
+            continue
+        walk.lookups += 1
+        if walk.over_limit:
+            return
+        if name == "include":
+            _spf_follow(walk, f"include:{rest[1:]}", rest[1:], top_term, through, tuple(denied_here),
+                        authorising and passes)
+            if walk.over_limit:
+                return
+        if not passes:
+            authorising = False
+    redirect = _spf_redirect(terms)
+    if redirect:
+        walk.lookups += 1
+        if walk.over_limit:
+            return
+        _spf_follow(walk, f"redirect={redirect}", redirect, top_term, through, tuple(denied_here), authorising)
+
+
+def _spf_follow(walk: _SPFWalk, term: str, target: str, top_term: str, through: tuple[str, ...],
+                denied: tuple[IPNetwork, ...], authorising: bool) -> None:
+    """The record `term` (include:x or redirect=x) pulls in from `target`, visited."""
+    if _spf_macro(target):
+        walk.unexpanded.append(term)
+        return
+    where = term
+    if top_term:
+        where += f" (in {top_term}" + "".join(f", through {hop}" for hop in through) + ")"
+    record = walk.record_of(target)
+    if record is None:
+        walk.errors.append(f"SPF {where} has no single SPF record — permerror, receivers apply no SPF")
+        return
+    syntax_errors = _spf_syntax_errors(record)
+    if syntax_errors:
+        walk.errors.extend(
+            f"SPF {where} pulls in the term {bad}, which {wrong} — permerror, receivers apply no SPF"
+            for bad, wrong in syntax_errors
+        )
+        return
+    if top_term:
+        _spf_visit(walk, _spf_terms(record), top_term, (*through, target), denied, authorising)
+    else:
+        _spf_visit(walk, _spf_terms(record), term, (), denied, authorising)
 
 
 def _within(inner: IPNetwork, outer: IPNetwork) -> bool:
@@ -621,16 +804,30 @@ def _within(inner: IPNetwork, outer: IPNetwork) -> bool:
     return False
 
 
-def _spf_range_issues(terms: list[tuple[str, str, str]],
-                      nested_networks: list[tuple[str, IPNetwork]]) -> list[str]:
+def _overlaps(one: IPNetwork, other: IPNetwork) -> bool:
+    """`one` and `other` share an address; never across address families."""
+    if isinstance(one, ipaddress.IPv4Network) and isinstance(other, ipaddress.IPv4Network):
+        return one.overlaps(other)
+    if isinstance(one, ipaddress.IPv6Network) and isinstance(other, ipaddress.IPv6Network):
+        return one.overlaps(other)
+    return False
+
+
+def _spf_range_notes(terms: list[tuple[str, str, str]], ranges: list[_SPFRange]) -> list[str]:
     """What the record's own ranges say beyond what they authorise.
 
     A range written from an inner address (qnap.com: ip4:113.196.74.98/27)
-    authorises the whole block, whatever was meant; a range a record it pulls
-    in already authorises is listed twice. Neither changes the verdict.
+    covers the whole block, whatever was meant; a range a record it pulls
+    in already authorises is listed twice. Neither changes the verdict: these
+    are notes, not issues.
     """
-    issues = []
+    notes = []
+    tested = True
     for qualifier, name, rest in terms:
+        if name == "all":
+            # Nothing after `all` is tested: no range there repeats anything
+            tested = False
+            continue
         found = _spf_network(name, rest)
         if not found:
             continue
@@ -641,19 +838,30 @@ def _spf_range_issues(terms: list[tuple[str, str, str]],
         if "/" in value and written != network.network_address:
             size = (f"{network.num_addresses} addresses" if network.version == 4
                     else f"a /{network.prefixlen}")
-            issues.append(
-                f"SPF {name}:{value} is written from an address inside the range — "
-                f"it authorises all of {network} ({size}), not {value.split('/')[0]} alone"
+            # What the qualifier does to the whole range (RFC 7208 §4.6.2):
+            # "authorises" under -ip4: said the opposite of what the record does
+            does = {
+                "-": f"denies (fail) all of {network} ({size})",
+                "~": f"softfails all of {network} ({size})",
+                "?": f"marks all of {network} ({size}) neutral",
+            }.get(qualifier, f"authorises all of {network} ({size})")
+            notes.append(
+                f"SPF {qualifier}{name}:{value} is written from an address inside the range — "
+                f"it {does}, not {value.split('/')[0]} alone"
             )
-        if qualifier not in ("", "+"):
+        if not tested or qualifier not in ("", "+"):
             continue
-        for via, wider in nested_networks:
-            if _within(network, wider):
-                issues.append(
-                    f"SPF {name}:{value} is already authorised by {via} ({wider}) — redundant"
+        for nested in ranges:
+            if _within(network, nested.network) and not any(
+                _overlaps(network, other) for other in nested.denied
+            ):
+                path = "".join(f", through {hop}" for hop in nested.through)
+                notes.append(
+                    f"SPF {qualifier}{name}:{value} is already authorised by "
+                    f"{nested.term} ({nested.network}{path}) — redundant"
                 )
                 break
-    return issues
+    return notes
 
 
 @_unless_dns_fails("SPF", SPFResult)
@@ -679,46 +887,87 @@ def check_spf(domain: str) -> SPFResult:
     terms = _spf_terms(records[0])
     result.all_mechanism = _spf_all(terms)
 
-    nested_networks: list[tuple[str, IPNetwork]] = []
-    result.lookups = _spf_lookups(records[0], 0, nested_networks)
-    if result.lookups > SPF_MAX_LOOKUPS:
+    syntax_errors = _spf_syntax_errors(records[0])
+    if syntax_errors:
+        result.permerror = True
+        result.issues.extend(
+            f"SPF term {term} {wrong} — permerror, receivers apply no SPF"
+            for term, wrong in syntax_errors
+        )
+        return result
+
+    walk = _spf_walk(terms)
+    result.lookups = walk.lookups
+    result.lookups_partial = bool(walk.unexpanded)
+    if walk.over_limit:
         result.permerror = True
         result.issues.append(
             f"SPF needs more than {SPF_MAX_LOOKUPS} DNS lookups — permerror, receivers apply no SPF"
         )
         return result
+    # An include: or redirect= whose target has no single SPF record, or one
+    # with a syntax error (RFC 7208 §5.2, §6.1)
+    if walk.errors:
+        result.permerror = True
+        result.issues.extend(walk.errors)
+        return result
 
     # RFC 7208 §6.1: with no `all`, redirect= hands the verdict to another
-    # record. The chain is finite: a loop would have failed the count above.
+    # record, which the walk has fetched. The chain is finite: a loop would
+    # have failed the count above.
     redirected = terms
     via = ""
+    unexpanded = ""
+    open_ranges: list[str] = []
     while not result.all_mechanism and (target := _spf_redirect(redirected)):
-        record = _spf_record_of(target)
-        if record is None:
-            result.permerror = True
-            result.issues.append(f"SPF redirect={target} has no single SPF record — permerror")
-            return result
-        redirected = _spf_terms(record)
+        if _spf_macro(target):
+            unexpanded = f"redirect={target}"
+            break
+        redirected = _spf_terms(walk.records.get(target) or "")
         result.all_mechanism = _spf_all(redirected)
         # The verdict is the target's: the record shown has no `all` of its own
         via = f" via redirect={target}"
+        open_ranges += [f"{term}{via}" for term in _spf_open_ranges(redirected)]
 
-    _apply_spf_verdict(result, terms, via)
-    result.issues.extend(_spf_range_issues(terms, nested_networks))
-    if result.lookups == SPF_MAX_LOOKUPS:
-        result.issues.append(
+    _apply_spf_verdict(result, terms, via, unexpanded, tuple(open_ranges))
+    result.notes.extend(_spf_range_notes(terms, walk.ranges))
+    if walk.unexpanded:
+        result.notes.append(
+            f"SPF needs at least {result.lookups} of {SPF_MAX_LOOKUPS} DNS lookups — macros are "
+            f"not expanded, so the lookups behind {', '.join(walk.unexpanded)} are not counted"
+        )
+    elif result.lookups == SPF_MAX_LOOKUPS:
+        result.notes.append(
             f"SPF needs {SPF_MAX_LOOKUPS} of {SPF_MAX_LOOKUPS} DNS lookups — at the limit, "
             "one more include, a or mx makes it a permerror"
         )
     return result
 
 
-def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]], via: str = "") -> None:
+def _spf_open_ranges(terms: list[tuple[str, str, str]]) -> list[str]:
+    """The pass ranges with prefix length 0 that the evaluation reaches: they
+    cover every address of their family (RFC 7208 §5.6), so any server
+    passes, as with +all. One after `all` is never tested."""
+    found = []
+    for qualifier, name, rest in terms:
+        if name == "all":
+            break
+        network = _spf_network(name, rest)
+        if network and qualifier in ("", "+") and network[1].prefixlen == 0:
+            found.append(f"{qualifier}{name}:{network[0]}")
+    return found
+
+
+def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]], via: str = "",
+                       unexpanded: str = "", open_ranges: tuple[str, ...] = ()) -> None:
     """
     Score and annotate `result` from its `all` mechanism and the record's
     `terms`. No DNS: the lookups, which may change `all_mechanism` through
     redirect=, are check_spf's and have already been made; `via` names the
-    redirect= the `all` came from, if it did.
+    redirect= the `all` came from, if it did, and `unexpanded` the redirect=
+    with a macro the verdict was handed to, which could not be followed.
+    `open_ranges` are the /0 ranges of the records redirect= led to; the
+    record's own are read from `terms`.
     """
     if result.all_mechanism == "-all":
         result.permissive = False
@@ -735,15 +984,30 @@ def _apply_spf_verdict(result: SPFResult, terms: list[tuple[str, str, str]], via
         result.permissive = True
         result.issues.append(f"SPF uses ?all (neutral){via} — no enforcement")
         result.score += 5
+    elif unexpanded:
+        # RFC 7208 §6.1: the redirect= applies, and the result is its target's;
+        # "no all mechanism, neutral" described a record without one
+        result.permissive = True
+        result.issues.append(
+            f"SPF hands its verdict to {unexpanded}{via}, a macro MailRadar does not expand — "
+            "the result is not checked"
+        )
     else:
         # RFC 7208 §4.7: no `all` and no redirect= ends in neutral
         result.permissive = True
         result.issues.append("SPF has no all mechanism — the default result is neutral, no enforcement")
 
-    # Check for overly permissive mechanisms
-    if any(qualifier == "+" and name in ("a", "mx") for qualifier, name, _ in terms):
-        result.permissive = True
-        result.issues.append("SPF contains +a or +mx — too permissive")
+    # ip4:0.0.0.0/0 under -all passes every IPv4 server: it is +all, and
+    # scored 20
+    if result.all_mechanism != "+all":
+        for term in (*_spf_open_ranges(terms), *open_ranges):
+            family = "IPv4" if "ip4:" in term else "IPv6"
+            result.permissive = True
+            result.score = 0
+            result.issues.append(
+                f"SPF {term} passes every {family} address, as +all does — "
+                "any server can send as this domain!"
+            )
 
 
 def _ed25519_bits(key: str) -> int:

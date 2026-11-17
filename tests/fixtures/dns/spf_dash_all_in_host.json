@@ -1,7 +1,7 @@
 {
  "_derived": {
   "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
-  "changed": "SPF record replaced by \"v=spf1 include:spf-all.example.net ~all\"; what spf-all.example.net answers is in dns/example_net.json, recorded"
+  "changed": "SPF record replaced by \"v=spf1 include:spf-all.example.net ~all\"; spf-all.example.net, which has no TXT record in dns/example_net.json (recorded), is given the SPF record \"v=spf1 ip4:192.0.2.0/24 -all\" (RFC 5737): an include whose target has no SPF record is a permerror (RFC 7208 §5.2), and this fixture is about where the -all is read from, not about that"
  },
  "responses": [
   [
@@ -13,6 +13,17 @@
    ";ANSWER",
    "example.com. 48 IN TXT \"_k2n1y4vw3qtb4skdx9e7dxt97qrmmq9\"",
    "example.com. 48 IN TXT \"v=spf1 include:spf-all.example.net ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "spf-all.example.net. IN TXT",
+   ";ANSWER",
+   "spf-all.example.net. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 -all\"",
    ";AUTHORITY",
    ";ADDITIONAL"
   ]
