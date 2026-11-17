@@ -10,13 +10,14 @@ Shared by the Radar tools: only the mapping section is specific to MailRadar.
 """
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import httpx
 
 from mailradar import law_fetcher
-from mailradar.law_cache import Key, LawCache
+from mailradar.law_cache import Key, LawCache, merge
 from mailradar.law_fetcher import DLGS_138_2024, GDPR, Act, LawFetchError, Provision
 
 # ─── Mapping: MailRadar findings → provisions ─────────────────────────────────
@@ -93,7 +94,13 @@ def findings_of(report) -> dict[str, list[str]]:
 
 
 def notes_of(report) -> list[str]:
-    cites_nis2 = not report.dmarc.present or not report.mta_sts.present
+    # From the findings, so that the note goes with the citation: a DMARC or
+    # MTA-STS lookup that failed cites nothing, and used to get the note anyway
+    cites_nis2 = any(
+        act == DLGS_138_2024
+        for finding in findings_of(report)
+        for act, _ in FINDING_ARTICLES[finding]
+    )
     return [NIS2_SCOPE_NOTE] if cites_nis2 else []
 
 
@@ -111,11 +118,27 @@ class Citation:
 @dataclass(frozen=True)
 class ActStatus:
     act: Act
-    # "verified": downloaded now; "cache": source unreachable, cached copy; "unavailable": no text at all
+    # "verified": every reference cited was in the text downloaded now; "cache": the source was
+    # unreachable or its text lacked a reference, cached copy; "unavailable": no text at all
     source: str
     error: str | None = None
     # Where a verified text came from: "Cellar", "EUR-Lex" (the fallback) or "Normattiva"; None otherwise
     origin: str | None = None
+    # When not verified: the source tried last ("Cellar", "EUR-Lex", "Normattiva", "Cellar and
+    # EUR-Lex"; None if unknown), and why it was not used: "unreachable" (no page) or "not_in_text"
+    # (a page, without the text cited)
+    tried: str | None = None
+    failure: str | None = None
+
+    @property
+    def reason(self) -> str | None:
+        """Why the act was not verified, as a report says it: "Cellar and EUR-Lex unreachable"."""
+        if self.source == "verified":
+            return None
+        tried = self.tried or self.act.source
+        if self.failure == "not_in_text":
+            return f"{tried} answered without the text cited"
+        return f"{tried} unreachable"
 
 
 @dataclass
@@ -161,36 +184,52 @@ def check(
     acts = list(dict.fromkeys(act for _, act, _ in cited))
     # Keyed by (celex, article) — the cache's key, not the fetcher's.
     fresh: dict[Key, Provision] = {}
-    errors: dict[Act, str] = {}
+    errors: dict[Act, LawFetchError] = {}
     origins: dict[Act, str] = {}
     for act in acts:
+        refs = list(dict.fromkeys(ref for _, a, ref in cited if a == act))
         # The articles cited ("32(1)(a)" is part of article 32) and ALSO_FETCH
         articles = tuple(dict.fromkeys(
-            [ref.split("(")[0] for _, a, ref in cited if a == act] + list(ALSO_FETCH.get(act, ()))
+            [ref.split("(")[0] for ref in refs] + list(ALSO_FETCH.get(act, ()))
         ))
         try:
-            by_article, origins[act] = law_fetcher.fetch_provisions_from(act, articles, now=now, client=client)
+            by_article, origin = law_fetcher.fetch_provisions_from(act, articles, now=now, client=client)
+            # The article being there is not enough: each reference cited is
+            # checked against the text just parsed. A point the parser missed
+            # used to fall back to the cache, old hash and date included, under
+            # the "verified" label, or to no hash at all.
+            missing = [ref for ref in refs if ref not in by_article]
+            if missing:
+                raise LawFetchError(
+                    f"{act.name} art. {', '.join(missing)} not found in the text from {origin}",
+                    source=origin, reached=True,
+                )
         except LawFetchError as e:
-            errors[act] = str(e)
+            errors[act] = e
         else:
+            origins[act] = origin
             fresh.update({p.key: p for p in by_article.values()})
 
-    changed: dict[Key, str] = {}
-    try:
-        if fresh:
-            provisions, changed = cache.update(fresh, checked_at=law_fetcher.utc_stamp(now))
-        else:
-            provisions = cache.load()
-    except OSError:
-        provisions = {**cache.load(), **fresh}   # the text just downloaded can still be cited
+    # Merged here, not by the save: a cache that cannot be written (read-only,
+    # disk full) must not hide a change in the law, nor date an unchanged
+    # wording to today.
+    provisions, changed = merge(cache.load(), fresh)
+    if fresh:
+        # Unsaved, the text just downloaded can still be cited
+        with contextlib.suppress(OSError):
+            cache.update(fresh, checked_at=law_fetcher.utc_stamp(now))
 
     statuses = []
     for act in acts:
         if act not in errors:
             statuses.append(ActStatus(act, "verified", origin=origins[act]))
         else:
+            error = errors[act]
             cached = any((act.celex, ref) in provisions for _, a, ref in cited if a == act)
-            statuses.append(ActStatus(act, "cache" if cached else "unavailable", errors[act]))
+            statuses.append(ActStatus(
+                act, "cache" if cached else "unavailable", str(error),
+                tried=error.source, failure="not_in_text" if error.reached else "unreachable",
+            ))
 
     citations = []
     for finding, act, ref in cited:

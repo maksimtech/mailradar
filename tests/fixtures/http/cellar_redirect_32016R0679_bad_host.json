@@ -1,0 +1,17 @@
+{
+ "_derived": {
+  "from": "cellar_redirect_32016R0679.json (Cellar's 303, recorded 2026-10-11)",
+  "changed": "Location is http://xn--/DOC_1, a host that is not valid IDNA: httpx raises idna.core.IDNAError, not httpx.HTTPError, when asked to follow it"
+ },
+ "responses": [
+  {
+   "request": "GET https://publications.europa.eu/resource/celex/32016R0679",
+   "status": 303,
+   "headers": {
+    "Content-Type": "application/xhtml+xml;charset=UTF-8",
+    "Location": "http://xn--/DOC_1"
+   },
+   "body": ""
+  }
+ ]
+}

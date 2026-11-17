@@ -101,6 +101,14 @@ def test_corrupt_file_is_empty(tmp_path):
     assert LawCache(path).load() == {}
 
 
+def test_deeply_nested_file_is_empty(tmp_path):
+    """json.loads raises RecursionError here, which is neither OSError nor
+    ValueError: the corrupt cache took the whole law check down."""
+    path = tmp_path / "law_cache.json"
+    path.write_text("[" * 200_000 + "]" * 200_000, encoding="utf-8")
+    assert LawCache(path).load() == {}
+
+
 def test_unexpected_structure_is_empty(tmp_path):
     path = tmp_path / "law_cache.json"
     path.write_text('["a", "b"]', encoding="utf-8")

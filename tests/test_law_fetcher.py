@@ -216,6 +216,104 @@ def test_the_language_reaches_cellar_as_a_three_letter_code(monkeypatch):
     assert seen["Accept"] == law_fetcher.CELLAR_TYPE
 
 
+@pytest.mark.parametrize("url", [
+    "https://publications.europa.eu/resource/celex/32016R0679",
+    "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32016R0679",
+    "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2005-09-06;206~art20!vig=",
+])
+@pytest.mark.parametrize("location", [
+    "https://example.org/page",
+    "https://normattiva.it/page",                    # not www.normattiva.it
+    "https://publications.europa.eu.example.org/page",
+    "https://eur-lex.europa.eu:8443/page",
+])
+def test_a_redirect_off_the_source_host_is_refused(url, location):
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        if len(seen) == 1:
+            return httpx.Response(302, headers={"Location": location})
+        return httpx.Response(200, text="<html>elsewhere</html>")
+
+    with pytest.raises(LawFetchError, match="redirected") as caught:
+        real_fetch_html(url, client=_client(handler))
+    assert seen == [url]
+    assert caught.value.source == law_fetcher._source_of(url)
+
+
+@pytest.mark.parametrize("url", [
+    "https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32016R0679",
+    "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2005-09-06;206~art20!vig=",
+])
+def test_a_redirect_on_the_source_host_is_followed(url):
+    """The http:// hop Cellar makes is in test_law_fetch_https.py."""
+    def handler(request):
+        if request.url.path != "/moved":
+            return httpx.Response(302, headers={"Location": f"http://{request.url.host}/moved"})
+        return httpx.Response(200, text="<html>moved</html>")
+
+    assert real_fetch_html(url, client=_client(handler)) == "<html>moved</html>"
+
+
+def test_a_host_httpx_cannot_encode_is_a_fetch_error():
+    """httpx raises idna.core.IDNAError, a ValueError and no httpx.HTTPError, for
+    a host like "xn--": it used to skip the EUR-Lex fallback and the cache. A
+    redirect there raises it too, inside client.get (test_law_replayed.py)."""
+    client = _client(lambda request: httpx.Response(200, text="<html></html>"))
+    with pytest.raises(LawFetchError, match="unreachable"):
+        real_fetch_html("https://xn--/DOC_1", client=client)
+
+
+# ─── size and time ────────────────────────────────────────────────────────────
+# The limits are lowered for these tests, so that they run in a second; set
+# with raising=False, so that the tests fail on the behaviour, not on a name.
+
+CELLAR_GDPR = "https://publications.europa.eu/resource/celex/32016R0679"
+
+
+def _streamed(chunks, pause=0.0):
+    import time
+
+    def body():
+        for chunk in chunks:
+            time.sleep(pause)
+            yield chunk
+
+    return _client(lambda request: httpx.Response(200, content=body()))
+
+
+def test_a_response_larger_than_the_limit_is_refused(monkeypatch):
+    monkeypatch.setattr(law_fetcher, "MAX_RESPONSE_BYTES", 64 * 1024, raising=False)
+    client = _streamed([b"x" * 1024] * 200)
+    with pytest.raises(LawFetchError, match="Cellar sent more than 65536 bytes"):
+        real_fetch_html(CELLAR_GDPR, client=client)
+
+
+def test_a_response_within_the_limit_is_read_whole(monkeypatch):
+    monkeypatch.setattr(law_fetcher, "MAX_RESPONSE_BYTES", 64 * 1024, raising=False)
+    assert real_fetch_html(CELLAR_GDPR, client=_streamed([b"<html>", b"ok", b"</html>"])) == "<html>ok</html>"
+
+
+def test_a_server_that_drips_is_cut_off_at_the_deadline(monkeypatch):
+    """Each chunk arrives well within the read timeout, so only an overall
+    deadline stops it: 40 chunks, 0.1 s apart, against a 0.5 s deadline."""
+    import time
+
+    monkeypatch.setattr(law_fetcher, "FETCH_DEADLINE", 0.5, raising=False)
+    started = time.monotonic()
+    with pytest.raises(LawFetchError, match="Cellar took more than 0.5 s"):
+        real_fetch_html(CELLAR_GDPR, client=_streamed([b"x"] * 40, pause=0.1))
+    assert time.monotonic() - started < 2
+
+
+def test_the_limits_are_sane():
+    """Room for the largest act the Radars cite (the GDPR from Cellar was 823981
+    bytes on 2026-10-11), and an end to a fetch that never finishes."""
+    assert 8 * 1024 * 1024 <= law_fetcher.MAX_RESPONSE_BYTES <= 64 * 1024 * 1024
+    assert 30 <= law_fetcher.FETCH_DEADLINE <= 300
+
+
 def test_an_error_from_cellar_names_cellar():
     client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(503)))
     with pytest.raises(LawFetchError, match="Cellar answered HTTP 503"):

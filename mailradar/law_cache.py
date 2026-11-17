@@ -54,6 +54,29 @@ def default_cache_path() -> Path:
     return base.resolve() / "law_cache.json"
 
 
+def merge(
+    cached: dict[Key, Provision], fresh: dict[Key, Provision]
+) -> tuple[dict[Key, Provision], dict[Key, str]]:
+    """
+    What the cache holds once `fresh` is merged into `cached`, saved or not.
+
+    Returns:
+        (provisions, changed): an entry whose text did not change keeps its
+        fetched_at; for each one whose text changed, the SHA-256 of the
+        previous text.
+    """
+    provisions = dict(cached)
+    changed = {}
+    for key, provision in fresh.items():
+        old = provisions.get(key)
+        if old is not None and old.sha256 == provision.sha256:
+            continue
+        if old is not None:
+            changed[key] = old.sha256
+        provisions[key] = provision
+    return provisions, changed
+
+
 class LawCache:
 
     def __init__(self, path: str | Path | None = None):
@@ -67,7 +90,8 @@ class LawCache:
         """
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        # RecursionError: a deeply nested file, which used to end the law check
+        except (OSError, ValueError, RecursionError):
             return {}
         entries = data.get("entries") if isinstance(data, dict) else None
         if not isinstance(entries, list):
@@ -94,15 +118,7 @@ class LawCache:
             for each provision whose text differs from the cached one, the
             SHA-256 of the previous text.
         """
-        provisions = self.load()
-        changed = {}
-        for key, provision in fresh.items():
-            old = provisions.get(key)
-            if old is not None and old.sha256 == provision.sha256:
-                continue
-            if old is not None:
-                changed[key] = old.sha256
-            provisions[key] = provision
+        provisions, changed = merge(self.load(), fresh)
         self._save(provisions, checked_at)
         return provisions, changed
 
