@@ -43,8 +43,7 @@ MailRadar requires **Python 3.11 or later**.
 pip install mailradar
 ```
 
-Check the installed version (`--version` is not yet in a published release;
-see [CHANGELOG.md](CHANGELOG.md)):
+Check the installed version:
 
 ```bash
 mailradar --version

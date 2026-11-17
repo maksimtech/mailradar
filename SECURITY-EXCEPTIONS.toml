@@ -118,10 +118,12 @@ review_by = "2026-12-31"
 id = "py/incomplete-url-substring-sanitization"
 source = "CodeQL"
 path = "tests/benchmarks/test_bench_checker.py"
-where = "test_bench_checker.py:67 — the benchmark's own assertion"
+where = "test_bench_checker.py:96 — the benchmark's stand-in resolver"
 why = """
-One assertion of the same shape, in a benchmark that measures how long a check \
-takes. Same reasoning as tests/test_reporter.py above.
+`name.startswith("example.com")` in the resolver a benchmark gives \
+analyze_domain, choosing which TXT answer a DNS query name gets; the benchmark \
+measures how long a check takes. The subject is a query name built in the same \
+test; there is no URL and no sanitization, as in tests/test_reporter.py above.
 """
 review_by = "2026-12-31"
 

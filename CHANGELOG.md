@@ -14,6 +14,14 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **`uv.lock` and `requirements-ci.txt` name the same versions again.** Dependabot's pip ecosystem
+  bumps only `requirements-ci.txt`, so from 2026-09-14 seven packages drifted apart one pull request
+  at a time, and `uv lock --check` cannot see it, because it compares `uv.lock` with `pyproject.toml`.
+  `uv.lock` now has anyio 4.16.0, certifi 2026.10.23, cryptography 50.0.2, idna 3.20, markupsafe
+  3.0.4, pycparser 3.12 and typer 0.27.3, as `requirements-ci.txt` does. Every one of them is past
+  the 14-day rule, and PyPI lists no known vulnerability on either side. `tests/test_lock_agreement.py`
+  fails when the two files disagree on a package they both pin.
+
 - **The sqlite3 findings say what Debian decided, and Trivy's two new ones are recorded.** On
   2026-11-09 Trivy began reporting CVE-2026-119374 and CVE-2026-119379, which only Docker Scout had
   reported, and Security Posture failed on main. Both now have a Trivy entry beside the Scout one.
@@ -99,6 +107,22 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   1.45.1 with a Dependabot alert on it from 2026-11-14, and no pull request came, because no entry
   of the configuration read `uv.lock`. A `uv` entry with `open-pull-requests-limit: 0` stops version
   updates for uv, so pip's remain the one weekly stream, and leaves security updates to arrive.
+
+- **The README no longer says `--version` is unreleased.** It has shipped since 2026.09.9
+  (2026-09-19), but the installation section still called it "not yet in a published release".
+  `tests/test_version.py` now fails when a README paragraph calls unreleased something a dated
+  CHANGELOG section already records.
+
+- **Rebuilding the image by hand no longer offers September's release.** The `version` input of
+  `docker.yml`'s manual run defaulted to `v2026.09.4`, so the form arrived pre-filled with a version
+  that looked deliberate and would have republished it. It has no default now, as in apkradar;
+  `tests/test_ci_scripts.py` keeps it that way.
+
+- **The version typed into a manual image build is no longer pasted into the script.** `docker.yml`
+  wrote `${{ github.event.inputs.version }}` straight into its `run:` block, so a value with a quote
+  in it would have become shell code in a job that holds the Docker Hub token. It now arrives through
+  `env:`, where it stays a string, as apkradar's did; a test refuses any workflow that pastes an input
+  or event field into a script.
 
 ## [2026.47] - 2026-10-28
 
