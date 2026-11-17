@@ -15,6 +15,16 @@ updates:
       - dependencies
       - python
 
+  - package-ecosystem: uv
+    directory: "/"
+    schedule:
+      interval: weekly
+    # Security updates only (tests/test_dependabot_config.py): uv.lock had a
+    # Dependabot alert and no pull request while no entry read it. A limit of 0
+    # stops version updates for uv; it does not limit security updates.
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

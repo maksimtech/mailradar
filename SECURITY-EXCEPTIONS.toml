@@ -222,8 +222,13 @@ the reason has not changed.
 The fix is scheduled, not absent, so the only thing to do is rebuild after the \
 next trixie point release. The date below is set for that. A local TOCTOU in \
 recursive setfacl/chacl; mailradar calls neither.
+
+Reviewed 2026-11-17: still no-dsa for trixie (Debian bug 1141110). acl 2.4.0 \
+is only in forky and sid, trixie-proposed-updates has nothing for it, and the \
+last point release is still 13.7 of 2026-09-12. Moved past the 13.8 point \
+release that is due.
 """
-review_by = "2026-11-30"
+review_by = "2027-01-31"
 
 [[exception]]
 id = "CVE-2026-76642"
