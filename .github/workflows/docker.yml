@@ -10,9 +10,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v2026.09.4)'
+        # No default: a default that is a version is a version that rots, and the
+        # dispatch form arrives pre-filled with something that looks deliberate.
+        # `v2026.09.4` sat here while this project was at 2026.47.
+        description: 'Tag of a published release to rebuild (e.g. v2026.47)'
         required: true
-        default: 'v2026.09.4'
 permissions:
   contents: read
   security-events: write
@@ -33,11 +35,16 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # The dispatch input arrives through env, where it stays a string: pasted
+      # into the script as ${{ }} it would be shell text, in a job that holds the
+      # Docker Hub token (tests/test_ci_scripts.py).
       - name: Extract version
         id: version
+        env:
+          REQUESTED: ${{ github.event.inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RAW="${{ github.event.inputs.version }}"
+            RAW="$REQUESTED"
           elif [ "${{ github.event_name }}" = "schedule" ]; then
             RAW=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
           else

@@ -24,6 +24,7 @@ Ported from cookieradar, which has polled since 2026-09-24.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -295,6 +296,20 @@ def test_the_checkout_fetches_the_tags_it_will_need():
     assert checkout.get("with", {}).get("fetch-depth") == 0
 
 
+def test_the_dispatch_offers_no_stale_version_as_its_default():
+    """`default: 'v2026.09.4'` sat in this workflow while the project was at 2026.47.
+
+    A default that is a version is a version that rots, and the rot is invisible: the
+    dispatch form arrives pre-filled with something that looks deliberate. Whoever
+    rebuilds without reading it republishes September. apkradar holds its own
+    dispatch input with the same test.
+    """
+    dispatch = _workflow("docker.yml")["on"]["workflow_dispatch"]
+    version = dispatch["inputs"]["version"]
+
+    assert "default" not in version, f"a default version rots: {version.get('default')!r}"
+
+
 def test_the_image_is_built_before_a_release_and_not_only_during_one():
     """Otherwise the first attempt at building the image is the one that publishes it.
 
@@ -344,3 +359,16 @@ def test_the_shell_scripts_are_checked_out_with_lf():
     """With core.autocrlf=true the .sh scripts arrive in CRLF, and bash dies on `set -o pipefail\\r`."""
     attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
     assert "*.sh text eol=lf" in [line.strip() for line in attributes]
+
+
+def test_no_workflow_pastes_a_dispatch_input_into_a_script():
+    """`${{ }}` inside `run:` is substituted into the script text before bash reads
+    it, so a value with a quote in it becomes code. docker.yml did that with the
+    version typed into the dispatch form, in a job that holds the Docker Hub token.
+    An input reaches a script through `env:`, where it stays a string, as apkradar's
+    docker.yml has done since its own test (test_ci_scripts.py) found the same line."""
+    pasted = re.compile(r"\$\{\{[^}]*\b(?:github\.event\.|inputs\.|github\.head_ref)")
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for job_id, job in (_workflow(path.name).get("jobs") or {}).items():
+            for step in job.get("steps", []):
+                assert not pasted.search(step.get("run", "")), f"{path.name}: {job_id}: {step.get('name')}"

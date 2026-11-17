@@ -47,6 +47,28 @@ class TestVersion(unittest.TestCase):
             expected = match.group(1)
         self.assertEqual(mailradar.__version__, expected)
 
+    def test_readme_does_not_call_a_released_option_unreleased(self):
+        """The README said `--version` was "not yet in a published release" until
+        2026-11-17, two months after 2026.09.9 shipped it and with 2026.47 on PyPI.
+
+        A README paragraph that calls something unreleased may only name, in
+        backticks, things no dated CHANGELOG section has recorded yet.
+        """
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        released = changelog.split("\n## [Unreleased]", 1)[-1].split("\n## [", 1)[-1]
+        unreleased_claim = re.compile(
+            r"not\s+yet\s+(?:in\s+a\s+published\s+release|released|published)", re.IGNORECASE
+        )
+        for paragraph in re.split(r"\n\s*\n", readme):
+            if not unreleased_claim.search(paragraph):
+                continue
+            for name in re.findall(r"`([^`\n]+)`", paragraph):
+                self.assertFalse(
+                    f"`{name}`" in released,
+                    f"README calls `{name}` unreleased, but a dated CHANGELOG section records it",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
