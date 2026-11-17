@@ -29,6 +29,7 @@ from mailradar.checker import (
     find_domain_variants,
     organizational_domain,
 )
+from tests.names import mentions
 from tests.replay import recorded_txt
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -935,7 +936,7 @@ class TestHTTPFailures:
         dns_replay("mta_sts_invalid")
         http_replay("mta_sts_invalid")
         result = check_mta_sts("unreachable.example.com")
-        assert "mta-sts.unreachable.example.com" in result.error
+        assert mentions(result.error, "mta-sts.unreachable.example.com")
         assert any("MTA-STS not verified" in issue for issue in result.issues)
         assert not any("not accessible" in issue for issue in result.issues)
 
@@ -954,7 +955,7 @@ class TestHTTPFailures:
         result = check_mta_sts("no-host.example.com")
         assert result.error == ""
         assert result.score == 0
-        assert any("mta-sts.no-host.example.com" in issue and "does not exist" in issue
+        assert any(mentions(issue, "mta-sts.no-host.example.com") and "does not exist" in issue
                    for issue in result.issues)
 
     def test_a_connection_that_fails_to_a_host_that_exists_is_not_verified(self, dns_replay, monkeypatch):
@@ -962,14 +963,14 @@ class TestHTTPFailures:
         dns_replay("bimi_example_com", "amplify_valimail_com_a")
         _no_proxy_answers(monkeypatch)
         result = check_bimi("example.com")
-        assert "amplify.valimail.com" in result.error
+        assert mentions(result.error, "amplify.valimail.com")
         assert any("BIMI not verified" in issue for issue in result.issues)
 
     def test_a_bimi_logo_fetch_with_no_answer_is_not_verified(self, dns_replay, http_replay):
         dns_replay("bimi_example_com")
         http_replay("bimi_logo_unreachable")
         result = check_bimi("example.com")
-        assert "amplify.valimail.com" in result.error
+        assert mentions(result.error, "amplify.valimail.com")
         assert result.score == 0
         assert not any("timeout or error" in issue for issue in result.issues)
 

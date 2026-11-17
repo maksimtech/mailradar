@@ -6,6 +6,7 @@ recordings). No mail leaves the machine, and gpg never sees the user's keyring.
 from __future__ import annotations
 
 import email
+import re
 import secrets
 
 import pytest
@@ -14,6 +15,7 @@ from typer.testing import CliRunner
 from mailradar.cli import app
 from mailradar.gpg import lookup_gpg
 from mailradar.sender import SMTPConfig, send_report
+from tests.names import mentions
 
 FROM = "security@maksimtech.com"
 NAMED = ["--name", "Mario Rossi", "--role", "Security engineer", "--org", "Maksimtech"]
@@ -55,7 +57,9 @@ def _send(domain, smtp, *extra, input=None):
 
 
 def _flat(output: str) -> str:
-    return " ".join(output.split())
+    """The words of `output`, without Rich's colours: on GitHub Actions Rich colours
+    Typer's usage panel, and `--from` arrives as `-` and `-from` between escapes."""
+    return " ".join(re.sub(r"\x1b\[[0-9;]*m", "", output).split())
 
 
 def _recipients(server) -> list[str]:
@@ -161,7 +165,7 @@ def test_a_verified_keyserver_that_did_not_answer_is_reported(http_replay):
 
     assert gpg.found is True and gpg.verified is False
     assert "429" in gpg.unanswered
-    assert any("keys.openpgp.org" in issue and "did not answer" in issue for issue in gpg.issues)
+    assert any(mentions(issue, "keys.openpgp.org") and "did not answer" in issue for issue in gpg.issues)
 
 
 def test_send_says_the_verifying_keyserver_did_not_answer(server, http_replay):
@@ -171,7 +175,7 @@ def test_send_says_the_verifying_keyserver_did_not_answer(server, http_replay):
     result = send_report("gmail.com", "report", gpg, config=_config(server))
 
     assert result.method == "gpg-unverified"
-    assert "keys.openpgp.org" in result.message and "429" in result.message
+    assert mentions(result.message, "keys.openpgp.org") and "429" in result.message
 
 
 # ─── --sign ──────────────────────────────────────────────────────────────────

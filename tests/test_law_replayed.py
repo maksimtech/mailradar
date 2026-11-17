@@ -22,6 +22,7 @@ from mailradar.checker import DKIMResult, DMARCResult, DomainReport, GPGResult, 
 from mailradar.law_cache import LawCache
 from mailradar.law_checker import FINDING_ARTICLES, check
 from mailradar.law_fetcher import GDPR
+from tests.names import mentions
 
 REAL_FETCH_HTML = law_fetcher.fetch_html
 DAY1 = datetime(2026, 9, 19, 14, 0, tzinfo=UTC)
@@ -128,7 +129,7 @@ def test_a_redirect_to_another_host_is_not_followed(real_fetch, http_replay):
     proxy = http_replay("cellar_redirect_32016R0679_other_host")
     with pytest.raises(law_fetcher.LawFetchError, match="example.org"):
         law_fetcher.fetch_html(CELLAR_GDPR)
-    assert not any("example.org" in request for request in proxy.requests), proxy.requests
+    assert not any(mentions(request, "example.org") for request in proxy.requests), proxy.requests
 
 
 def test_a_text_from_another_host_is_not_verified_against_cellar(real_fetch, http_replay, cache):

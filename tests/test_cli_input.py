@@ -12,12 +12,15 @@ import pytest
 from typer.testing import CliRunner
 
 from mailradar.cli import app
+from tests.names import mentions
 
 ENV = {"COLUMNS": "300"}
 
 
 def _flat(output: str) -> str:
-    return " ".join(output.split())
+    """The words of `output`, without Rich's colours: on GitHub Actions Rich colours
+    Typer's usage panel, and an option name arrives split between escapes."""
+    return " ".join(re.sub(r"\x1b\[[0-9;]*m", "", output).split())
 
 
 # ─── Exit code 64 for usage errors ───────────────────────────────────────────
@@ -107,7 +110,7 @@ def test_batch_skips_a_url_and_says_what_to_write(dns_replay, tmp_path):
     result = CliRunner().invoke(app, ["batch", str(domains)], env=ENV)
     out = _flat(result.output)
     assert "Failed (1)" in out
-    assert "example.com" in out
+    assert mentions(out, "example.com")
     assert server.queries == []
 
 
