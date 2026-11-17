@@ -12,6 +12,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+## [2026.48] - 2026-11-17
+
 ### Added
 
 - **SPF says what its ranges authorise and how many lookups it spends.** Seen in qnap.com's record on
@@ -1137,7 +1139,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.47.1...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.48...HEAD
+[2026.48]: https://github.com/maksimtech/mailradar/compare/v2026.47.1...v2026.48
 [2026.47.1]: https://github.com/maksimtech/mailradar/compare/v2026.47...v2026.47.1
 [2026.47]: https://github.com/maksimtech/mailradar/compare/v2026.46...v2026.47
 [2026.46]: https://github.com/maksimtech/mailradar/compare/v2026.45...v2026.46
