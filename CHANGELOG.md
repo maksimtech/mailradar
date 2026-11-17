@@ -12,6 +12,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+## [2026.47.1] - 2026-11-17
+
 ### Changed
 
 - **`uv.lock` and `requirements-ci.txt` name the same versions again.** Dependabot's pip ecosystem
@@ -1120,7 +1122,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   a file with one domain per line.
 - Color-coded Rich terminal output.
 
-[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.47...HEAD
+[Unreleased]: https://github.com/maksimtech/mailradar/compare/v2026.47.1...HEAD
+[2026.47.1]: https://github.com/maksimtech/mailradar/compare/v2026.47...v2026.47.1
 [2026.47]: https://github.com/maksimtech/mailradar/compare/v2026.46...v2026.47
 [2026.46]: https://github.com/maksimtech/mailradar/compare/v2026.45...v2026.46
 [2026.45]: https://github.com/maksimtech/mailradar/compare/v2026.44...v2026.45
