@@ -1071,8 +1071,13 @@ def _spf_open_ranges(terms: list[tuple[str, str, str]]) -> list[str]:
     for qualifier, name, rest in terms:
         if name == "all":
             break
+        # Only a pass term written with /0 can be one: checked on the text first,
+        # since parsing every ip4:/ip6: term made the evaluation four times slower
+        # (CodSpeed, test_bench_spf, 176 → 688 µs on qwant.com's six ranges)
+        if qualifier not in ("", "+") or not rest.endswith("/0"):
+            continue
         network = _spf_network(name, rest)
-        if network and qualifier in ("", "+") and network[1].prefixlen == 0:
+        if network and network[1].prefixlen == 0:
             found.append(f"{qualifier}{name}:{network[0]}")
     return found
 
