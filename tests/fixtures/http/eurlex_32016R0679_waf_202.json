@@ -1,0 +1,14 @@
+{
+ "_derived": {
+  "from": "law_fetcher.fetch_act_html's docstring and test_law_fetcher.test_fetch_html_rejects_non_200: eur-lex.europa.eu answers every automated request with HTTP 202 and an empty body (AWS WAF)",
+  "changed": "that answer, for the GDPR's EUR-Lex URL"
+ },
+ "responses": [
+  {
+   "request": "GET https://eur-lex.europa.eu/legal-content/IT/TXT/HTML/?uri=CELEX:32016R0679",
+   "status": 202,
+   "headers": {},
+   "body": ""
+  }
+ ]
+}

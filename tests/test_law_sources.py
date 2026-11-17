@@ -96,6 +96,27 @@ def test_normattiva_update_marks_and_heading_are_dropped():
         assert "vigore" not in text
 
 
+def test_normattiva_bis_paragraphs_can_be_cited():
+    """Art. 21 of the Consumer Code has paragraphs 3-bis and 4-bis: they were
+    part of the article's text, and could not be cited on their own."""
+    texts = parse_articles(page("normattiva_cdc_art21.html"), ("21",))
+
+    assert texts["21(3-bis)"].startswith("3-bis. ")
+    assert texts["21(4-bis)"].startswith("4-bis. ")
+    assert texts["21"].split("\n") == [
+        texts[f"21({n})"] for n in ("1", "2", "3", "3-bis", "4", "4-bis")
+    ]
+
+
+@pytest.mark.parametrize("suffix", ["ter", "quater", "quinquies", "sexies", "decies", "terdecies"])
+def test_normattiva_later_latin_paragraphs_can_be_cited(suffix):
+    """The same page with paragraph 4-bis renumbered, as later amendments number theirs."""
+    html = page("normattiva_cdc_art21.html").replace(">4-bis. <", f">4-{suffix}. <")
+    assert html != page("normattiva_cdc_art21.html")
+
+    assert parse_articles(html, ("21",))[f"21(4-{suffix})"].startswith(f"4-{suffix}. ")
+
+
 def test_normattiva_articles_21_and_49():
     assert parse_articles(page("normattiva_cdc_art21.html"), ("21",))["21(1)(a)"] == (
         "a) l'esistenza o la natura del prodotto;"

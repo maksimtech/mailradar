@@ -153,6 +153,9 @@ def test_nis2_scope_is_noted_when_nis2_is_cited(overrides):
     {},
     {"gpg": GPGResult(found=False)},
     {"mta_sts": MTASTSResult(present=True, mode="testing")},
+    # A lookup that failed is not a missing record: nothing is cited, so no note
+    {"dmarc": DMARCResult(error="DNS lookup failed: Timeout")},
+    {"mta_sts": MTASTSResult(error="DNS lookup failed: Timeout")},
 ])
 def test_no_nis2_note_without_nis2(overrides):
     assert notes_of(_report(**overrides)) == []
@@ -266,3 +269,55 @@ def test_dkim_not_found_under_common_selectors_is_not_evidence(dns_replay):
     from mailradar.checker import check_dkim
     dns_replay("amazon_it")
     assert findings_of(_report(dkim=check_dkim("amazon.it"))) == {}
+
+
+# ─── a cache that cannot be written ──────────────────────────────────────────
+
+@pytest.fixture
+def read_only_cache(cache):
+    """Call it after a first audit: it makes `cache` read-only, the file (what
+    stops os.replace on Windows) and its folder (what stops it on POSIX)."""
+    import os
+    import stat
+
+    def freeze():
+        cache.path.chmod(stat.S_IREAD)
+        cache.path.parent.chmod(stat.S_IREAD | stat.S_IEXEC)
+        try:
+            cache.update({}, checked_at="2026-10-01T09:30:00Z")
+        except OSError:
+            return
+        pytest.skip("this user can write a read-only file (root?)")
+
+    yield freeze
+    os.chmod(cache.path.parent, stat.S_IRWXU)
+    if cache.path.exists():
+        os.chmod(cache.path, stat.S_IREAD | stat.S_IWRITE)
+
+
+def test_a_changed_text_is_reported_when_the_cache_cannot_be_written(cache, read_only_cache, monkeypatch):
+    """The change used to be computed only by a successful save: with the cache
+    read-only, a law whose text changed was cited with no warning."""
+    monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch())
+    first = check(_report(gpg=GPGResult(found=False)), cache=cache, now=DAY1)
+    read_only_cache()
+
+    monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch(" (rettificato)"))
+    law = check(_report(gpg=GPGResult(found=False)), cache=cache, now=DAY2)
+
+    assert law.changed == {"GDPR art. 32": first.citations[0].sha256}
+    assert law.citations[0].sha256 != first.citations[0].sha256
+    assert law.citations[0].version_date == "2026-10-01"
+
+
+def test_an_unchanged_text_keeps_its_version_date_when_the_cache_cannot_be_written(
+    cache, read_only_cache, online
+):
+    """The date of a wording is its first download, saved or not."""
+    check(_report(gpg=GPGResult(found=False)), cache=cache, now=DAY1)
+    read_only_cache()
+
+    law = check(_report(gpg=GPGResult(found=False)), cache=cache, now=DAY2)
+
+    assert law.changed == {}
+    assert law.citations[0].version_date == "2026-09-19"
