@@ -1,0 +1,74 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "one name per syntax error RFC 7208 §4.6 and §6 make a permerror, each with an SPF record that is otherwise valid and ends in -all: an unknown mechanism (foo:bar), a term that is not a name at all (1x), two typos of all (-al with no all after it, -all; with a semicolon), and redirect= twice; plus a name whose record has an unknown modifier (foo=bar), which §6 allows, and documentation addresses (RFC 5737)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "unknown-mechanism.example.com. IN TXT",
+   ";ANSWER",
+   "unknown-mechanism.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 foo:bar -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "not-a-name.example.com. IN TXT",
+   ";ANSWER",
+   "not-a-name.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 1x -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "all-typo.example.com. IN TXT",
+   ";ANSWER",
+   "all-typo.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 -al\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "all-semicolon.example.com. IN TXT",
+   ";ANSWER",
+   "all-semicolon.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 -all;\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "two-redirects.example.com. IN TXT",
+   ";ANSWER",
+   "two-redirects.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 redirect=a.example.net redirect=b.example.net\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "unknown-modifier.example.com. IN TXT",
+   ";ANSWER",
+   "unknown-modifier.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 foo=bar -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

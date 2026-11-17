@@ -1,0 +1,107 @@
+{
+ "_derived": {
+  "from": "dns/spf_redundant_include.json",
+  "changed": "one name per way the include's range is not reached first for the domain's own ip4:192.0.2.96/27 (RFC 7208 §4.6.2 and §5.1: the first mechanism that matches decides, and nothing after all is tested): the range after -all in the include; a -ip4 in the include that covers .96/27 before the range; a -exists in the include before the range, which may match any address; a -ip4 in the domain's own record before the include. One more name has a -ip4 in the include that does not touch the domain's range (192.0.2.0/27), which the include does authorise. Documentation addresses (RFC 5737)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "after-all.example.com. IN TXT",
+   ";ANSWER",
+   "after-all.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 include:after-all.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "after-all.example.net. IN TXT",
+   ";ANSWER",
+   "after-all.example.net. 300 IN TXT \"v=spf1 -all ip4:192.0.2.0/24\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "denied-first.example.com. IN TXT",
+   ";ANSWER",
+   "denied-first.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 include:denied-first.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "denied-first.example.net. IN TXT",
+   ";ANSWER",
+   "denied-first.example.net. 300 IN TXT \"v=spf1 -ip4:192.0.2.64/26 ip4:192.0.2.0/24 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "exists-first.example.com. IN TXT",
+   ";ANSWER",
+   "exists-first.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 include:exists-first.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "exists-first.example.net. IN TXT",
+   ";ANSWER",
+   "exists-first.example.net. 300 IN TXT \"v=spf1 -exists:%{i}.bl.example.net ip4:192.0.2.0/24 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "top-denied.example.com. IN TXT",
+   ";ANSWER",
+   "top-denied.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 -ip4:192.0.2.0/24 include:top-denied.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "top-denied.example.net. IN TXT",
+   ";ANSWER",
+   "top-denied.example.net. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "disjoint-denied.example.com. IN TXT",
+   ";ANSWER",
+   "disjoint-denied.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/27 include:denied-first.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

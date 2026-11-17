@@ -1,0 +1,74 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "one name per ip4/ip6 value that Python's ipaddress.ip_network accepts and the ABNF of RFC 7208 §5.6 does not: a netmask and a hostmask instead of a prefix length, a prefix length with a leading zero (ip4 and ip6), a prefix length past the family's maximum, and an IPv6 zone id; each record is otherwise valid and ends in -all, with documentation addresses (RFC 5737, RFC 3849)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "netmask.example.com. IN TXT",
+   ";ANSWER",
+   "netmask.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/255.255.255.0 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "hostmask.example.com. IN TXT",
+   ";ANSWER",
+   "hostmask.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/0.0.0.255 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "leading-zero.example.com. IN TXT",
+   ";ANSWER",
+   "leading-zero.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/027 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "leading-zero6.example.com. IN TXT",
+   ";ANSWER",
+   "leading-zero6.example.com. 300 IN TXT \"v=spf1 ip6:2001:db8::/064 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "too-long.example.com. IN TXT",
+   ";ANSWER",
+   "too-long.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/33 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "zone-id.example.com. IN TXT",
+   ";ANSWER",
+   "zone-id.example.com. 300 IN TXT \"v=spf1 ip6:2001:db8::1%eth0/64 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

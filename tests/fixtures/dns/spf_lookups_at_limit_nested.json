@@ -1,0 +1,41 @@
+{
+ "_derived": {
+  "from": "dns/spf_lookups_at_limit.json",
+  "changed": "the ten lookups are spread over the records the count follows: five in the domain's record (a, mx, two a: and an include), three in the include's (two a: and a redirect=), two in the redirect target's (mx: and exists:); the include and the redirect target are added"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 a mx a:a1.example.com a:a2.example.com include:_spf.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.example.net. IN TXT",
+   ";ANSWER",
+   "_spf.example.net. 300 IN TXT \"v=spf1 a:a3.example.com a:a4.example.com redirect=_r.example.net\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_r.example.net. IN TXT",
+   ";ANSWER",
+   "_r.example.net. 300 IN TXT \"v=spf1 mx:m1.example.com exists:%{i}.e1.example.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

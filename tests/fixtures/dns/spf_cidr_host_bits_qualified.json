@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/spf_cidr_host_bits.json",
+  "changed": "the ranges written from an address inside them carry each qualifier that does not pass: -ip4 fails the whole range, ~ip4 softfails it and ?ip4 makes it neutral (RFC 7208 §4.6.2), with documentation addresses (RFC 5737); one passing range keeps the original wording"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 -ip4:192.0.2.98/27 ~ip4:198.51.100.5/28 ?ip4:203.0.113.9/29 +ip4:192.0.2.130/30 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

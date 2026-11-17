@@ -1,0 +1,30 @@
+{
+ "_derived": {
+  "from": "dns/spf_lookups_at_limit.json",
+  "changed": "one name whose record has nine terms that each cost a lookup and ends in a redirect= whose target is a macro (%{d}), the tenth lookup (RFC 7208 §4.6.4), with no all; one name whose only include: has a macro, counted but not followed"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "macro-redirect.example.com. IN TXT",
+   ";ANSWER",
+   "macro-redirect.example.com. 300 IN TXT \"v=spf1 a mx a:a1.example.com a:a2.example.com a:a3.example.com a:a4.example.com a:a5.example.com a:a6.example.com a:a7.example.com redirect=%{d}.r.example.net\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "macro-include.example.com. IN TXT",
+   ";ANSWER",
+   "macro-include.example.com. 300 IN TXT \"v=spf1 include:%{d}.i.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

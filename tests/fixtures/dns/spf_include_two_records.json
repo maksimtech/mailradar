@@ -1,0 +1,31 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "SPF record replaced by \"v=spf1 include:two.example.net -all\", and two.example.net publishes two SPF records, which RFC 7208 §4.5 makes a permerror wherever the include is evaluated (§5.2); documentation addresses (RFC 5737)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 include:two.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "two.example.net. IN TXT",
+   ";ANSWER",
+   "two.example.net. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 -all\"",
+   "two.example.net. 300 IN TXT \"v=spf1 ip4:198.51.100.0/24 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
