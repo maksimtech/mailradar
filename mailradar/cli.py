@@ -17,7 +17,7 @@ from rich.text import Text
 from typer.core import TyperGroup
 
 import mailradar
-from mailradar.checker import DomainReport, analyze_domain
+from mailradar.checker import DomainReport, analyze_domain, dkim_unusable
 from mailradar.reporter import visible
 
 
@@ -286,8 +286,10 @@ def _print_report(report: DomainReport) -> None:
         # Every active key, the weakest first: it is the one the score measures
         dkim_detail = " | ".join(f"{_s(selector)}: {_s(key)}" for selector, key in k.keys.items())
     elif k.present:
-        key = "Ed25519" if k.key_type == "ed25519" else f"{k.key_bits}-bit RSA"
-        dkim_detail = f"selector: {_s(k.selector)} | {key}"
+        # The checker's own description: a malformed key, or one only in
+        # testing mode, is not "0-bit RSA" or a plain "2048-bit RSA"
+        key = k.keys.get(k.selector) or ("Ed25519" if k.key_type == "ed25519" else f"{k.key_bits}-bit RSA")
+        dkim_detail = f"selector: {_s(k.selector)} | {_s(key)}"
     elif k.error:
         dkim_detail = _UNVERIFIED
     elif k.selector:
@@ -298,7 +300,9 @@ def _print_report(report: DomainReport) -> None:
         dkim_detail = f"[red]Not found under {k.tried} common selectors[/red]"
     else:
         dkim_detail = "[red]Not found (tried common selectors)[/red]"
-    dkim_icon = "✅" if k.present else ("⚠️ " if k.error else "❌")
+    # A key nothing can be verified with, or one only in testing mode: published,
+    # and still no signature a receiver counts
+    dkim_icon = ("❌" if dkim_unusable(k) else "✅") if k.present else ("⚠️ " if k.error else "❌")
     table.add_row("DKIM", dkim_icon, dkim_detail, _check_score_cell("dkim", k))
 
     # BIMI row
@@ -401,13 +405,17 @@ def _print_law_check(law, out=None) -> None:
         out.print("[bold]⚖️  Provisions applied[/bold]")
     for status in law.acts:
         act = status.act
-        name, source = _s(act.name), _s(act.source)
+        name = _s(act.name)
+        # Which source was tried, and whether it was unreachable or answered
+        # without the text cited: "EUR-Lex unreachable" whatever happened was
+        # how a reached page with a moved point used to be reported
+        reason = _s(status.reason or "")
         if status.source == "verified":
             origin = _s(status.origin or act.source)
             out.print(f"[dim]{name}: verified against {origin} ({act.id_label} {_s(act.celex)})[/dim]")
         elif status.source == "cache":
             out.print(
-                f"[yellow]{name}: {source} unreachable, "
+                f"[yellow]{name}: {reason}, "
                 "text from the cached copy, not re-verified[/yellow]"
             )
         else:
@@ -416,7 +424,7 @@ def _print_law_check(law, out=None) -> None:
             # for a bug in the hashing. There is no verified text to hash, and
             # printing one anyway would assert a verification never made.
             out.print(
-                f"[yellow]{name}: {source} unreachable and nothing cached, "
+                f"[yellow]{name}: {reason} and nothing cached, "
                 "text not verifiable: the citations below have no SHA-256[/yellow]"
             )
         if act.note:
@@ -476,17 +484,29 @@ def _lang_option(value: str) -> str:
 def _existing_domain(domain: str) -> str:
     """The domain to analyse: `domain` if DNS knows it, or the variant the user picks.
 
-    Exits 1 when DNS did not answer, when the name does not exist and has no
-    variants to offer, or when the user picks none. `check`, `report` and
+    Exits 64 when the name is not a valid domain name, and 1 when DNS did not
+    answer, when the name does not exist and has no variants to offer, or when
+    the user picks none. `check`, `report` and
     `send` share it: `report no-such-domain.example` wrote a letter grading the
     name CRITICAL, and `send` would have mailed security@ it.
     """
-    from mailradar.checker import DNSLookupError, domain_exists, find_domain_variants, variant_base
+    from mailradar.checker import (
+        DNSLookupError,
+        InvalidDomainError,
+        domain_exists,
+        find_domain_variants,
+        variant_base,
+    )
 
     # Does the domain exist at all
     try:
         with _status(f"[cyan]Checking if {_s(domain)} exists...[/cyan]"):
             exists = domain_exists(domain)
+    except InvalidDomainError as e:
+        # No resolver is asked and none would help: the name itself is wrong,
+        # a usage error like a URL given for a domain
+        console.print(f"\n[red]❌ {_s(str(e))}[/red]")
+        raise typer.Exit(64) from None
     except DNSLookupError as e:
         # A timeout is not an answer: neither "not found" nor a guess at another domain
         console.print(f"\n[red]❌ {_s(domain)} could not be checked: {_s(str(e))}. "

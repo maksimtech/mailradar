@@ -1245,6 +1245,17 @@ def _describe_key(key: _DKIMKey) -> str:
     return f"{description} (testing, t=y)" if key.testing else description
 
 
+def dkim_unusable(dkim: DKIMResult) -> bool:
+    """The key the DKIM result rests on gives no signature a receiver counts:
+    malformed (no length), of a type no verifier knows, or only in testing mode
+    (RFC 6376 §3.6.1). From what the check found, not from the score, whose 0
+    is also the default of a result nobody scored."""
+    if not dkim.present:
+        return False
+    return (not dkim.key_bits or dkim.key_type not in ("rsa", "ed25519")
+            or "(testing, t=y)" in dkim.keys.get(dkim.selector, ""))
+
+
 def _key_strength(key: _DKIMKey) -> int:
     """A rank for 'weakest key': a valid Ed25519 key is as strong as RSA 2048 (RFC 8463), a malformed one is nothing."""
     if key.problem:

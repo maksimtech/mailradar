@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 import httpx
 
 from mailradar import law_fetcher
+from mailradar.checker import dkim_unusable
 from mailradar.law_cache import Key, LawCache, merge
 from mailradar.law_fetcher import DLGS_138_2024, GDPR, Act, LawFetchError, Provision
 
@@ -77,12 +78,25 @@ def findings_of(report) -> dict[str, list[str]]:
     elif report.spf.permerror:
         weak.append("SPF permerror: receivers apply no SPF")
     elif report.spf.permissive:
-        weak.append(f"SPF {report.spf.all_mechanism or 'permissivo'}")
+        if report.spf.all_mechanism == "-all":
+            # Permissive under -all only through a pass /0 range before it:
+            # "SPF -all" would read as the remedy, not the weakness
+            weak.append("SPF authorises every address before -all")
+        elif report.spf.all_mechanism:
+            weak.append(f"SPF {report.spf.all_mechanism}")
+        else:
+            # No all, or a redirect= to a macro MailRadar does not expand
+            weak.append("SPF without an all that applies")
     # A key under none of the common selectors is not found, not absent: DNS
     # cannot list selectors, and amazon.it signs under its own. Only a key
-    # that was found, and is short, is a weakness worth citing.
-    if report.dkim.present and report.dkim.key_type == "rsa" and report.dkim.key_bits < DKIM_MIN_BITS:
-        weak.append(f"DKIM {report.dkim.key_bits} bit")
+    # that was found, and is short or unusable, is a weakness worth citing.
+    dkim = report.dkim
+    if dkim_unusable(dkim):
+        # Malformed, or only in testing mode: no signature a receiver counts.
+        # Named as the checker describes it, not by a length it does not have
+        weak.append(f"DKIM {dkim.keys.get(dkim.selector) or 'key unusable'}")
+    elif dkim.present and dkim.key_type == "rsa" and dkim.key_bits < DKIM_MIN_BITS:
+        weak.append(f"DKIM {dkim.key_bits} bit")
     if weak:
         found["spf_dkim_weak"] = weak
 

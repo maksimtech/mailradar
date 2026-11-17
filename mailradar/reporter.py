@@ -140,8 +140,17 @@ def _dkim_current(report: DomainReport, lang: str) -> str:
     if dkim.present:
         if dkim.key_type == "ed25519":
             key = "Ed25519" if dkim.key_bits else ("Ed25519 malformata" if it else "malformed Ed25519")
+        elif dkim.key_type != "rsa":
+            # k= of a type neither RFC 6376 nor RFC 8463 defines
+            key = (f"chiave di tipo sconosciuto (k={dkim.key_type})" if it
+                   else f"key of an unknown type (k={dkim.key_type})")
+        elif not dkim.key_bits:
+            # Not "0-bit RSA": a key that does not decode is no key of any length
+            key = "chiave RSA malformata" if it else "malformed RSA key"
         else:
-            key = f"{dkim.key_bits or 0}-bit RSA"
+            key = f"{dkim.key_bits}-bit RSA"
+        if "(testing, t=y)" in dkim.keys.get(dkim.selector, ""):
+            key += " (in modalità test, t=y)" if it else " (testing, t=y)"
         return (f"Selettore {dkim.selector} | {key}" if it else f"Selector {dkim.selector} | {key}")
     if dkim.selector:
         # Found, but revoked (empty p=)

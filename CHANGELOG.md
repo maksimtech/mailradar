@@ -43,6 +43,23 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   `+a` is the same term as a bare `a`, which was never flagged. The warning judged the spelling, not
   the record, and marked as permissive a `-all` record that is not.
 
+- **A usage error exits 64, not 2.** Click exits 2 on an unknown option or a missing argument, and 2 is also
+  `check`'s grade CRITICAL: a script could not tell a wrong command line from a critical domain. Every usage
+  error, at any level and in every command, now exits 64 (EX_USAGE, sysexits.h), and so do the new refusals of
+  a value: `--lang de`, a URL or an address instead of a domain, `--sign` without `--from`. The grade codes
+  0-3 are unchanged; the README's table lists 64.
+
+- **`batch` exits with the worst code `check` would give.** It exited 0 whatever it found. It now exits with
+  the highest of the codes `check` would give each domain, a domain it skipped (not a domain, not in DNS,
+  analysis failed) counting 1 as in `check`: 0 only when every domain was analysed and graded GOOD or better,
+  2 when the worst is CRITICAL, 3 when an analysis could not be completed.
+
+- **No published GPG key is a suggestion, not a GDPR art. 32 gap.** Owner's decision: art. 32 asks for
+  measures appropriate to the risk, and a key on a keyserver is not one of them. `law_checker` no longer cites
+  art. 32 for it and prints a suggestion instead; the letter's art. 32 paragraph appears only when it lists a
+  problem with DMARC, SPF or DKIM, and not for a domain whose only findings are BIMI, MTA-STS, TLS-RPT, SPF
+  notes or the missing key.
+
 ### Fixed
 
 - **An SPF syntax error is a permerror, and the issue shows the term.** RFC 7208 §4.6: a syntax error
@@ -72,8 +89,6 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   is handed to such a `redirect=` was also told "SPF has no all mechanism — the default result is
   neutral", although the redirect applies; the issue now says the verdict is the macro target's,
   which is not checked. The score of that case is unchanged.
-
-### Fixed
 
 - **A citation is "verified" only when the reference it cites is in the text downloaded now.** The
   check looked at the article: with Cellar's page parsed and point a) of GDPR art. 32 laid out as a
@@ -125,8 +140,6 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   3-bis and 4-bis of art. 21 of the Consumer Code were part of the article's text and had no reference
   of their own. `21(3-bis)` and `21(4-bis)` now exist, as do -ter, -quater and the later Latin
   numbers (every one after quater ends in -ies), with their lettered points.
-
-### Fixed
 
 - **A malformed BIMI URL no longer ends the analysis.** `default._bimi` publishing
   `l=https://[::1/logo.svg` made `urlsplit` raise `ValueError: Invalid IPv6 URL`, and a port past
@@ -211,27 +224,6 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   `check` prints them under "Notes", apart from the issues and through the same sanitising; the letter lists
   them as "Note:"/"Nota:" in the SPF section, which stays "Properly configured" when they are all there is.
 
-### Changed
-
-- **A usage error exits 64, not 2.** Click exits 2 on an unknown option or a missing argument, and 2 is also
-  `check`'s grade CRITICAL: a script could not tell a wrong command line from a critical domain. Every usage
-  error, at any level and in every command, now exits 64 (EX_USAGE, sysexits.h), and so do the new refusals of
-  a value: `--lang de`, a URL or an address instead of a domain, `--sign` without `--from`. The grade codes
-  0-3 are unchanged; the README's table lists 64.
-
-- **`batch` exits with the worst code `check` would give.** It exited 0 whatever it found. It now exits with
-  the highest of the codes `check` would give each domain, a domain it skipped (not a domain, not in DNS,
-  analysis failed) counting 1 as in `check`: 0 only when every domain was analysed and graded GOOD or better,
-  2 when the worst is CRITICAL, 3 when an analysis could not be completed.
-
-- **No published GPG key is a suggestion, not a GDPR art. 32 gap.** Owner's decision: art. 32 asks for
-  measures appropriate to the risk, and a key on a keyserver is not one of them. `law_checker` no longer cites
-  art. 32 for it and prints a suggestion instead; the letter's art. 32 paragraph appears only when it lists a
-  problem with DMARC, SPF or DKIM, and not for a domain whose only findings are BIMI, MTA-STS, TLS-RPT, SPF
-  notes or the missing key.
-
-### Fixed
-
 - **`--sign` that fails stops the send.** A wrong passphrase, or no secret key for the address, sent the report
   unsigned without a word (`sender.py`, the signature was used only if there was one), and `--sign` without
   `--from` signed nothing and said nothing. A failed signature now ends `send` with exit code 1 and the reason;
@@ -298,6 +290,20 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 - **A 429 from keys.openpgp.org is not lost when keyserver.ubuntu.com answers.** The lookup returned the
   unverified key and forgot that the keyserver that verifies addresses had not answered. `GPGResult.unanswered`
   keeps it, the issues say a verified key may exist, and `send` repeats it when it refuses the key.
+
+- **What one fix found, the others now say in their own words.** The bug-fix pass of 2026-11-17
+  changed what the checks find, and four places still spoke of the old answers. A DKIM key that
+  cannot be used, malformed or only in testing mode, was shown as `0-bit RSA` with a ✅, described by
+  its length in the letter and cited as `DKIM 0 bit`; it is now named as the check describes it
+  (`malformed RSA key`, `chiave RSA malformata` in Italian, `(testing, t=y)`), marked ❌, and cited
+  as such, through `checker.dkim_unusable`. A record made permissive under `-all` by a pass /0 range
+  was cited as `SPF -all`, which reads as the remedy; it is now `SPF authorises every address before
+  -all`, and a record with no `all` that applies is no longer cited as `SPF permissivo`. A law text
+  whose source was reached but lacked the point cited was printed as `EUR-Lex unreachable` whichever
+  source was tried; the CLI now prints the reason the status carries. And `check` answered a name
+  DNS cannot hold with "try again, or with another DNS resolver"; it now says the name is not a
+  valid domain name, with exit code 64, as for any other usage error.
+  `tests/test_findings_named_as_they_are.py` holds the cases.
 
 ### Security
 
