@@ -1,0 +1,119 @@
+{
+ "_derived": {
+  "from": "dns/ecosia_org.json, _mta-sts.ecosia.org. TXT (recorded 2026-10-07): \"v=STSv1; id=1706804415551\"; the NXDOMAIN shape is example.com's (dns/example_com.json)",
+  "changed": "published under _mta-sts.<case>.example.com, one name per case: two-records has the record twice with different ids; no-id is \"v=STSv1;\"; not-first is \"id=1706804415551; v=STSv1\", which holds v=STSv1 without beginning with it; mode-only, stsv2, no-mx, valid, unreachable and no-host have the record as recorded, and their policy files are in http/mta_sts_invalid.json, except no-host's: mta-sts.no-host.example.com. A is NXDOMAIN"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.two-records.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.two-records.example.com. 300 IN TXT \"v=STSv1; id=1706804415551\"",
+   "_mta-sts.two-records.example.com. 300 IN TXT \"v=STSv1; id=20261117\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.no-id.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.no-id.example.com. 300 IN TXT \"v=STSv1;\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.not-first.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.not-first.example.com. 300 IN TXT \"id=1706804415551; v=STSv1\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.mode-only.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.mode-only.example.com. 300 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.stsv2.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.stsv2.example.com. 300 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.no-mx.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.no-mx.example.com. 300 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.valid.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.valid.example.com. 300 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.unreachable.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.unreachable.example.com. 300 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_mta-sts.no-host.example.com. IN TXT",
+   ";ANSWER",
+   "_mta-sts.no-host.example.com. 300 IN TXT \"v=STSv1; id=1706804415551\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "mta-sts.no-host.example.com. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "example.com. 1800 IN SOA elliott.ns.cloudflare.com. dns.cloudflare.com. 2416374680 10000 2400 604800 1800",
+   ";ADDITIONAL"
+  ]
+ ]
+}

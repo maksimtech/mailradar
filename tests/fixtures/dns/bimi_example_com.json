@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/cnn_com.json, default._bimi.cnn.com. TXT (recorded 2026-10-07): \"v=BIMI1; l=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+  "changed": "the same record published as default._bimi.example.com"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.example.com. 1800 IN TXT \"v=BIMI1; l=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

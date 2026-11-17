@@ -13,6 +13,7 @@ from typing import TypeVar
 from urllib.parse import urlsplit
 
 import dns.exception
+import dns.name
 import dns.resolver
 import httpx
 
@@ -66,8 +67,10 @@ class DKIMResult:
     # The selector of the weakest key found: the score measures it, a
     # receiver verifies a signature made with any published key
     selector: str = ""
+    # 0 when the key is malformed: p= missing, or no key of the type declared
     key_bits: int = 0
-    # The k= tag: "rsa" (the default) or "ed25519" (RFC 8463)
+    # The k= tag: "rsa" (the default) or "ed25519" (RFC 8463); any other value
+    # is a type no verifier knows, and its key_bits is 0
     key_type: str = "rsa"
     raw: str = ""
     # Every active key found, selector -> "2048-bit RSA" / "Ed25519"
@@ -89,23 +92,28 @@ class BIMIResult:
     vmc_present: bool = False
     raw: str = ""
     score: int = 0
-    # Set when a DNS lookup failed: the check then says nothing either way
+    # Set when a DNS lookup failed or the logo fetch got no answer: the check
+    # then says nothing either way
     error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
 @dataclass
 class MTASTSResult:
+    # A valid _mta-sts record announces a policy (RFC 8461 §3.1)
     present: bool = False
+    # Set only from a valid policy file (RFC 8461 §3.2)
     mode: str = ""
     score: int = 0
-    # Set when a DNS lookup failed: the check then says nothing either way
+    # Set when a DNS lookup failed or the policy fetch got no answer: the
+    # check then says nothing either way
     error: str = ""
     issues: list[str] = field(default_factory=list)
 
 
 @dataclass
 class TLSRPTResult:
+    # One valid v=TLSRPTv1 record, with a usable rua (RFC 8460 §3)
     present: bool = False
     rua: str = ""
     score: int = 0
@@ -124,16 +132,18 @@ class DomainReport:
     mta_sts: MTASTSResult = field(default_factory=MTASTSResult)
     tls_rpt: TLSRPTResult = field(default_factory=TLSRPTResult)
     gpg: GPGResult = field(default_factory=GPGResult)
-    # None, with grade "N/A", when a DNS lookup got no answer: a check that was
-    # not verified scored 0, and the total read as a measured bottom of scale.
+    # None, with grade "N/A", when a DNS lookup or an HTTP request got no
+    # answer: a check that was not verified scored 0, and the total read as a
+    # measured bottom of scale.
     total_score: int | None = 0
     grade: str = "F"
 
     @property
     def unverified(self) -> list[str]:
-        """The checks whose DNS lookup got no answer (timeout, SERVFAIL), in report order.
+        """The checks whose DNS lookup or HTTP request got no answer (timeout, SERVFAIL, reset), in report order.
 
-        GPG is not among them: a keyserver that rate-limits withholds at most its
+        A domain that is not a valid name leaves every check here, with the
+        reason in its `error`. GPG is not among them: a keyserver that rate-limits withholds at most its
         5 points and says so in its own issue, as `report` and `send` already treat it.
         """
         checks = (("DMARC", self.dmarc), ("SPF", self.spf), ("DKIM", self.dkim),
@@ -162,6 +172,8 @@ def domain_exists(domain: str) -> bool:
     # asked for, and NOERROR with no answer (sanita.fvg.it: MX and TXT, no A)
     # is a name that exists. A timeout or a SERVFAIL says nothing about the
     # name: read as "no such domain", it sent the user to another domain.
+    # A name DNS cannot hold is neither: InvalidDomainError says which.
+    _require_valid_name(domain)
     try:
         dns.resolver.resolve(domain, "A")
     except dns.resolver.NXDOMAIN:
@@ -295,19 +307,22 @@ def organizational_domain(domain: str) -> str:
 
 def dmarc_lookup_chain(domain: str) -> list[str]:
     """
-    RFC 7489 §6.6.3 — catena di ricerca del record DMARC: si parte dal
-    dominio richiesto e si rimuove una label per volta, fermandosi al
-    organizational domain. The public suffix itself is never queried:
-    un record pubblicato su `it` o `co.uk` non è la policy del dominio.
+    RFC 7489 §6.6.3 — the names whose `_dmarc` record DMARC policy discovery
+    asks for: the domain itself and, if it is not one, its organizational
+    domain. Nothing in between: a record on a.example.com is not the policy
+    of sub.a.example.com. The public suffix itself is never queried: a record
+    published on `it` or `co.uk` is not the domain's policy.
 
     asufc.sanita.fvg.it -> [asufc.sanita.fvg.it, sanita.fvg.it]
+    sub.a.example.com   -> [sub.a.example.com, example.com]
     """
     labels = _labels(domain)
     if not labels:
         return []
     chain = [".".join(labels)]
-    for i in range(1, len(labels) - _org_depth(labels) + 1):
-        chain.append(".".join(labels[i:]))
+    organizational = ".".join(labels[len(labels) - _org_depth(labels):])
+    if organizational != chain[0]:
+        chain.append(organizational)
     return chain
 
 
@@ -315,8 +330,47 @@ class DNSLookupError(Exception):
     """A lookup that got no answer (timeout, SERVFAIL): not the same as no record."""
 
 
+class InvalidDomainError(DNSLookupError):
+    """A name DNS cannot hold: a label past 63 octets, a name past 255, invalid IDNA.
+
+    No resolver is asked and none would help: trying again changes nothing. A
+    DNSLookupError still, so that whoever catches one does not crash on it.
+    """
+
+
+class HTTPFetchError(Exception):
+    """An HTTP request that got no answer (timeout, reset, refused): not the same as an HTTP error status.
+
+    It says something about the network the scan runs from, not about the
+    domain, so the check that made it is not verified, as for DNS.
+    """
+
+
+def _require_valid_name(name: str) -> None:
+    """Raise InvalidDomainError if `name` cannot be a DNS name.
+
+    dnspython raises the same errors from inside resolve(), as DNSException
+    subclasses: caught there, they read as a lookup that failed.
+    """
+    try:
+        dns.name.from_text(name)
+    except dns.name.LabelTooLong:
+        reason = "a label is longer than 63 octets"
+    except dns.name.NameTooLong:
+        reason = "it is longer than 255 octets"
+    except dns.name.IDNAException as e:
+        reason = f"it is not valid IDNA ({e.kwargs.get('idna_exception') or e})"
+    except dns.exception.DNSException as e:
+        # An empty label, a bad escape
+        reason = str(e).rstrip(".").lower() or type(e).__name__
+    else:
+        return
+    raise InvalidDomainError(f"{name} is not a valid domain name: {reason}")
+
+
 def _query_txt(name: str) -> list[str]:
     """Query TXT records for a given name."""
+    _require_valid_name(name)
     try:
         answers = dns.resolver.resolve(name, "TXT")
         # Join a record's multiple strings (DKIM keys are split across them)
@@ -337,13 +391,25 @@ _Result = TypeVar("_Result")
 def _unless_dns_fails(
     check: str, result_type: Callable[..., _Result]
 ) -> Callable[[Callable[..., _Result]], Callable[..., _Result]]:
-    """A check_* whose DNS lookup fails returns a result marked as not verified."""
+    """A check_* whose DNS lookup or HTTP request gets no answer returns a result marked as not verified.
+
+    So does one asked about a domain that is not a valid name, with the reason.
+    When the domain is valid and only the name the check asks about is too long
+    (_mta-sts.<domain> past 255 octets), no record can be published there:
+    that is an answer, and is scored as one.
+    """
     def decorate(run: Callable[..., _Result]) -> Callable[..., _Result]:
         @functools.wraps(run)
         def wrapper(*args, **kwargs) -> _Result:
             try:
+                _require_valid_name(kwargs.get("domain", args[0] if args else ""))
+            except InvalidDomainError as e:
+                return result_type(error=str(e), issues=[f"{check} not verified — {e}"])
+            try:
                 return run(*args, **kwargs)
-            except DNSLookupError as e:
+            except InvalidDomainError as e:
+                return result_type(issues=[f"No {check} record can be published for this domain — {e}"])
+            except (DNSLookupError, HTTPFetchError) as e:
                 return result_type(error=str(e), issues=[f"{check} not verified — {e}"])
         return wrapper
     return decorate
@@ -368,6 +434,28 @@ def _parse_pct(value: str) -> int | None:
     return pct if 0 <= pct <= 100 else None
 
 
+_DMARC_POLICIES = ("none", "quarantine", "reject")
+# RFC 7489 §6.4: dmarc-uri is a URI (RFC 3986: a scheme, then ':'), with an
+# optional size limit after '!'
+_DMARC_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:[^!\s]+(![0-9]+[kmgtKMGT]?)?")
+
+
+def _dmarc_uris(result: DMARCResult, tag: str, value: str) -> bool:
+    """Whether rua= or ruf= names at least one URI; an entry that is none is an issue.
+
+    `rua=dmarc@example.com` is an address, not a mailto: URI, and turns no
+    reports on.
+    """
+    entries = [entry.strip() for entry in value.split(",") if entry.strip()]
+    for entry in entries:
+        if not _DMARC_URI.fullmatch(entry):
+            result.issues.append(
+                f"DMARC {tag} entry {entry!r} is not a URI — write it as mailto:{entry.removeprefix('mailto:')}"
+                if "@" in entry else f"DMARC {tag} entry {entry!r} is not a URI — no reports are sent there"
+            )
+    return any(_DMARC_URI.fullmatch(entry) for entry in entries)
+
+
 def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
     """Popola e valuta un DMARCResult a partire dal record trovato."""
     result.present = True
@@ -377,8 +465,36 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
     # p=REJECT is p=reject
     tags = {key.lower(): value for key, value in _parse_tags(record).items()}
 
-    result.policy = tags.get("p", "none").lower()
-    result.sp = tags.get("sp", "").lower()
+    # An empty rua= or ruf= names nobody to send reports to (RFC 7489 §6.4)
+    result.rua = _dmarc_uris(result, "rua", tags.get("rua", ""))
+    result.ruf = _dmarc_uris(result, "ruf", tags.get("ruf", ""))
+
+    # RFC 7489 §6.6.3: with no valid p, or an sp that is not valid, the record
+    # acts as p=none if its rua names a valid URI; otherwise no DMARC applies
+    policy = tags.get("p", "").lower()
+    sp = tags.get("sp", "").lower()
+    invalid = []
+    if "p" not in tags:
+        invalid.append("no p= tag")
+    elif policy not in _DMARC_POLICIES:
+        invalid.append(f"p={tags['p']}")
+    if "sp" in tags and sp not in _DMARC_POLICIES:
+        invalid.append(f"sp={tags['sp']}")
+    if invalid:
+        if not result.rua:
+            result.present = False
+            result.issues.append(
+                f"Invalid DMARC record ({', '.join(invalid)}) and no valid rua — receivers apply "
+                "no DMARC policy (RFC 7489 §6.6.3)"
+            )
+            return
+        result.issues.append(
+            f"Invalid DMARC record ({', '.join(invalid)}) — receivers act as if it said p=none (RFC 7489 §6.6.3)"
+        )
+        policy, sp = "none", ""
+
+    result.policy = policy
+    result.sp = sp
     # RFC 7489 §6.3: per un sottodominio vale `sp`, se presente sul padre
     if result.inherited and result.sp:
         result.policy = result.sp
@@ -394,9 +510,6 @@ def _apply_dmarc_record(result: DMARCResult, record: str) -> None:
     result.pct = pct
     result.adkim = tags.get("adkim", "r").lower()
     result.aspf = tags.get("aspf", "r").lower()
-    # An empty rua= or ruf= names nobody to send reports to (RFC 7489 §6.4)
-    result.rua = bool(tags.get("rua"))
-    result.ruf = bool(tags.get("ruf"))
 
     # Scoring
     if result.policy == "reject":
@@ -447,16 +560,21 @@ def _dmarc_records(name: str) -> list[str]:
 @_unless_dns_fails("DMARC", DMARCResult)
 def check_dmarc(domain: str) -> DMARCResult:
     """
-    Cerca il record DMARC risalendo la gerarchia del dominio (RFC 7489
-    §6.6.3): prima `_dmarc.<dominio>`, poi si rimuove una label per volta
-    fino al dominio organizzativo.
+    The DMARC record that applies to `domain`, found as RFC 7489 §6.6.3
+    says: `_dmarc.<domain>` first and, if it has none, `_dmarc.<organizational
+    domain>` (from the Public Suffix List), with no name in between.
     """
     result = DMARCResult()
     chain = dmarc_lookup_chain(domain)
     requested = chain[0] if chain else ""
 
     for candidate in chain:
-        records = _dmarc_records(f"_dmarc.{candidate}")
+        try:
+            records = _dmarc_records(f"_dmarc.{candidate}")
+        except InvalidDomainError:
+            # _dmarc.<domain> past 255 octets holds no record; the
+            # organizational domain's still applies
+            continue
         if not records:
             continue
 
@@ -476,12 +594,13 @@ def check_dmarc(domain: str) -> DMARCResult:
         if result.inherited:
             result.issues.append(
                 f"No DMARC record on {requested} — policy inherited "
-                f"from parent domain {candidate}"
+                f"from its organizational domain {candidate}"
             )
         _apply_dmarc_record(result, record)
         break
 
-    if not result.present:
+    # A record that applies no policy has already said so
+    if not result.present and not result.found_at:
         result.issues.append("No DMARC record found — domain is spoofable")
 
     return result
@@ -760,24 +879,25 @@ def _ed25519_bits(key: str) -> int:
 
 
 def _rsa_bits(key_part: str) -> int:
-    """The modulus size of a DER-encoded RSA public key; a length estimate if it does not parse."""
+    """The modulus size of an RSA public key in DER, 0 if `key_part` is not one.
+
+    SubjectPublicKeyInfo, which nearly everyone publishes, or the bare PKCS#1
+    RSAPublicKey that RFC 6376 §3.6.1 names; load_der_public_key reads both.
+    The length of the text says nothing: a 2048-bit key cut at 255 characters
+    read as 1024-bit, and 400 'A' as 2048-bit.
+    """
     import base64
 
+    from cryptography.exceptions import UnsupportedAlgorithm
     from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
     from cryptography.hazmat.primitives.serialization import load_der_public_key
     try:
-        pub = load_der_public_key(base64.b64decode(key_part + "=="))
-        if isinstance(pub, RSAPublicKey):
-            return pub.key_size
-    except Exception:
-        pass
-    # Fallback to length estimate
-    key_len = len(key_part)
-    if key_len > 350:
-        return 2048
-    if key_len > 170:
-        return 1024
-    return 512
+        # Missing padding is common and harmless; any other character is not base64
+        der = base64.b64decode(key_part + "=" * (-len(key_part) % 4), validate=True)
+        pub = load_der_public_key(der)
+    except (ValueError, UnsupportedAlgorithm):
+        return 0
+    return pub.key_size if isinstance(pub, RSAPublicKey) else 0
 
 
 # The selectors check_dkim asks about when none is given. A selector is the
@@ -797,31 +917,75 @@ DKIM_SELECTORS = [
 ]
 
 
+@dataclass(frozen=True)
+class _DKIMKey:
+    """What a DKIM key record publishes, as far as scoring goes."""
+    # k= in lower case: "rsa" (the default), "ed25519" (RFC 8463), or a type
+    # neither RFC defines
+    key_type: str
+    # 0 when p= is no key of that type
+    bits: int
+    # Why no signature can be verified with it; "" when one can
+    problem: str
+    # t=y (RFC 6376 §3.6.1): the domain is testing DKIM
+    testing: bool
+
+
+# The tags of a DKIM key record (RFC 6376 §3.6.1), v= aside
+_DKIM_TAGS = frozenset({"g", "h", "k", "n", "p", "s", "t"})
+
+
+def _is_dkim(record: str) -> bool:
+    """A DKIM key record: v=DKIM1 as its first tag, or no v= and DKIM's own tags.
+
+    RFC 6376 §3.6.1: v= is optional, must come first and be DKIM1. A DMARC
+    record holds 'p=' and was read as a 512-bit key.
+    """
+    tags = _parse_tags(record)
+    if "v" in tags:
+        return next(iter(tags)) == "v" and tags["v"] == "DKIM1"
+    return bool(_DKIM_TAGS & tags.keys())
+
+
 @functools.lru_cache(maxsize=256)
-def _dkim_key(record: str) -> tuple[str, int] | None:
-    """(key type, bits) of a DKIM key record; None when p= is empty (RFC 6376 §3.6.1: revoked).
+def _dkim_key(record: str) -> _DKIMKey | None:
+    """The key a DKIM key record publishes; None when p= is empty (RFC 6376 §3.6.1: revoked).
 
     Cached by record: the DER parse is the costly part, and the same key is
     often published under several selectors (each a CNAME to the provider's).
     """
     tags = _parse_tags(record)
-    key_part = "".join(tags.get("p", "").split())
-    if "p" in tags and not key_part:
+    key_type = tags.get("k", "rsa").lower()
+    testing = "y" in (flag.strip() for flag in tags.get("t", "").split(":"))
+    if "p" not in tags:
+        # p= is required; only an empty one means revoked
+        return _DKIMKey(key_type, 0, "no p= tag", testing)
+    key_part = "".join(tags["p"].split())
+    if not key_part:
         return None
-    if tags.get("k", "rsa").lower() == "ed25519":
-        return "ed25519", _ed25519_bits(key_part)
-    return "rsa", _rsa_bits(key_part) if "p" in tags else 0
-
-
-def _describe_key(key_type: str, bits: int) -> str:
-    return "Ed25519" if key_type == "ed25519" else f"{bits}-bit RSA"
-
-
-def _key_strength(key_type: str, bits: int) -> int:
-    """A rank for 'weakest key': a valid Ed25519 key is as strong as RSA 2048 (RFC 8463), a malformed one is nothing."""
     if key_type == "ed25519":
-        return 2048 if bits else 0
-    return bits
+        bits = _ed25519_bits(key_part)
+        return _DKIMKey(key_type, bits, "" if bits else "p= is not a 32-byte Ed25519 key", testing)
+    if key_type == "rsa":
+        bits = _rsa_bits(key_part)
+        return _DKIMKey(key_type, bits, "" if bits else "p= does not decode as an RSA public key", testing)
+    return _DKIMKey(key_type, 0, f"k={key_type} is a key type neither RFC 6376 nor RFC 8463 defines", testing)
+
+
+def _describe_key(key: _DKIMKey) -> str:
+    if key.problem:
+        name = {"rsa": "RSA key", "ed25519": "Ed25519 key"}.get(key.key_type, f"key (k={key.key_type})")
+        description = f"malformed {name}"
+    else:
+        description = "Ed25519" if key.key_type == "ed25519" else f"{key.bits}-bit RSA"
+    return f"{description} (testing, t=y)" if key.testing else description
+
+
+def _key_strength(key: _DKIMKey) -> int:
+    """A rank for 'weakest key': a valid Ed25519 key is as strong as RSA 2048 (RFC 8463), a malformed one is nothing."""
+    if key.problem:
+        return 0
+    return 2048 if key.key_type == "ed25519" else key.bits
 
 
 @_unless_dns_fails("DKIM", DKIMResult)
@@ -837,44 +1001,66 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
     result.tried = len(selectors_to_try)
     failed: DNSLookupError | None = None
     revoked: list[str] = []
-    keys: list[tuple[str, str, int, str]] = []  # selector, type, bits, record
+    keys: list[tuple[str, _DKIMKey, str]] = []  # selector, key, record
+
+    too_long: list[str] = []
 
     for selector in selectors_to_try:
         try:
             records = _query_txt(f"{selector}._domainkey.{domain}")
+        except InvalidDomainError:
+            # Past 255 octets: no key can be published under that name
+            too_long.append(selector)
+            continue
         except DNSLookupError as e:
             # One selector that fails says nothing about the next one
             failed = failed or e
             continue
         for record in records:
-            if "v=DKIM1" in record or "p=" in record:
+            if _is_dkim(record):
                 key = _dkim_key(record)
                 if key is None:
                     # After a rotation the active key is on another selector
                     revoked.append(selector)
                 else:
-                    keys.append((selector, key[0], key[1], record))
+                    keys.append((selector, key, record))
                 break
 
     if keys:
-        selector, key_type, bits, record = min(keys, key=lambda key: _key_strength(key[1], key[2]))
+        # The weakest key a signature can be verified with is the posture. A
+        # malformed key verifies nothing, and a key in testing mode makes its
+        # mail count as unsigned (RFC 6376 §3.6.1): neither lets anyone forge
+        # a signature that counts, so each decides only when no other does.
+        working = [entry for entry in keys if not entry[1].problem]
+        signing = [entry for entry in working if not entry[1].testing]
+        selector, key, record = min(signing or working or keys, key=lambda entry: _key_strength(entry[1]))
+        bits = key.bits
         result.present = True
         result.selector = selector
-        result.key_type = key_type
+        result.key_type = key.key_type
         result.key_bits = bits
         result.raw = record
-        result.keys = {name: _describe_key(kind, size) for name, kind, size, _ in keys}
+        result.keys = {name: _describe_key(published) for name, published, _ in keys}
         others = ", ".join(f"{name} {description}" for name, description in result.keys.items())
         found = f" (keys found: {others})" if len(result.keys) > 1 else ""
 
-        if key_type == "ed25519":
-            # RFC 8463: 256 bits of elliptic curve, stronger than RSA 2048
-            if bits:
-                result.score += 15
-            else:
+        for name, published, _ in keys:
+            if published.problem:
                 result.issues.append(
-                    f"DKIM Ed25519 key under {selector} is malformed — signatures cannot be verified{found}"
+                    f"DKIM key under {name} is malformed ({published.problem}) — signatures cannot be verified"
                 )
+            elif published.testing:
+                result.issues.append(
+                    f"DKIM key under {name} is in testing mode (t=y) — receivers treat its signatures "
+                    "as unsigned (RFC 6376 §3.6.1)"
+                )
+
+        if not signing:
+            # Nothing a receiver would count as signed: no points
+            pass
+        elif key.key_type == "ed25519":
+            # RFC 8463: 256 bits of elliptic curve, stronger than RSA 2048
+            result.score += 15
         elif bits >= 2048:
             result.score += 15
         elif bits >= 1024:
@@ -887,7 +1073,12 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
 
     if failed:
         raise failed
-    if revoked:
+    if len(too_long) == result.tried:
+        result.issues.append(
+            f"No DKIM selector can be checked — <selector>._domainkey.{domain} is longer than 255 octets "
+            "for every selector, so no DKIM key can be published under this domain"
+        )
+    elif revoked:
         # Some domains revoke every name at once (example.com answers p= for
         # all of them): the first is enough to say it
         result.selector = revoked[0]
@@ -904,6 +1095,57 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
     return result
 
 
+def _well_formed(url: str) -> bool:
+    """A URL with a scheme and a host that urllib can take apart, port included.
+
+    It comes from the analysed domain's DNS: urlsplit raises ValueError on
+    https://[::1/logo.svg, and .port on a port past 65535, and either ended the
+    whole analysis.
+    """
+    try:
+        parts = urlsplit(url)
+        # Read for its check alone: it raises on a port that is no number in range
+        _ = parts.port
+    except ValueError:
+        return False
+    return bool(parts.scheme and parts.hostname)
+
+
+# One part of an IPv4 address as inet_aton reads it: hex (0x), octal (a
+# leading 0) or decimal
+_INET_ATON_PART = re.compile(r"0[xX][0-9a-fA-F]*|[0-9]+")
+
+
+def _inet_aton(host: str) -> ipaddress.IPv4Address | None:
+    """The address glibc's inet_aton reads in `host`, or None if it reads none.
+
+    getaddrinfo asks it before any DNS, so on Linux (the Docker image)
+    https://127.1/, https://2130706433/ and https://0x7f000001/ reach
+    127.0.0.1; ipaddress accepts only the dotted-quad form. One to four parts:
+    the last fills the bytes the others leave.
+    """
+    parts = host.split(".")
+    if not 1 <= len(parts) <= 4 or not all(_INET_ATON_PART.fullmatch(part) for part in parts):
+        return None
+    values = []
+    for part in parts:
+        if part[:2].lower() == "0x":
+            values.append(int(part[2:] or "0", 16))
+        elif part.startswith("0") and len(part) > 1:
+            if not set(part) <= set("01234567"):
+                return None
+            values.append(int(part, 8))
+        else:
+            values.append(int(part))
+    *head, last = values
+    if any(value > 255 for value in head) or last >= 256 ** (4 - len(head)):
+        return None
+    number = last
+    for position, value in enumerate(head):
+        number |= value << (8 * (3 - position))
+    return ipaddress.IPv4Address(number)
+
+
 def _fetchable(url: str) -> bool:
     """
     An https URL that does not name a private, loopback or link-local address.
@@ -911,14 +1153,63 @@ def _fetchable(url: str) -> bool:
     third party: fetching anything it says would let it point this tool at
     http://127.0.0.1:8080/admin on the network it runs from.
     """
+    if not _well_formed(url):
+        return False
     parts = urlsplit(url)
-    if parts.scheme.lower() != "https" or not parts.hostname:
+    host = parts.hostname or ""
+    if parts.scheme.lower() != "https":
         return False
     try:
-        return ipaddress.ip_address(parts.hostname).is_global
+        return ipaddress.ip_address(host).is_global
     except ValueError:
-        # A host name. What it resolves to is not checked here.
+        pass
+    # A host made of numbers alone is an IPv4 literal to getaddrinfo, in
+    # whatever form, or nothing at all: no top-level domain is numeric. The
+    # trailing dot of a fully qualified name does not make it a name.
+    labels = host.removesuffix(".").split(".")
+    if all(_INET_ATON_PART.fullmatch(label) for label in labels):
+        address = _inet_aton(".".join(labels))
+        return address is not None and address.is_global
+    # A host name. What it resolves to is not checked here.
+    return True
+
+
+def _has_address(host: str) -> bool:
+    """Whether DNS gives `host` an address; an IP literal has one. DNSLookupError if DNS does not answer."""
+    try:
+        ipaddress.ip_address(host)
         return True
+    except ValueError:
+        pass
+    try:
+        _require_valid_name(host)
+    except InvalidDomainError:
+        return False
+    for rdtype in ("A", "AAAA"):
+        try:
+            dns.resolver.resolve(host, rdtype)
+            return True
+        except dns.resolver.NXDOMAIN:
+            return False
+        except dns.resolver.NoAnswer:
+            continue
+        except dns.exception.DNSException as e:
+            raise DNSLookupError(f"DNS lookup for {host} failed: {type(e).__name__}") from e
+    return False
+
+
+def _unanswered(url: str, error: httpx.TransportError) -> HTTPFetchError | None:
+    """What a GET of `url` that got no answer means for the check.
+
+    An HTTPFetchError, to leave the check not verified, unless the connection
+    failed because DNS has no address for the host: then no server exists to
+    answer, which is the domain's doing (mta-sts.<domain> never set up), and
+    None says to report it as a finding.
+    """
+    host = urlsplit(url).hostname or ""
+    if isinstance(error, httpx.ConnectError) and not _has_address(host):
+        return None
+    return HTTPFetchError(f"GET {url} got no answer from {host}: {type(error).__name__}")
 
 
 @_unless_dns_fails("BIMI", BIMIResult)
@@ -935,15 +1226,24 @@ def check_bimi(domain: str) -> BIMIResult:
 
             result.svg_url = tags.get("l", "")
             result.vmc_url = tags.get("a", "")
-            result.vmc_present = bool(result.vmc_url and result.vmc_url != "")
 
             # `v=BIMI1; l=; a=;` is how a domain says it does not take part
             if not result.svg_url and not result.vmc_url:
                 result.issues.append("BIMI declined by the domain (empty l= and a=)")
                 break
 
+            # The VMC is not fetched, but a= has to name one that could be
+            if result.vmc_url and not _well_formed(result.vmc_url):
+                result.issues.append(f"BIMI VMC URL is malformed ({result.vmc_url!r}) — no VMC")
+            elif result.vmc_url and urlsplit(result.vmc_url).scheme.lower() != "https":
+                result.issues.append("BIMI VMC URL is not an https:// URL — no VMC")
+            else:
+                result.vmc_present = bool(result.vmc_url)
+
             # Validate SVG
-            if result.svg_url and not _fetchable(result.svg_url):
+            if result.svg_url and not _well_formed(result.svg_url):
+                result.issues.append(f"BIMI logo URL is malformed ({result.svg_url!r}) — not fetched")
+            elif result.svg_url and not _fetchable(result.svg_url):
                 result.issues.append("BIMI logo URL is not a public https:// URL — not fetched")
             elif result.svg_url:
                 try:
@@ -951,8 +1251,20 @@ def check_bimi(domain: str) -> BIMIResult:
                     result.svg_valid = resp.status_code == 200
                     if not result.svg_valid:
                         result.issues.append(f"BIMI SVG not accessible: HTTP {resp.status_code}")
-                except Exception:
-                    result.issues.append("BIMI SVG fetch timeout or error")
+                except httpx.InvalidURL:
+                    # urllib took it apart, httpx does not: 0177.0.0.1, a host with a space
+                    result.issues.append(f"BIMI logo URL is malformed ({result.svg_url!r}) — not fetched")
+                except httpx.TransportError as e:
+                    unanswered = _unanswered(result.svg_url, e)
+                    if unanswered:
+                        raise unanswered from e
+                    result.issues.append(
+                        f"BIMI logo host {urlsplit(result.svg_url).hostname} does not exist in DNS — "
+                        "the logo cannot be fetched"
+                    )
+                except httpx.HTTPError as e:
+                    # An answer that could not be read (a body that does not decode)
+                    result.issues.append(f"BIMI SVG not accessible: {type(e).__name__}")
 
             if result.vmc_present:
                 result.score += 8
@@ -971,63 +1283,168 @@ def check_bimi(domain: str) -> BIMIResult:
     return result
 
 
+# RFC 8461 §3.1: the record begins with v=STSv1, then ';' (spaces around it
+# allowed) or nothing more
+_STS_RECORD = re.compile(r"v=STSv1[ \t]*(;|$)")
+_STS_ID = re.compile(r"[A-Za-z0-9]{1,32}")
+# §3.2: max_age is 1 to 10 digits, at most 31557600 seconds (about a year)
+_STS_MAX_AGE = re.compile(r"[0-9]{1,10}")
+_STS_MAX_AGE_LIMIT = 31557600
+
+
+def _mta_sts_policy(text: str) -> tuple[str, list[str]]:
+    """The mode of an MTA-STS policy file and what makes it invalid (RFC 8461 §3.2).
+
+    `key: value` lines ending in CRLF or LF; mx may repeat, unknown keys are
+    ignored. A policy needs version STSv1, a mode, max_age, and at least one
+    mx in enforce or testing mode: senders discard one that lacks any of them.
+    """
+    fields: dict[str, str] = {}
+    mx: list[str] = []
+    for line in text.splitlines():
+        key, colon, value = line.partition(":")
+        if not colon:
+            continue
+        key, value = key.strip(), value.strip()
+        if key == "mx":
+            mx.append(value)
+        else:
+            fields.setdefault(key, value)
+
+    problems = []
+    version = fields.get("version")
+    if version is None:
+        problems.append("no version: STSv1")
+    elif version != "STSv1":
+        problems.append(f"version: {version} is not STSv1")
+    mode = fields.get("mode", "")
+    if not mode:
+        problems.append("no mode")
+    elif mode not in ("enforce", "testing", "none"):
+        problems.append(f"mode: {mode} is not enforce, testing or none")
+    max_age = fields.get("max_age")
+    if max_age is None:
+        problems.append("no max_age")
+    elif not _STS_MAX_AGE.fullmatch(max_age) or int(max_age) > _STS_MAX_AGE_LIMIT:
+        problems.append(f"max_age: {max_age} is not a number of seconds up to {_STS_MAX_AGE_LIMIT}")
+    if mode in ("enforce", "testing") and not any(mx):
+        problems.append(f"no mx, which mode {mode} requires")
+    return mode, problems
+
+
 @_unless_dns_fails("MTA-STS", MTASTSResult)
 def check_mta_sts(domain: str) -> MTASTSResult:
     result = MTASTSResult()
-    records = _query_txt(f"_mta-sts.{domain}")
+    name = f"_mta-sts.{domain}"
+    records = _query_txt(name)
 
-    for record in records:
-        if "v=STSv1" in record:
-            result.present = True
+    # RFC 8461 §3.1: records that do not begin with v=STSv1 are discarded, and
+    # with none or several left, or one that is invalid, senders look for no
+    # policy: there is nothing to fetch
+    announced = [record for record in records if _STS_RECORD.match(record)]
+    if not announced:
+        if any("v=STSv1" in record for record in records):
+            result.issues.append(
+                f"MTA-STS record on {name} does not begin with v=STSv1 — senders ignore it (RFC 8461 §3.1)"
+            )
+        else:
+            result.issues.append("No MTA-STS configured")
+        return result
+    if len(announced) > 1:
+        result.issues.append(
+            f"Multiple MTA-STS records ({len(announced)}) on {name} — senders apply no policy (RFC 8461 §3.1)"
+        )
+        return result
+    if not _STS_ID.fullmatch(_parse_tags(announced[0]).get("id", "")):
+        result.issues.append(
+            f"MTA-STS record on {name} has no valid id= (1 to 32 letters and digits) — "
+            "senders apply no policy (RFC 8461 §3.1)"
+        )
+        return result
 
-            try:
-                resp = httpx.get(
-                    f"https://mta-sts.{domain}/.well-known/mta-sts.txt",
-                    timeout=5
-                )
-                if resp.status_code == 200:
-                    for line in resp.text.splitlines():
-                        if line.startswith("mode:"):
-                            result.mode = line.split(":")[1].strip()
-                    if result.mode == "enforce":
-                        result.score += 5
-                    elif result.mode == "testing":
-                        result.score += 2
-                        result.issues.append("MTA-STS in testing mode — upgrade to enforce")
-                    elif result.mode == "none":
-                        # RFC 8461 §5: a valid mode, the one that withdraws the policy
-                        result.issues.append("MTA-STS mode none — policy disabled, upgrade to enforce")
-                    else:
-                        result.issues.append(f"MTA-STS mode unknown: {result.mode}")
-                else:
-                    # The TXT record alone does nothing: senders need the policy
-                    result.issues.append(f"MTA-STS policy file not accessible: HTTP {resp.status_code}")
-            except Exception:
-                result.issues.append("MTA-STS policy file not accessible")
-            break
+    result.present = True
+    url = f"https://mta-sts.{domain}/.well-known/mta-sts.txt"
+    try:
+        resp = httpx.get(url, timeout=5)
+    except httpx.TransportError as e:
+        unanswered = _unanswered(url, e)
+        if unanswered:
+            raise unanswered from e
+        result.issues.append(
+            f"MTA-STS policy host mta-sts.{domain} does not exist in DNS — senders find no policy"
+        )
+        return result
+    except httpx.HTTPError as e:
+        # An answer that could not be read (a body that does not decode)
+        result.issues.append(f"MTA-STS policy file not accessible: {type(e).__name__}")
+        return result
 
-    if not result.present:
-        result.issues.append("No MTA-STS configured")
+    if resp.status_code != 200:
+        # The TXT record alone does nothing: senders need the policy
+        result.issues.append(f"MTA-STS policy file not accessible: HTTP {resp.status_code}")
+        return result
+
+    mode, problems = _mta_sts_policy(resp.text)
+    if problems:
+        result.issues.append(
+            f"MTA-STS policy is invalid — {'; '.join(problems)}: senders apply no policy (RFC 8461 §3.2)"
+        )
+    elif mode == "enforce":
+        result.mode = mode
+        result.score += 5
+    elif mode == "testing":
+        result.mode = mode
+        result.score += 2
+        result.issues.append("MTA-STS in testing mode — upgrade to enforce")
+    else:
+        # RFC 8461 §5: a valid mode, the one that withdraws the policy
+        result.mode = mode
+        result.issues.append("MTA-STS mode none — policy disabled, upgrade to enforce")
 
     return result
+
+
+# RFC 8460 §3: the record begins with v=TLSRPTv1, then ';' or nothing more;
+# rua lists URIs, separated by commas, and only mailto: and https: are defined
+_TLSRPT_RECORD = re.compile(r"v=TLSRPTv1[ \t]*(;|$)")
+_TLSRPT_URI = re.compile(r"(mailto|https):\S+", re.IGNORECASE)
 
 
 @_unless_dns_fails("TLS-RPT", TLSRPTResult)
 def check_tls_rpt(domain: str) -> TLSRPTResult:
     result = TLSRPTResult()
-    records = _query_txt(f"_smtp._tls.{domain}")
+    name = f"_smtp._tls.{domain}"
+    # RFC 8460 §3: records that do not begin with v=TLSRPTv1 are discarded,
+    # and with any number left but one senders assume there is no TLS-RPT
+    records = [record for record in _query_txt(name) if _TLSRPT_RECORD.match(record)]
 
-    for record in records:
-        if "v=TLSRPTv1" in record:
-            result.present = True
-            if "rua=" in record:
-                result.rua = record.split("rua=")[-1].split(";")[0].strip()
-            result.score += 3
-            break
-
-    if not result.present:
+    if not records:
         result.issues.append("No TLS-RPT configured")
+        return result
+    if len(records) > 1:
+        result.issues.append(
+            f"Multiple TLS-RPT records ({len(records)}) on {name} — senders assume the domain "
+            "has no TLS-RPT (RFC 8460 §3)"
+        )
+        return result
 
+    # The rua tag, not the text after the last 'rua=': a URI can hold one
+    result.rua = _parse_tags(records[0]).get("rua", "")
+    uris = [uri.strip() for uri in result.rua.split(",") if uri.strip()]
+    if not uris:
+        result.issues.append(f"TLS-RPT record on {name} has no rua — it names nobody to send reports to (RFC 8460 §3)")
+        return result
+    invalid = [uri for uri in uris if not _TLSRPT_URI.fullmatch(uri)]
+    if len(invalid) == len(uris):
+        result.issues.append(
+            f"TLS-RPT rua={result.rua} is not a mailto: or https: URI — no reports can be sent (RFC 8460 §3)"
+        )
+        return result
+    for uri in invalid:
+        result.issues.append(f"TLS-RPT rua entry {uri!r} is not a mailto: or https: URI — no reports go there")
+
+    result.present = True
+    result.score += 3
     return result
 
 
@@ -1045,6 +1462,26 @@ MAX_SCORES = {
 MAX_RAW_SCORE = sum(MAX_SCORES.values())
 
 
+def _bimi_under_dmarc(bimi: BIMIResult, dmarc: DMARCResult) -> None:
+    """Withhold BIMI's points when DMARC does not enforce.
+
+    Mail clients display a BIMI logo only for mail under a DMARC policy of
+    quarantine or reject (the policy that applies to the domain, sp= included):
+    with p=none, or no DMARC, the logo and its VMC are never shown. A DMARC
+    check that was not verified says nothing either way, and leaves no total.
+    """
+    if not bimi.score or dmarc.error:
+        return
+    if dmarc.present and dmarc.policy in ("quarantine", "reject"):
+        return
+    policy = f"p={dmarc.policy}" if dmarc.present else "absent"
+    bimi.issues.append(
+        f"BIMI logo is never displayed: DMARC policy is {policy}, and mail clients show BIMI "
+        "only under quarantine or reject — no BIMI points until DMARC enforces"
+    )
+    bimi.score = 0
+
+
 def analyze_domain(domain: str) -> DomainReport:
     """Run full email security analysis on a domain."""
     # Once, here: `Example.COM.` otherwise reached the keyservers as
@@ -1056,6 +1493,8 @@ def analyze_domain(domain: str) -> DomainReport:
     report.spf = check_spf(domain)
     report.dkim = check_dkim(domain)
     report.bimi = check_bimi(domain)
+    # The one check whose worth depends on another's result
+    _bimi_under_dmarc(report.bimi, report.dmarc)
     report.mta_sts = check_mta_sts(domain)
     report.tls_rpt = check_tls_rpt(domain)
 

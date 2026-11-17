@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "the BIMI logo host of dns/cnn_com.json (recorded 2026-10-07); its address was not recorded",
+  "changed": "an A answer for amplify.valimail.com with 192.0.2.10 (RFC 5737 TEST-NET-1): a host that exists, which is all the test needs to know about it"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "amplify.valimail.com. IN A",
+   ";ANSWER",
+   "amplify.valimail.com. 300 IN A 192.0.2.10",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

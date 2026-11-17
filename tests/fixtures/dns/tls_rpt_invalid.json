@@ -1,0 +1,53 @@
+{
+ "_derived": {
+  "from": "dns/proton_me.json, _smtp._tls.protonmail.ch. TXT (recorded 2026-10-09): \"v=TLSRPTv1; rua=https://reports.proton.me/reports/smtptls\"",
+  "changed": "published under _smtp._tls.<case>.example.com, one name per case: no-rua is \"v=TLSRPTv1;\"; two-records has the record and a second one with rua=mailto:tls@example.com; rua-in-url has rua=https://x.example/?rua=1; (a second 'rua=' inside the URI); rua-no-scheme has rua=tls@example.com, an address without mailto:"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_smtp._tls.no-rua.example.com. IN TXT",
+   ";ANSWER",
+   "_smtp._tls.no-rua.example.com. 300 IN TXT \"v=TLSRPTv1;\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_smtp._tls.two-records.example.com. IN TXT",
+   ";ANSWER",
+   "_smtp._tls.two-records.example.com. 300 IN TXT \"v=TLSRPTv1; rua=https://reports.proton.me/reports/smtptls\"",
+   "_smtp._tls.two-records.example.com. 300 IN TXT \"v=TLSRPTv1; rua=mailto:tls@example.com\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_smtp._tls.rua-in-url.example.com. IN TXT",
+   ";ANSWER",
+   "_smtp._tls.rua-in-url.example.com. 300 IN TXT \"v=TLSRPTv1; rua=https://x.example/?rua=1;\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_smtp._tls.rua-no-scheme.example.com. IN TXT",
+   ";ANSWER",
+   "_smtp._tls.rua-no-scheme.example.com. 300 IN TXT \"v=TLSRPTv1; rua=tls@example.com\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
