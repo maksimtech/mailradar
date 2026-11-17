@@ -50,6 +50,9 @@ class SPFResult:
     permissive: bool = False
     # RFC 7208 §2.6.7: the record cannot be evaluated, receivers apply no SPF
     permerror: bool = False
+    # DNS lookups the evaluation needs (§4.6.4), past the limit when permerror
+    # says so; None when they were not counted, which is not 0
+    lookups: int | None = None
     raw: str = ""
     score: int = 0
     # Set when a DNS lookup failed: the check then says nothing either way
@@ -519,6 +522,8 @@ def _spf_all(terms: list[tuple[str, str, str]]) -> str:
     return ""
 
 
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+
 # RFC 7208 §4.6.4: the terms that cost a DNS query, and how many of them one
 # evaluation may make, nested include: and redirect= counted in
 _SPF_LOOKUP_TERMS = frozenset({"include", "a", "mx", "ptr", "exists", "redirect"})
@@ -547,15 +552,44 @@ def _spf_record_of(name: str) -> str | None:
     return records[0] if len(records) == 1 else None
 
 
-def _spf_lookups(record: str, count: int = 0) -> int:
+def _spf_network(name: str, rest: str) -> tuple[str, IPNetwork] | None:
+    """`ip4:`/`ip6:` as (the value as written, the network it authorises).
+
+    RFC 7208 §5.6 compares only the first prefix-length bits, so a value
+    written from an inner address authorises the whole network around it:
+    `strict=False` is the receiver's reading. None for any other term, and
+    for a value that is not an address of that family.
+    """
+    if name not in ("ip4", "ip6") or not rest.startswith(":"):
+        return None
+    value = rest[1:]
+    try:
+        network = ipaddress.ip_network(value, strict=False)
+    except ValueError:
+        return None
+    if network.version != (4 if name == "ip4" else 6):
+        return None
+    return value, network
+
+
+def _spf_lookups(record: str, count: int = 0,
+                 nested_networks: list[tuple[str, IPNetwork]] | None = None) -> int:
     """
     DNS lookups the evaluation of `record` needs, including those of the
     records it pulls in. It stops as soon as the limit is passed, which is
     also what ends an include loop.
+
+    `nested_networks`, when given, collects the ranges that pass in the
+    records pulled in, with the include or redirect that holds them: the
+    records are fetched here for the count already, so the comparison with
+    the top record costs no query of its own. Only through an include that
+    passes: `?include:`, `~include:` and `-include:` match with their own
+    qualifier (RFC 7208 §5.2), so what they list authorises nothing, and
+    neither does anything further down them.
     """
     terms = _spf_terms(record)
     redirect = _spf_redirect(terms)
-    for _, name, rest in terms:
+    for qualifier, name, rest in terms:
         if name not in _SPF_LOOKUP_TERMS or (name == "redirect" and not redirect):
             continue
         count += 1
@@ -564,10 +598,62 @@ def _spf_lookups(record: str, count: int = 0) -> int:
         target = _spf_domain(rest) if name in ("include", "redirect") else ""
         nested = _spf_record_of(target) if target else None
         if nested:
-            count = _spf_lookups(nested, count)
+            passes = name == "redirect" or qualifier in ("", "+")
+            collected = nested_networks if passes else None
+            if collected is not None:
+                via = f"{name}{':' if name == 'include' else '='}{target}"
+                for term_qualifier, term, term_rest in _spf_terms(nested):
+                    found = _spf_network(term, term_rest) if term_qualifier in ("", "+") else None
+                    if found:
+                        collected.append((via, found[1]))
+            count = _spf_lookups(nested, count, collected)
             if count > SPF_MAX_LOOKUPS:
                 return count
     return count
+
+
+def _within(inner: IPNetwork, outer: IPNetwork) -> bool:
+    """`inner` lies inside `outer`; never across address families."""
+    if isinstance(inner, ipaddress.IPv4Network) and isinstance(outer, ipaddress.IPv4Network):
+        return inner.subnet_of(outer)
+    if isinstance(inner, ipaddress.IPv6Network) and isinstance(outer, ipaddress.IPv6Network):
+        return inner.subnet_of(outer)
+    return False
+
+
+def _spf_range_issues(terms: list[tuple[str, str, str]],
+                      nested_networks: list[tuple[str, IPNetwork]]) -> list[str]:
+    """What the record's own ranges say beyond what they authorise.
+
+    A range written from an inner address (qnap.com: ip4:113.196.74.98/27)
+    authorises the whole block, whatever was meant; a range a record it pulls
+    in already authorises is listed twice. Neither changes the verdict.
+    """
+    issues = []
+    for qualifier, name, rest in terms:
+        found = _spf_network(name, rest)
+        if not found:
+            continue
+        value, network = found
+        # The address written against the network's first: comparing the text
+        # would report 2001:DB8::/64, which is aligned and only spelled otherwise
+        written = ipaddress.ip_address(value.split("/")[0])
+        if "/" in value and written != network.network_address:
+            size = (f"{network.num_addresses} addresses" if network.version == 4
+                    else f"a /{network.prefixlen}")
+            issues.append(
+                f"SPF {name}:{value} is written from an address inside the range — "
+                f"it authorises all of {network} ({size}), not {value.split('/')[0]} alone"
+            )
+        if qualifier not in ("", "+"):
+            continue
+        for via, wider in nested_networks:
+            if _within(network, wider):
+                issues.append(
+                    f"SPF {name}:{value} is already authorised by {via} ({wider}) — redundant"
+                )
+                break
+    return issues
 
 
 @_unless_dns_fails("SPF", SPFResult)
@@ -593,7 +679,9 @@ def check_spf(domain: str) -> SPFResult:
     terms = _spf_terms(records[0])
     result.all_mechanism = _spf_all(terms)
 
-    if _spf_lookups(records[0]) > SPF_MAX_LOOKUPS:
+    nested_networks: list[tuple[str, IPNetwork]] = []
+    result.lookups = _spf_lookups(records[0], 0, nested_networks)
+    if result.lookups > SPF_MAX_LOOKUPS:
         result.permerror = True
         result.issues.append(
             f"SPF needs more than {SPF_MAX_LOOKUPS} DNS lookups — permerror, receivers apply no SPF"
@@ -616,6 +704,12 @@ def check_spf(domain: str) -> SPFResult:
         via = f" via redirect={target}"
 
     _apply_spf_verdict(result, terms, via)
+    result.issues.extend(_spf_range_issues(terms, nested_networks))
+    if result.lookups == SPF_MAX_LOOKUPS:
+        result.issues.append(
+            f"SPF needs {SPF_MAX_LOOKUPS} of {SPF_MAX_LOOKUPS} DNS lookups — at the limit, "
+            "one more include, a or mx makes it a permerror"
+        )
     return result
 
 

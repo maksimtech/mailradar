@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "SPF record replaced by one whose ip4 and ip6 values are not addresses of their family: a name, an IPv6 network under ip4, an IPv4 network under ip6"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 ip4:mail.example.com/27 ip4:2001:db8::1/64 ip6:192.0.2.98/27 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

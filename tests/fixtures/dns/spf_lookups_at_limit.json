@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "SPF record replaced by one with exactly ten terms that each cost a DNS lookup (RFC 7208 §4.6.4): a, mx and exists, none of which the count follows"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 a mx a:a1.example.com a:a2.example.com a:a3.example.com mx:m1.example.com mx:m2.example.com exists:%{i}.e1.example.com exists:%{i}.e2.example.com a:a4.example.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

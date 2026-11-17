@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "SPF record replaced by one whose ip4 and ip6 ranges start at their first address, and a single address with no prefix length; one ip6 range is written in capitals and with a zero group spelled out, which is the same network in another spelling"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 ip4:198.51.100.7 ip6:2001:db8::/64 ip6:2001:DB8:0:1::/64 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

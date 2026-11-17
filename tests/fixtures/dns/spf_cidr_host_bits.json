@@ -1,0 +1,19 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "SPF record replaced by one whose ip4 and ip6 ranges are written from an address inside the range, not from its first address: as qnap.com writes ip4:113.196.74.98/27 (seen 2026-11-16), with documentation addresses (RFC 5737, RFC 3849)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.98/27 ip6:2001:db8::1/64 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
