@@ -141,7 +141,8 @@ def test_law_check_failure_does_not_change_exit_code(monkeypatch):
 
 
 def test_report_command_cites_too(eurlex):
-    with patch("mailradar.checker.analyze_domain", return_value=_report()):
+    with patch("mailradar.checker.domain_exists", return_value=True), \
+            patch("mailradar.checker.analyze_domain", return_value=_report()):
         out = runner.invoke(app, ["report", "example.com"])
 
     assert out.exit_code == 0, out.output

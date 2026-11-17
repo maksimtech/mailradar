@@ -2,9 +2,11 @@
 MailRadar — Email address discovery via Certificate Transparency (crt.sh).
 """
 
+import ipaddress
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 
@@ -16,20 +18,112 @@ class DiscoveryResult:
     candidates: list[str] = field(default_factory=list)  # guessed, unverified
     sources: dict = field(default_factory=dict)
     gpg_capable: list[str] = field(default_factory=list)
+    # Addresses no keyserver answered for (HTTP 429, a timeout): neither with a key nor without
+    gpg_unverified: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
+# RFC 5322 §3.2.3 atext, plus the letters and digits of other scripts that
+# RFC 6532 allows in a local part: o'brien, josé.dpo
+_ATEXT = r"A-Za-z0-9!#$%&'*+/=?^_`{|}~\-"
+_ATOM_CHAR = rf"(?:[{_ATEXT}]|[^\x00-\x7f\W])"
+_DOT_ATOM = re.compile(rf"{_ATOM_CHAR}+(?:\.{_ATOM_CHAR}+)*")
+# atext that RFC 5322 allows in a local part, but that in a page or a URL ends
+# whatever comes before an address: /contact/info@, ?email=info@, 'info@'
+_DELIMITERS = re.compile(r"[/=?{}|`]")
+# mailto: values are URLs: mailto:%20dpo@ is dpo@, mailto:Privacy%40 is Privacy@
+_MAILTO = re.compile(r"mailto:([^\s\"'<>]+)", re.IGNORECASE)
+
+
 def _extract_emails_from_text(text: str, domain: str) -> list[str]:
-    """Extract email addresses for a specific domain from text."""
-    # The domain must not continue past the name: this excludes
-    # example.community and
-    # example.com.evil.org, ma accetta un punto finale di frase ("info@example.com.")
+    """
+    Extract email addresses for a specific domain from text, each whole.
+
+    The local part is RFC 5322's dot-atom, read to its first character: a
+    narrower class cut `o'brien@` to `brien@` and `josé.dpo@` to `.dpo@`, and
+    reported the cut. A local part that is not a dot-atom is not reported.
+    """
+    text = _MAILTO.sub(lambda m: "mailto:" + unquote(m.group(1)), text)
+    # The run of local-part characters before the @, from its first one; the
+    # domain must not continue past the name: this excludes
+    # example.community and example.com.evil.org, but accepts a full stop
+    # ending a sentence ("info@example.com.")
     pattern = (
-        rf'[a-zA-Z0-9._%+\-]+@{re.escape(domain)}'
-        r'(?![a-zA-Z0-9\-]|\.[a-zA-Z0-9])'
+        rf"(?<![{_ATEXT}.]|[^\x00-\x7f\W])((?:{_ATOM_CHAR}|\.)+)@{re.escape(domain)}"
+        r"(?![a-zA-Z0-9\-]|\.[a-zA-Z0-9])"
     )
-    found = re.findall(pattern, text, re.IGNORECASE)
-    return list({e.lower() for e in found})
+    found = set()
+    for run in re.findall(pattern, text, re.IGNORECASE):
+        local = _DELIMITERS.split(run)[-1].lstrip("'")
+        if _DOT_ATOM.fullmatch(local):
+            found.add(f"{local}@{domain}".lower())
+    return list(found)
+
+
+# ─── Redirects, followed by hand ─────────────────────────────────────────────
+
+_REDIRECTS = frozenset({301, 302, 303, 307, 308})
+MAX_REDIRECTS = 5
+
+
+class RedirectRefused(Exception):
+    """A redirect to somewhere discover does not go: not https, or not a public address."""
+
+
+def _addresses_are_global(host: str) -> bool:
+    """Every address DNS gives for `host` is a public one (and there is at least one)."""
+    import dns.exception
+    import dns.resolver
+
+    addresses = []
+    for rdtype in ("A", "AAAA"):
+        try:
+            addresses += [rdata.address for rdata in dns.resolver.resolve(host, rdtype)]
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            continue
+        except dns.exception.DNSException:
+            return False
+    return bool(addresses) and all(ipaddress.ip_address(address).is_global for address in addresses)
+
+
+def _may_follow(target: str, origin: str) -> bool:
+    """Whether discover follows a redirect to `target`, from a request first made to `origin`.
+
+    https only. An address must be a public one. A name in the registrable
+    domain of the first request is followed as that request was; any other name
+    only if every address it has is public. httpx followed every redirect,
+    `http://127.0.0.1` included: a page, or anyone on the path, could point the
+    tool at the network it runs from.
+    """
+    from mailradar.checker import organizational_domain
+
+    parts = urlsplit(target)
+    if parts.scheme.lower() != "https" or not parts.hostname:
+        return False
+    host = parts.hostname.rstrip(".").lower()
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        pass
+    first = (urlsplit(origin).hostname or "").rstrip(".").lower()
+    if first and organizational_domain(host) == organizational_domain(first):
+        return True
+    return _addresses_are_global(host)
+
+
+def _get(url: str, **kwargs) -> httpx.Response:
+    """httpx.get with its redirects followed by hand, each one past _may_follow; RedirectRefused otherwise."""
+    origin = url
+    for _ in range(MAX_REDIRECTS + 1):
+        resp = httpx.get(url, follow_redirects=False, **kwargs)
+        if resp.status_code not in _REDIRECTS:
+            return resp
+        location = resp.headers.get("location") or ""
+        target = urljoin(url, location) if location else ""
+        if not target or not _may_follow(target, origin):
+            raise RedirectRefused(f"redirect from {url} to {target or 'nowhere'} not followed")
+        url = target
+    raise RedirectRefused(f"more than {MAX_REDIRECTS} redirects from {origin}")
 
 
 def _discover_subdomains_via_crtsh(domain: str) -> list[str]:
@@ -43,7 +137,7 @@ def _discover_subdomains_via_crtsh(domain: str) -> list[str]:
     for _attempt in range(3):
         try:
             url = f"https://crt.sh/?q=%.{domain}&output=json"
-            resp = httpx.get(url, timeout=20, follow_redirects=True)
+            resp = _get(url, timeout=20)
 
             if resp.status_code != 200 or not resp.content:
                 time.sleep(2)
@@ -101,10 +195,9 @@ def _discover_via_website(domain: str, extra_subdomains: list[str] | None = None
 
     for url in pages:
         try:
-            resp = httpx.get(
+            resp = _get(
                 url,
                 timeout=5,
-                follow_redirects=True,
                 headers={"User-Agent": "MailRadar/1.0 (+https://github.com/maksimtech/mailradar)"},
             )
             if resp.status_code == 200:
@@ -126,14 +219,15 @@ def _discover_via_dns(domain: str) -> list[str]:
     try:
         answers = dns.resolver.resolve(domain, "SOA")
         for r in answers:
+            # An SOA rname uses its first label boundary where an address has
+            # the @: hostmaster.tplfvg.it is hostmaster@tplfvg.it. By labels,
+            # not by the first dot of the text: RFC 1035 §8 writes a dot inside
+            # the local part as \., and john\.doe.example.com. is
+            # john.doe@example.com — split on the text, it matched no domain.
+            labels = [label.decode("utf-8", errors="replace") for label in r.rname.labels if label]
             # DNS names are case-insensitive: Hostmaster.Example.COM. counts
-            rname = str(r.rname).rstrip(".").lower()
-            # An SOA rname uses its first dot where an address has the @:
-            # hostmaster.tplfvg.it is hostmaster@tplfvg.it
-            parts = rname.split(".", 1)
-            if len(parts) == 2 and parts[1] == domain.lower():
-                email = f"{parts[0]}@{parts[1]}"
-                emails.append(email.lower())
+            if len(labels) >= 2 and ".".join(labels[1:]).lower() == domain.lower():
+                emails.append(f"{labels[0]}@{'.'.join(labels[1:])}".lower())
     except Exception:
         pass
 
@@ -159,7 +253,7 @@ def _discover_via_whois(domain: str) -> list[str]:
     emails = []
     try:
         url = f"https://rdap.org/domain/{domain}"
-        resp = httpx.get(url, timeout=10, follow_redirects=True)
+        resp = _get(url, timeout=10)
 
         if resp.status_code == 200:
             text = resp.text
@@ -219,15 +313,22 @@ def _discover_common_contacts(domain: str) -> list[str]:
     return [f"{prefix}@{domain}" for prefix in common]
 
 
-def _check_gpg_for_emails(emails: list[str]) -> list[str]:
-    """Check which emails have GPG public keys on keyservers."""
+def _check_gpg_for_emails(emails: list[str]) -> tuple[list[str], list[str]]:
+    """(the addresses with a GPG key on a keyserver, those no keyserver answered for), in `emails` order.
+
+    The second list used to be dropped: when the keyservers did not answer,
+    discover said "No GPG public keys found".
+    """
     from mailradar.gpg import lookup_gpg_by_email
     # In parallel: each address queries up to three keyservers with a 15s
     # timeout, which in sequence would be minutes.
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(lookup_gpg_by_email, emails))
 
-    return [email for email, r in zip(emails, results, strict=True) if r.found]
+    pairs = list(zip(emails, results, strict=True))
+    found = [email for email, r in pairs if r.found]
+    unverified = [email for email, r in pairs if not r.found and r.error]
+    return found, unverified
 
 
 def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
@@ -273,6 +374,6 @@ def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
     # GPG is checked on the candidates too: a public key for security@ is worth
     to_check = result.emails + result.candidates
     if check_gpg and to_check:
-        result.gpg_capable = _check_gpg_for_emails(to_check)
+        result.gpg_capable, result.gpg_unverified = _check_gpg_for_emails(to_check)
 
     return result

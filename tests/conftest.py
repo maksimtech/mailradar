@@ -83,13 +83,14 @@ def http_replay(monkeypatch, trusted_ca):
 
 @pytest.fixture
 def smtp_server():
-    """smtp_server(mode, context=None) — a real SMTPServer on 127.0.0.1, closed when the test ends."""
+    """smtp_server(mode, context=None, replies=None, refused=()) — a real SMTPServer on 127.0.0.1,
+    closed when the test ends."""
     from tests.replay import SMTPServer
 
     servers = []
 
-    def start(mode: str, context=None):
-        server = SMTPServer(mode, context)
+    def start(mode: str, context=None, replies=None, refused=()):
+        server = SMTPServer(mode, context, replies=replies, refused=refused)
         servers.append(server)
         return server
 

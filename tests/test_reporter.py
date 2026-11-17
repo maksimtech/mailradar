@@ -1,4 +1,6 @@
 """Tests for report generation."""
+import pytest
+
 from mailradar.checker import (
     BIMIResult,
     DKIMResult,
@@ -64,12 +66,25 @@ class TestGenerateReport:
         text = generate_report(report, lang="it")
         assert "example.com" in text
 
-    def test_generate_report_fallback_to_english(self):
-        """Unknown language falls back to English."""
-        report = make_report()
-        text = generate_report(report, lang="xx")
-        assert "example.com" in text
-        assert "DMARC" in text
+    def test_an_unknown_language_is_refused(self):
+        """It fell back to English, and the caller saved the letter as _xx.txt."""
+        with pytest.raises(ValueError, match="it, en"):
+            generate_report(make_report(), lang="xx")
+
+    def test_a_missing_template_is_an_error_not_another_language(self, tmp_path, monkeypatch):
+        """`except Exception` sent whatever went wrong with the Italian template to the English one."""
+        import shutil
+
+        from jinja2 import TemplateNotFound
+
+        from mailradar import reporter
+        shutil.copy(reporter.TEMPLATES_DIR / "report_en.j2", tmp_path / "report_en.j2")
+        monkeypatch.setattr(reporter, "TEMPLATES_DIR", tmp_path)
+        with pytest.raises(TemplateNotFound):
+            generate_report(make_report(), lang="it")
+
+    def test_the_language_is_read_whatever_its_case(self):
+        assert generate_report(make_report(), lang="IT") == generate_report(make_report(), lang="it")
 
 
 def _section(text: str, start: str) -> str:
@@ -147,3 +162,92 @@ class TestReportSaysWhatWasFound:
         report = _analysed("inps.it")
         for lang in ("it", "en"):
             assert "\n\n\n" not in generate_report(report, lang=lang)
+
+
+# ─── What the letter claims ──────────────────────────────────────────────────
+
+GDPR_GAP = {"it": "lacuna documentabile", "en": "documentable gap"}
+
+
+def _clean() -> DomainReport:
+    """Nothing the letter calls a problem: strict DMARC, SPF -all, a 2048-bit key; BIMI, MTA-STS, TLS-RPT absent."""
+    return make_report(score=90, grade="EXCELLENT")
+
+
+class TestLetterClaims:
+
+    def test_a_clean_domain_is_not_told_it_has_an_article_32_gap(self):
+        """Owner's decision: the art. 32 paragraph only in a letter that lists actual problems."""
+        for lang, gap in GDPR_GAP.items():
+            assert gap not in generate_report(_clean(), lang=lang)
+
+    def test_a_domain_with_a_problem_still_is(self):
+        report = make_report(score=35, grade="POOR")
+        report.dmarc = DMARCResult(present=False, issues=["No DMARC record found — domain is spoofable"])
+        for lang, gap in GDPR_GAP.items():
+            assert gap in generate_report(report, lang=lang)
+
+    def test_no_published_pgp_key_is_no_article_32_gap(self):
+        """make_report has no GPG key: on its own that is a suggestion, not a gap."""
+        report = _clean()
+        assert not report.gpg.found
+        for lang, gap in GDPR_GAP.items():
+            assert gap not in generate_report(report, lang=lang)
+
+    def test_a_malformed_ed25519_key_is_not_told_to_upgrade_to_rsa(self, dns_replay):
+        """dkim_ed25519_malformed.json (derived): k=ed25519 with three bytes for a key."""
+        from mailradar.checker import check_dkim
+        dns_replay("dkim_ed25519_malformed")
+        report = make_report()
+        report.dkim = check_dkim("archlinux.org", selectors=["dkim-ed25519"])
+        en = _section(generate_report(report, lang="en"), "DKIM —")
+        it = _section(generate_report(report, lang="it"), "DKIM —")
+        assert "RSA" not in en.split("Recommended:")[1].split("\n")[0]
+        assert "RSA" not in it.split("Raccomandato:")[1].split("\n")[0]
+        assert "malformed" in en.lower()
+        assert "malformata" in it.lower()
+
+    def test_a_declined_bimi_is_not_called_an_error_nor_corrected(self, dns_replay):
+        """icloud.com publishes `v=BIMI1; l=; a=;` (recorded): how a domain says it does not take part."""
+        from mailradar.checker import check_bimi
+        dns_replay("icloud_com")
+        report = make_report(domain="icloud.com")
+        report.bimi = check_bimi("icloud.com")
+        for lang, error in (("en", "with errors"), ("it", "con errori")):
+            section = _section(generate_report(report, lang=lang), "BIMI/VMC —")
+            assert error not in section
+            assert "l=https://" not in section
+            assert "v=BIMI1; l=; a=;" in section
+
+    def test_an_incomplete_analysis_has_no_score_of_none(self):
+        report = make_report(score=None, grade="N/A")
+        for lang in ("it", "en"):
+            assert "None/100" not in generate_report(report, lang=lang)
+
+
+class TestSPFNotes:
+    """SPFResult.notes: findings that are not problems (a range from an inner address, a redundant range,
+    10 lookups of 10). Listed in the letter, never turning the section into "Action required"."""
+
+    NOTE = "SPF ip4:192.0.2.98/27 is written from an address inside the range — it authorises all of 192.0.2.96/27"
+
+    def _report(self) -> DomainReport:
+        report = make_report()
+        report.spf = SPFResult(present=True, all_mechanism="-all", raw="v=spf1 ip4:192.0.2.98/27 -all", score=20,
+                               issues=[], notes=[self.NOTE])
+        return report
+
+    def test_a_note_is_written_under_spf(self):
+        for lang, label in (("en", "Note:"), ("it", "Nota:")):
+            section = _section(generate_report(self._report(), lang=lang), "SPF —")
+            assert f"{label} {self.NOTE}" in section
+
+    def test_a_note_does_not_make_the_section_an_action(self):
+        en = generate_report(self._report(), lang="en")
+        it = generate_report(self._report(), lang="it")
+        assert _section(en, "SPF —").startswith(" ✅ Properly configured")
+        assert _section(it, "SPF —").startswith(" ✅ Configurato correttamente")
+
+    def test_a_note_is_not_an_article_32_gap(self):
+        for lang, gap in GDPR_GAP.items():
+            assert gap not in generate_report(self._report(), lang=lang)

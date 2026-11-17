@@ -206,6 +206,135 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   so does a connection that fails because DNS has no address for the host (`mta-sts.<domain>` never
   set up), which is checked with one A/AAAA query after the failure.
 
+- **Informational SPF findings are printed and written as notes.** `SPFResult.notes` holds what is not a
+  problem — a range written from an inner address, a range an include already authorises, 10 lookups of 10.
+  `check` prints them under "Notes", apart from the issues and through the same sanitising; the letter lists
+  them as "Note:"/"Nota:" in the SPF section, which stays "Properly configured" when they are all there is.
+
+### Changed
+
+- **A usage error exits 64, not 2.** Click exits 2 on an unknown option or a missing argument, and 2 is also
+  `check`'s grade CRITICAL: a script could not tell a wrong command line from a critical domain. Every usage
+  error, at any level and in every command, now exits 64 (EX_USAGE, sysexits.h), and so do the new refusals of
+  a value: `--lang de`, a URL or an address instead of a domain, `--sign` without `--from`. The grade codes
+  0-3 are unchanged; the README's table lists 64.
+
+- **`batch` exits with the worst code `check` would give.** It exited 0 whatever it found. It now exits with
+  the highest of the codes `check` would give each domain, a domain it skipped (not a domain, not in DNS,
+  analysis failed) counting 1 as in `check`: 0 only when every domain was analysed and graded GOOD or better,
+  2 when the worst is CRITICAL, 3 when an analysis could not be completed.
+
+- **No published GPG key is a suggestion, not a GDPR art. 32 gap.** Owner's decision: art. 32 asks for
+  measures appropriate to the risk, and a key on a keyserver is not one of them. `law_checker` no longer cites
+  art. 32 for it and prints a suggestion instead; the letter's art. 32 paragraph appears only when it lists a
+  problem with DMARC, SPF or DKIM, and not for a domain whose only findings are BIMI, MTA-STS, TLS-RPT, SPF
+  notes or the missing key.
+
+### Fixed
+
+- **`--sign` that fails stops the send.** A wrong passphrase, or no secret key for the address, sent the report
+  unsigned without a word (`sender.py`, the signature was used only if there was one), and `--sign` without
+  `--from` signed nothing and said nothing. A failed signature now ends `send` with exit code 1 and the reason;
+  `--sign` without `--from` is a usage error, refused before the analysis. The passphrase is asked before the
+  "Checking GPG keys and sending" spinner starts, not under it, where the status line was redrawn over the
+  prompt.
+
+- **SMTP failures are told apart, and a sent report counts as sent.** Every exception meant "try the next
+  address": a wrong password (535) cost five logins on five connections, which is how an account gets locked,
+  and a server that accepted the message after `DATA` but answered `QUIT` with 250 instead of 221 made
+  `SMTP.__exit__` raise, so the report was delivered five times and the user told it had not gone. Only a
+  refused recipient now moves on to the next address; authentication, TLS and connection errors end the
+  attempt at once and are reported with the server's answer. A message accepted after `DATA` is sent, whatever
+  `QUIT` gets back. Whenever delivery was configured and did not happen `send` exits 1, in every branch, and an
+  encrypted report whose SMTP delivery failed is no longer printed under "no SMTP configured".
+
+- **`send` can use STARTTLS.** `use_tls` was never set from the command line, so on port 587 the TLS handshake
+  met a plain-text greeting five times and the command exited 0. `--smtp-starttls` connects in plain text and
+  upgrades with STARTTLS, and port 587, the submission port (RFC 6409), uses it without being told; the
+  certificate and the host name are verified either way.
+
+- **`report`, `send` and `batch` check the name before analysing it.** Only `check` asked DNS whether the
+  domain exists: `report no-such-domain.example` wrote a letter grading it CRITICAL, and `send` would have
+  mailed security@ it. `report` and `send` now go through `check`'s handling — not found, no answer from DNS,
+  TLD variants to choose from — and `batch` reports a name that does not exist as failed, without prompting.
+  A URL (`https://example.com/`) or an address (`security@example.com`) is refused in every command, with the
+  host or the domain to pass instead.
+
+- **`send` and `discover` use the name as analysed.** `send StartPage.COM.` sent
+  `RCPT TO:<security@StartPage.COM.>` and titled its panels with the raw argument; `discover` queried crt.sh,
+  the website and RDAP with it. Both now use the lower-case name without the trailing dot.
+
+- **`--lang` is `it` or `en`, in any case.** On Windows `--lang IT` found `report_IT.j2`, since NTFS ignores
+  case, while the code compared `lang == "it"`: an Italian letter with English lines in it, saved as `_IT.txt`.
+  `--lang de` gave an English letter saved as `_de.txt`. Other values are now refused, and `generate_report`
+  no longer hides a template that is missing or broken behind `except Exception` and an English fallback.
+
+- **The Score column says what was measured, on each check's own scale.** A check whose lookup got no answer
+  showed 0; it shows `—`. Each check's points were coloured on the 0-100 scale of the total, so a perfect SPF
+  (20 of 20) came out red; they are coloured by their share of `MAX_SCORES[check]`.
+
+- **The letter says what was found.** A malformed Ed25519 DKIM key was told to "Upgrade to RSA 2048-bit"; the
+  letter now says the key is malformed and asks for it to be republished. A declined BIMI (`v=BIMI1; l=; a=;`)
+  was "present but with errors" with a record to publish; it is reported as the domain's choice, with no
+  recommendation. An incomplete analysis no longer reads "None/100". The mailed body no longer repeats the
+  "Subject:"/"Oggetto:" line under the Subject header; `report` still prints it, for whoever copies the letter.
+
+- **Records are printed as published.** Rich read `:100:` as the emoji shortcode for 💯, so
+  `ip6:2001:db8:100::/48` showed as `2001:db8💯:/48`, in the table and under `--verbose` alike. The console no
+  longer replaces emoji shortcodes.
+
+- **`discover` reports the keyservers that did not answer, and reads addresses whole.** A keyserver error was
+  dropped, so "No GPG public keys found" was printed when the keyservers had answered 429; those addresses are
+  now listed as not verified. The address pattern cut local parts — `o'brien@` to `brien@`, `josé.dpo@` to
+  `.dpo@`, `mailto:%20dpo@` to `%20dpo@` — and reported the cut: it now reads RFC 5322's dot-atom (with the
+  letters of other scripts RFC 6532 allows), decodes `mailto:` values, and leaves out a local part that is not
+  valid. An SOA contact with an escaped dot (`john\.doe.example.com.`, RFC 1035 §8) was dropped; it is
+  `john.doe@`.
+
+- **A keyserver index entry past its expiration date is not a key.** `_machine_readable` read the `r`, `d`
+  and `e` flags and ignored the expiration field: a key a keyserver had not flagged was taken although gpg
+  cannot encrypt to it.
+
+- **A 429 from keys.openpgp.org is not lost when keyserver.ubuntu.com answers.** The lookup returned the
+  unverified key and forgot that the keyserver that verifies addresses had not answered. `GPGResult.unanswered`
+  keeps it, the issues say a verified key may exist, and `send` repeats it when it refuses the key.
+
+### Security
+
+- **Text from outside no longer reaches the terminal as commands.** `rich.markup.escape` neutralises `[tag]`
+  and nothing else, and Rich strips only BEL, BS, VT, FF and CR: an ESC in a DNS TXT record, a keyserver's
+  answer or an MTA-STS policy went to the terminal as it was, in the table, the issues, `--verbose` and the
+  letter's panel. A record such as `v=spf1 \x1b[2J\x1b]8;;https://evil.example\x1b\click\x1b]8;;\x1b\ -all`
+  cleared the screen of whoever audited the domain and put a hyperlink in the output. C0 controls, DEL and C1
+  controls are now written out (`\x1b`) before anything from outside is printed, in `check`, `check -v`,
+  `batch`, `report`, `send` and `discover`, and in the letter that is saved or mailed.
+
+- **`send` encrypts on its own only to a key whose address was verified.** It encrypted to the first key any
+  keyserver listed, keyserver.ubuntu.com included, where anyone can upload a key under any address: the report
+  could go to whoever uploaded it. Owner's decision: a key from keys.openpgp.org (its owner confirmed the
+  address) is used as before; one from keyserver.ubuntu.com only with its fingerprint confirmed through the
+  new `--gpg-fingerprint` option, which must match the key found, and gpg then encrypts to that fingerprint and
+  no other. Without it nothing is sent, neither encrypted nor in plaintext, and `send` prints the fingerprint,
+  the reason and the report for a manual send, with exit code 1. Given when no key is found at all, the
+  option stops the send too, rather than letting it go in plaintext.
+
+- **`discover` follows redirects by hand, to public https only.** With `follow_redirects=True` on crt.sh, the
+  website pages and RDAP, a redirect could send the tool anywhere, `http://127.0.0.1` included. A redirect is
+  now followed only to `https://`, and only to a host of the same registrable domain as the first request or to
+  one whose addresses are all public; a 302 to `http://127.0.0.1:8080/admin` is not requested.
+
+- **`report --save` writes where it says, under a plain name.** The file name was built from the raw argument:
+  `x/../../../evil.com` wrote outside the current directory, `example.com:x` wrote an NTFS alternate data
+  stream, and `https://example.com/` ended in an uncaught OSError. The name is now
+  `mailradar_<domain>_<date>_<lang>.txt` in the current directory, `<domain>` the analysed name reduced to
+  `a-z`, `0-9`, `.` and `-`; a file that cannot be written is reported, with exit code 1.
+
+- **gpg stays local, and stops what it started.** Encrypting to a key that turned out unusable (expired,
+  say), gpg's default `auto-key-locate local,wkd` looked the address up through WKD at `openpgpkey.<domain>`,
+  and the dirmngr it started kept running after the throwaway homedir was deleted. `send` now passes
+  `--auto-key-locate clear,local` and `--no-auto-key-retrieve`, and runs `gpgconf --homedir <dir> --kill all`
+  before the homedir goes.
+
 ## [2026.47.1] - 2026-11-17
 
 ### Changed
