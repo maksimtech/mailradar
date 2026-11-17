@@ -1,0 +1,30 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"; dns/example_net.json for the name of the include",
+  "changed": "SPF record replaced by one that lists a range its own include also lists, as qnap.com lists ip4:113.196.74.98/27 both in its record and in include:_ac.qnap.com (seen 2026-11-16); the include's record is added, with documentation addresses (RFC 5737, RFC 3849); an ip6 range inside the include's ip6 range, and a -ip4 range inside the include's ip4 range, which denies rather than repeats"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 ip4:198.51.100.0/24 -ip4:192.0.2.200/29 ip6:2001:db8:1::/48 include:_spf.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.example.net. IN TXT",
+   ";ANSWER",
+   "_spf.example.net. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 ip6:2001:db8::/32 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

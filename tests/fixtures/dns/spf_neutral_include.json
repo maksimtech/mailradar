@@ -1,0 +1,30 @@
+{
+ "_derived": {
+  "from": "dns/spf_redundant_include.json",
+  "changed": "the include carries the ? qualifier: a match inside it makes the include itself match with neutral, not pass (RFC 7208 §5.2), so the range the domain lists on its own is the one that gives pass, not a repetition"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN TXT",
+   ";ANSWER",
+   "example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 ?include:_spf.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.example.net. IN TXT",
+   ";ANSWER",
+   "_spf.example.net. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

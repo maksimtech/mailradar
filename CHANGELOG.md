@@ -12,6 +12,21 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Added
+
+- **SPF says what its ranges authorise and how many lookups it spends.** Seen in qnap.com's record on
+  2026-11-16: `ip4:113.196.74.98/27` is written from an address inside the range, and RFC 7208 §5.6
+  compares only the first 27 bits, so all 32 addresses of 113.196.74.96/27 are authorised; the same
+  range is listed again in `include:_ac.qnap.com`. Both are now reported, with the range actually
+  authorised and the include that already holds it. The address written is compared with the
+  network's first, not the text, so an aligned range spelled otherwise (`2001:DB8::/64`) raises
+  nothing; and only an include that passes makes a range redundant, since `?include:`, `~include:`
+  and `-include:` match with their own qualifier (§5.2), as a `-ip4:` inside an include denies
+  rather than repeats. The lookup count, compared with the limit and then dropped, is kept in
+  `SPFResult.lookups` (None when not counted) and a record at 10 of 10 is reported: the next include
+  breaks it. The includes are compared with the record from the queries the count already makes, so
+  no DNS query is added. No score changes.
+
 ## [2026.47.1] - 2026-11-17
 
 ### Changed

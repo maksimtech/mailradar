@@ -313,6 +313,11 @@ neutral. Two SPF records on the domain, or more than 10 DNS lookups once
 SPF, and the check scores 0. MailRadar also flags `+a` and `+mx` mechanisms as
 too permissive.
 
+Three more findings change no points: a record at exactly 10 lookups, which the
+next `include:` breaks; an `ip4:` or `ip6:` range written from an address inside
+it (`ip4:192.0.2.98/27` authorises all of `192.0.2.96/27`, 32 addresses); and a
+range the domain lists although one of its own `include:` already authorises it.
+
 ### DKIM (up to 15 points)
 
 DKIM signs outgoing mail with a key published at
