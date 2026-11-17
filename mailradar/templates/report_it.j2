@@ -7,7 +7,11 @@ MailRadar (https://github.com/maksimtech/mailradar), strumento open source per
 l'audit della postura email, sono state rilevate le seguenti configurazioni
 che potrebbero richiedere attenzione.
 
+{% if total_score is none %}
+Score complessivo: N/A — analisi incompleta
+{% else %}
 Score complessivo: {{ total_score }}/100 — {{ grade }}
+{% endif %}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STATO ATTUALE → CONFIGURAZIONE RACCOMANDATA
@@ -33,12 +37,19 @@ SPF — ⚠️  Attenzione richiesta
 SPF — ✅ Configurato correttamente
   {{ spf_current }}
 {% endif %}
+{% for note in spf_notes %}
+  Nota: {{ note }}
+{% endfor %}
 
 {% if dkim_issues %}
 DKIM — ⚠️  Attenzione richiesta
 {% if not dkim_present %}
   Attuale:     {{ dkim_current }}
   Raccomandato: Pubblicare una chiave RSA 2048-bit (o Ed25519) sotto il selettore in uso
+{% elif dkim_malformed %}
+  Attuale:     {{ dkim_current }}
+  Raccomandato: Ripubblicare la chiave Ed25519: quella pubblicata è malformata e nessuna firma
+                fatta con essa può essere verificata
 {% else %}
   Attuale:     {{ dkim_current }}
   Raccomandato: Aggiornare a chiave RSA 2048-bit
@@ -49,7 +60,11 @@ DKIM — ✅ Configurato correttamente
   {{ dkim_current }}
 {% endif %}
 
-{% if bimi_issues %}
+{% if bimi_declined %}
+BIMI/VMC — ℹ️  Non adottato
+  Attuale:     {{ bimi_current }}
+
+{% elif bimi_issues %}
 BIMI/VMC — ℹ️  Miglioramento consigliato
   Attuale:     {{ bimi_current }}
   Raccomandato: v=BIMI1; l=https://{{ domain }}/logo.svg; a=https://{{ domain }}/vmc.pem
@@ -68,6 +83,7 @@ TLS-RPT — ℹ️  Miglioramento consigliato
   Raccomandato: v=TLSRPTv1; rua=mailto:tls-rpt@{{ domain }}
 
 {% endif %}
+{% if has_problems %}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RILEVANZA GDPR
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -88,6 +104,7 @@ trattamento sono tenuti ad adottare misure tecniche adeguate per garantire
 la sicurezza dei dati personali. Una postura email non configurata correttamente
 costituisce una lacuna documentabile e misurabile.
 
+{% endif %}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Questo report è stato generato automaticamente da MailRadar

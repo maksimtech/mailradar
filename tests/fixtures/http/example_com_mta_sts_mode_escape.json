@@ -1,0 +1,16 @@
+{
+  "_derived": {
+    "from": "http/fastmail_com.json, GET https://mta-sts.fastmail.com/.well-known/mta-sts.txt (recorded 2026-10-07)",
+    "changed": "answered for mta-sts.example.com, and \"mode: testing\" replaced by a mode that starts with ESC [2J (clear the screen) and ESC [31m (red)"
+  },
+  "responses": [
+    {
+      "request": "GET https://mta-sts.example.com/.well-known/mta-sts.txt",
+      "status": 200,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "version: STSv1\nmode: \u001b[2J\u001b[31mtesting\nmx: *.messagingengine.com\nmax_age: 86400\n"
+    }
+  ]
+}

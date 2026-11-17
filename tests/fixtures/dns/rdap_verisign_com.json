@@ -1,0 +1,37 @@
+{
+ "_recorded": {
+  "date": "2026-11-17",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.9.2; the OPT record is left out of the stored message and so is the id",
+  "by": "what discover asks about the host rdap.org redirects to (https://rdap.verisign.com/...), before following a redirect to another registrable domain",
+  "queried": [
+   "rdap.verisign.com. A",
+   "rdap.verisign.com. AAAA"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "rdap.verisign.com. IN A",
+   ";ANSWER",
+   "rdap.verisign.com. 34 IN A 192.81.185.30",
+   "rdap.verisign.com. 34 IN A 192.68.130.30",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "rdap.verisign.com. IN AAAA",
+   ";ANSWER",
+   "rdap.verisign.com. 29 IN AAAA 2001:500:30ff::30",
+   "rdap.verisign.com. 29 IN AAAA 2001:500:7967::30",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

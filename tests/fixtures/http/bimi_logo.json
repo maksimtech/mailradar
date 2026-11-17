@@ -1,0 +1,16 @@
+{
+ "_derived": {
+  "from": "the BIMI logo URL of dns/cnn_com.json (recorded 2026-10-07); its answer was not recorded",
+  "changed": "a 200 with a minimal SVG Tiny PS document stands for the logo: check_bimi reads only the status"
+ },
+ "responses": [
+  {
+   "request": "GET https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.svg",
+   "status": 200,
+   "headers": {
+    "content-type": "image/svg+xml"
+   },
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.2\" baseProfile=\"tiny-ps\"><title>CNN</title></svg>"
+  }
+ ]
+}

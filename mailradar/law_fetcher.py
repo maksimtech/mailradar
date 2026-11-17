@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 import unicodedata
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
@@ -92,7 +93,17 @@ CONSUMER_CODE = Act(
 
 
 class LawFetchError(Exception):
-    """The source could not be reached, or its page did not contain the articles."""
+    """The source could not be reached, or its page did not contain the articles.
+
+    `source` is the source tried ("Cellar", "EUR-Lex", "Normattiva", or "Cellar
+    and EUR-Lex" when the fallback failed too), and `reached` says it answered
+    with a page that lacked the text: a report must not call that "unreachable".
+    """
+
+    def __init__(self, message: str, *, source: str | None = None, reached: bool = False):
+        super().__init__(message)
+        self.source = source
+        self.reached = reached
 
 
 def text_sha256(text: str) -> str:
@@ -239,7 +250,9 @@ def _text(node: _Element | str) -> str:
 # ─── Tree → provisions ────────────────────────────────────────────────────────
 
 _PARAGRAPH_ID = re.compile(r"^\d{3}\.\d{3}$")   # <div id="005.001"> is art. 5(1)
-_PARAGRAPH = re.compile(r"^(\d+)\. ")           # "1. I dati personali sono:"
+# "1. I dati personali sono:", and the paragraphs Italian amendments insert: "3-bis. ",
+# "4-ter. ", ... every Latin adverb after quater ends in -ies (quinquies, decies, terdecies)
+_PARAGRAPH = re.compile(r"^(\d+(?:-(?:bis|ter|quater|[a-z]+ies))?)\. ")
 _NUMBERED = re.compile(r"^(\d+)\) ")            # GDPR art. 4: "1) «dato personale»: ..."
 _LETTER = re.compile(r"^([a-z]{1,4})\)$")       # table label cell: "a)"
 _POINT = re.compile(r"^([a-z]{1,4})\) ")          # Normattiva point: "a) ingannevoli ..."
@@ -319,7 +332,7 @@ def _parse_block(nodes: list, prefix: str) -> tuple[list[str], dict[str, str]]:
     return lines, points
 
 
-def _parse_paragraphs(groups: list[tuple[int, list]], number: str) -> dict[str, str]:
+def _parse_paragraphs(groups: list[tuple[str, list]], number: str) -> dict[str, str]:
     texts: dict[str, str] = {}
     lines = []
     for paragraph, nodes in groups:
@@ -340,7 +353,7 @@ def _parse_eli_article(article: _Element, number: str) -> dict[str, str]:
     ]
     if paragraphs:
         return _parse_paragraphs(
-            [(int(div.attrs["id"].split(".")[1]), div.children) for div in paragraphs], number
+            [(str(int(div.attrs["id"].split(".")[1])), div.children) for div in paragraphs], number
         )
     lines, points = _parse_block(article.children, number)
     return {**points, number: "\n".join(lines)}
@@ -364,14 +377,14 @@ def _parse_normattiva_article(root: _Element, number: str) -> dict[str, str]:
             for e in _elements(body)
         ):
             continue
-        groups: list[tuple[int | None, str, dict[str, str]]] = []
+        groups: list[tuple[str | None, str, dict[str, str]]] = []
         for comma in (e for e in _elements(body) if "art-comma-div-akn" in e.classes):
             text = _without_update_marks(_text(comma))
             if not text:
                 continue
             num = next((e for e in _elements(comma) if "comma-num-akn" in e.classes), None)
-            match = _PARAGRAPH.match(_text(num) + " ") if num is not None else None
-            paragraph = int(match.group(1)) if match else None
+            match = _PARAGRAPH.match(_without_update_marks(_text(num)) + " ") if num is not None else None
+            paragraph = match.group(1) if match else None   # "3", "3-bis"
             points = {}
             for item in (e for e in _elements(comma) if "pointedList-rest-akn" in e.classes):
                 point = _without_update_marks(_text(item))
@@ -421,12 +434,12 @@ def _parse_consolidated_article(root: _Element, number: str) -> dict[str, str]:
 
 
 def _split_flat_paragraphs(body: list, number: str) -> dict[str, str]:
-    groups: list[tuple[int, list]] = []
+    groups: list[tuple[str, list]] = []
     intro: list = []
     for node in _flatten(body):
         match = _PARAGRAPH.match(_text(node)) if isinstance(node, _Element) and node.tag == "p" else None
         if match:
-            groups.append((int(match.group(1)), [node]))
+            groups.append((match.group(1), [node]))
         elif groups:
             groups[-1][1].append(node)
         else:
@@ -439,10 +452,11 @@ def _split_flat_paragraphs(body: list, number: str) -> dict[str, str]:
     return _parse_paragraphs(groups, number)
 
 
-def parse_articles(html: str, articles: tuple[str, ...]) -> dict[str, str]:
+def parse_articles(html: str, articles: tuple[str, ...], source: str | None = None) -> dict[str, str]:
     """
     Extract articles from an EUR-Lex page (Official Journal or consolidated
-    layout) or a Normattiva article page.
+    layout) or a Normattiva article page; `source` is who served it, for the
+    error message.
 
     Returns:
         Text by reference, for each article and each of its paragraphs and
@@ -467,7 +481,8 @@ def parse_articles(html: str, articles: tuple[str, ...]) -> dict[str, str]:
                 or _parse_consolidated_article(builder.root, number)
             )
         if not parsed.get(number):
-            raise LawFetchError(f"Article {number} not found in the EUR-Lex page")
+            page = f"the {source} page" if source else "the page"
+            raise LawFetchError(f"Article {number} not found in {page}", source=source, reached=True)
         texts.update(parsed)
     return texts
 
@@ -483,10 +498,33 @@ def _source_of(url: str) -> str:
 
 
 MAX_REDIRECTS = 5
+# The one host each source may redirect to: a text served from anywhere else
+# would be labelled "verified against Cellar" without being Cellar's.
+SOURCE_HOSTS = {
+    "Cellar": "publications.europa.eu",
+    "EUR-Lex": "eur-lex.europa.eu",
+    "Normattiva": "www.normattiva.it",
+}
 
 
-def _get_over_https(client: httpx.Client, url: str, headers: dict[str, str], source: str) -> httpx.Response:
-    """GET `url`, following redirects by hand and never over plain HTTP.
+# A page is read up to this size, and a fetch, redirects included, ends at this
+# deadline. The largest act cited, the GDPR from Cellar, was 823981 bytes on
+# 2026-10-11. The timeout bounds each read, not the whole: without a deadline a
+# server sending a byte every few seconds held the audit for as long as it liked.
+MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+FETCH_DEADLINE = 120.0
+
+
+def _past(deadline: float, source: str) -> None:
+    if time.monotonic() > deadline:
+        raise LawFetchError(f"{source} took more than {FETCH_DEADLINE:g} s", source=source)
+
+
+def _get_over_https(
+    client: httpx.Client, url: str, headers: dict[str, str], source: str, deadline: float
+) -> httpx.Response:
+    """GET `url`, following redirects by hand, never over plain HTTP and never
+    off the source's host. The response is streamed: the caller reads and closes it.
 
     Cellar answers its https:// URL with a 303 to an http:// one: recorded on
     2026-10-11 for the GDPR, resource/celex/32016R0679 -> 303 ->
@@ -496,15 +534,54 @@ def _get_over_https(client: httpx.Client, url: str, headers: dict[str, str], sou
     the same document, byte for byte, so such a hop is taken over HTTPS; if that
     fails, the caller's fallback to EUR-Lex applies, as for any other failure.
     """
+    expected = SOURCE_HOSTS.get(source, "").encode("ascii")
     target = httpx.URL(url)
     for _ in range(MAX_REDIRECTS + 1):
+        _past(deadline, source)
         if target.scheme == "http":
             target = target.copy_with(scheme="https")
-        response = client.get(target, headers=headers, follow_redirects=False)
+        response = client.send(
+            client.build_request("GET", target, headers=headers), stream=True, follow_redirects=False
+        )
         if not response.is_redirect:
             return response
+        response.close()
         target = response.url.join(response.headers["location"])
-    raise LawFetchError(f"{source} redirected more than {MAX_REDIRECTS} times")
+        # raw_host: decoding the host is what raises on one like "xn--"
+        if target.raw_host != expected or target.port not in (None, 443):
+            host = target.raw_host.decode("ascii", "replace") + (f":{target.port}" if target.port else "")
+            raise LawFetchError(
+                f"{source} redirected to {host}, not to {expected.decode('ascii')}: not followed",
+                source=source,
+            )
+    raise LawFetchError(f"{source} redirected more than {MAX_REDIRECTS} times", source=source)
+
+
+def _read_capped(response: httpx.Response, source: str, deadline: float) -> str:
+    """The body as text, refused past MAX_RESPONSE_BYTES or past the deadline."""
+    too_large = f"{source} sent more than {MAX_RESPONSE_BYTES} bytes"
+    declared = response.headers.get("Content-Length", "")
+    if declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
+        raise LawFetchError(too_large, source=source)
+    body = bytearray()
+    for chunk in response.iter_bytes():
+        body += chunk
+        if len(body) > MAX_RESPONSE_BYTES:
+            raise LawFetchError(too_large, source=source)
+        _past(deadline, source)
+    # As Response.text decodes: the charset declared, else the client's default
+    return body.decode(response.encoding or "utf-8", errors="replace")
+
+
+def _download(client: httpx.Client, url: str, headers: dict[str, str], source: str) -> str:
+    deadline = time.monotonic() + FETCH_DEADLINE
+    response = _get_over_https(client, url, headers, source, deadline)
+    try:
+        if response.status_code != 200:
+            raise LawFetchError(f"{source} answered HTTP {response.status_code}", source=source)
+        return _read_capped(response, source, deadline)
+    finally:
+        response.close()
 
 
 def fetch_html(
@@ -521,14 +598,13 @@ def fetch_html(
     try:
         if client is None:
             with httpx.Client(timeout=timeout) as own_client:
-                response = _get_over_https(own_client, url, headers, source)
-        else:
-            response = _get_over_https(client, url, headers, source)
-    except httpx.HTTPError as e:
-        raise LawFetchError(f"{source} unreachable: {e}") from e
-    if response.status_code != 200:
-        raise LawFetchError(f"{source} answered HTTP {response.status_code}")
-    return response.text
+                return _download(own_client, url, headers, source)
+        return _download(client, url, headers, source)
+    # Not only httpx.HTTPError: a Location httpx cannot follow raises
+    # httpx.InvalidURL, or idna.core.IDNAError (a ValueError) for a host such
+    # as "xn--", and either one used to skip the EUR-Lex fallback and the cache.
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as e:
+        raise LawFetchError(f"{source} unreachable: {e}", source=source) from e
 
 
 def fetch_act_html(
@@ -575,7 +651,9 @@ def _fetch_act_page(
             )
             return page, "EUR-Lex"
         except LawFetchError as page_failed:
-            raise LawFetchError(f"{cellar_failed}; and {page_failed}") from page_failed
+            raise LawFetchError(
+                f"{cellar_failed}; and {page_failed}", source="Cellar and EUR-Lex"
+            ) from page_failed
 
 
 def fetch_provisions(
@@ -607,11 +685,11 @@ def fetch_provisions_from(
         texts: dict[str, str] = {}
         for article in articles:
             html = fetch_html(NORMATTIVA_URL.format(urn=act.celex, article=article), client=client)
-            texts.update(parse_articles(html, (article,)))
+            texts.update(parse_articles(html, (article,), "Normattiva"))
         source = "Normattiva"
     else:
         html, source = _fetch_act_page(act, lang, client=client)
-        texts = parse_articles(html, articles)
+        texts = parse_articles(html, articles, source)
     fetched_at = utc_stamp(now or datetime.now(UTC))
     return {
         ref: Provision.from_text(ref, text, fetched_at, act.celex)

@@ -147,3 +147,30 @@ class TestRecordedKeyservers:
         assert result.found is False
         # "<host>: <what happened>" per keyserver that did not answer
         assert result.error.split(":")[0] == "pgp.mit.edu"
+
+
+# ─── An expired key is not a usable key ──────────────────────────────────────
+
+# keyserver.ubuntu.com's index for security@gmail.com (keyservers_gmail_com.json, recorded 2026-10-09)
+GMAIL_INDEX = """info:1:4
+pub:B974E0B7FEC642C92398C48BF362969EA55DB311:1:4096:1539239777::
+pub:CAF6CFF9351925A6D7D932ABD0BEAD6D19EF2462:1:3072:1658869081::
+pub:6902757CCE90C14EA12A5A5E44789306437E75D5:1:2048:1525948574::
+uid:securityencyryption <security@gmail.com>:1525948574::
+pub:49C6C7B8E33C38DDC0C6FE01B0BE16BC8F0A454A:1:2048:1343589017::
+uid:Eli Geminder <eli.geminder+security@gmail.com>:1343589017::"""
+KEY_LINE = "pub:6902757CCE90C14EA12A5A5E44789306437E75D5:1:2048:1525948574::"
+
+
+def test_a_key_past_its_expiration_date_is_skipped():
+    """Derived from the recording: the key given an expiration date, 2019-05-10, and no `e` flag (keyservers
+    do not always set it). The expiration field was never read."""
+    from mailradar.gpg import _machine_readable
+    expired = GMAIL_INDEX.replace(KEY_LINE, KEY_LINE.replace("1525948574::", "1525948574:1557484574:"))
+    assert _machine_readable(expired, "security@gmail.com") == ""
+
+
+def test_a_key_that_expires_later_is_still_used():
+    from mailradar.gpg import _machine_readable
+    later = GMAIL_INDEX.replace(KEY_LINE, KEY_LINE.replace("1525948574::", "1525948574:4102444800:"))
+    assert _machine_readable(later, "security@gmail.com") == "6902757CCE90C14EA12A5A5E44789306437E75D5"

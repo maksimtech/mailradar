@@ -17,15 +17,329 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 - **SPF says what its ranges authorise and how many lookups it spends.** Seen in qnap.com's record on
   2026-11-16: `ip4:113.196.74.98/27` is written from an address inside the range, and RFC 7208 §5.6
   compares only the first 27 bits, so all 32 addresses of 113.196.74.96/27 are authorised; the same
-  range is listed again in `include:_ac.qnap.com`. Both are now reported, with the range actually
-  authorised and the include that already holds it. The address written is compared with the
-  network's first, not the text, so an aligned range spelled otherwise (`2001:DB8::/64`) raises
-  nothing; and only an include that passes makes a range redundant, since `?include:`, `~include:`
-  and `-include:` match with their own qualifier (§5.2), as a `-ip4:` inside an include denies
-  rather than repeats. The lookup count, compared with the limit and then dropped, is kept in
-  `SPFResult.lookups` (None when not counted) and a record at 10 of 10 is reported: the next include
-  breaks it. The includes are compared with the record from the queries the count already makes, so
-  no DNS query is added. No score changes.
+  range is listed again in `include:_ac.qnap.com`. Both are now reported as notes, in the new
+  `SPFResult.notes`, not as issues: the letter prints "SPF — Action required" whenever `issues` is not
+  empty, and a record that works needs no action. The note says what the qualifier does to the whole
+  range: `ip4:` authorises it, `-ip4:` denies it, `~ip4:` softfails it, `?ip4:` marks it neutral. The
+  address written is compared with the network's first, not the text, so an aligned range spelled
+  otherwise (`2001:DB8::/64`) raises nothing. A range is called redundant only when the evaluation
+  reaches the other range first for every address it covers (§4.6.2, §5.1: the first match decides,
+  nothing after `all` is tested): not when that range comes after an `all`, or after a term that may
+  fail, softfail or neutralise those addresses first, in the record that lists it or in any record
+  above it on the way, nor through an include that does not pass, at any depth, since `?include:`,
+  `~include:` and `-include:` match with their own qualifier (§5.2). When in doubt, nothing is
+  claimed. The note names the term of the domain's own record (`include:a.example.net`, or its
+  `redirect=`), with the records in between (`through b.example.net`). The lookup count, compared with
+  the limit and then dropped, is kept in `SPFResult.lookups` (None when not counted), and a record at
+  10 of 10 gets a note: the next include breaks it. An `include:` or `redirect=` whose target is a
+  macro is counted and not followed, so the count is then a lower bound: `SPFResult.lookups_partial`
+  says so, and the note reads "at least N". The included records are compared from the queries the
+  count already makes, each asked once, so no DNS query is added. No score changes.
+
+### Changed
+
+- **`+a` and `+mx` are no longer called too permissive.** They authorise the domain's own A and MX
+  hosts, which is what most records mean to do, and RFC 7208 §4.6.2 makes `+` the default qualifier:
+  `+a` is the same term as a bare `a`, which was never flagged. The warning judged the spelling, not
+  the record, and marked as permissive a `-all` record that is not.
+
+- **A usage error exits 64, not 2.** Click exits 2 on an unknown option or a missing argument, and 2 is also
+  `check`'s grade CRITICAL: a script could not tell a wrong command line from a critical domain. Every usage
+  error, at any level and in every command, now exits 64 (EX_USAGE, sysexits.h), and so do the new refusals of
+  a value: `--lang de`, a URL or an address instead of a domain, `--sign` without `--from`. The grade codes
+  0-3 are unchanged; the README's table lists 64.
+
+- **`batch` exits with the worst code `check` would give.** It exited 0 whatever it found. It now exits with
+  the highest of the codes `check` would give each domain, a domain it skipped (not a domain, not in DNS,
+  analysis failed) counting 1 as in `check`: 0 only when every domain was analysed and graded GOOD or better,
+  2 when the worst is CRITICAL, 3 when an analysis could not be completed.
+
+- **No published GPG key is a suggestion, not a GDPR art. 32 gap.** Owner's decision: art. 32 asks for
+  measures appropriate to the risk, and a key on a keyserver is not one of them. `law_checker` no longer cites
+  art. 32 for it and prints a suggestion instead; the letter's art. 32 paragraph appears only when it lists a
+  problem with DMARC, SPF or DKIM, and not for a domain whose only findings are BIMI, MTA-STS, TLS-RPT, SPF
+  notes or the missing key.
+
+### Fixed
+
+- **An SPF syntax error is a permerror, and the issue shows the term.** RFC 7208 §4.6: a syntax error
+  anywhere in the record makes receivers return permerror and apply no SPF. MailRadar dropped the
+  term and scored the rest, so `v=spf1 ip4:192.0.2.0/24 foo:bar -all` got the full 20 points, and a
+  typo of `all` (`-al`, `-all;`) read as "SPF has no all mechanism". Now an unknown mechanism
+  (`foo:bar`, `1x`), a typo of `all`, `redirect=` or `exp=` twice or with no domain, a qualifier on a
+  modifier, a known mechanism in a form §5 does not allow (`a/33`, `mx;`, `include:` with no domain),
+  and an `ip4:`/`ip6:` value outside the grammar of §5.6 are a permerror scored 0. Python's
+  `ip_network` accepted a netmask, a hostmask, a leading zero (`/027`) and an IPv6 zone id, none of
+  which is SPF. A modifier with an unknown name (`foo=bar`) stays allowed (§6). The same holds for a
+  record an `include:` or `redirect=` pulls in.
+
+- **An `include:` whose target has no SPF record is a permerror.** RFC 7208 §5.2 makes it one
+  whenever the include is evaluated, as it does for a target with two records. It is a common
+  leftover after a change of provider, and it scored 20 without a word. The issue names the include,
+  and the check scores 0, as for a `redirect=` to such a name. An include that gets no answer stays
+  "not verified", not a permerror.
+
+- **A passing range of every address scores as `+all`.** `ip4:0.0.0.0/0`, `ip6:::/0`, or any passing
+  range of prefix length 0, lets every server of the family pass, and before `-all` it scored 20. It
+  now scores 0 and is reported as `+all` is, also in a record a `redirect=` hands the verdict to.
+
+- **A `redirect=` with a macro counts towards the 10 lookups.** It was left out of the count because
+  its target could not be named, so `v=spf1 a mx`, seven `a:` and `redirect=%{d}.r.example.net` was
+  counted 9, not 10, and a record one lookup past the limit passed as valid. A record whose verdict
+  is handed to such a `redirect=` was also told "SPF has no all mechanism — the default result is
+  neutral", although the redirect applies; the issue now says the verdict is the macro target's,
+  which is not checked. The score of that case is unchanged.
+
+- **A citation is "verified" only when the reference it cites is in the text downloaded now.** The
+  check looked at the article: with Cellar's page parsed and point a) of GDPR art. 32 laid out as a
+  paragraph instead of a label/text table, `32(1)(a)` was missing from the fresh text and fell back to
+  the cache, old SHA-256 and date included, under "verified against Cellar"; with an empty cache the
+  same label stood beside `SHA256: not available`. Every cited reference is now looked up in the text
+  just parsed, and one that is missing makes the act a fetch failure: its citations come from the cache,
+  labelled as such, or have no hash and say so.
+
+- **A failed download always reaches the EUR-Lex fallback and the cache.** Only `httpx.HTTPError` was
+  turned into a fetch failure. A 303 to `http://xn--/DOC_1` makes httpx raise `idna.core.IDNAError`, a
+  `ValueError`, which skipped the fallback and ended the whole law check even with the cache populated.
+  `httpx.InvalidURL` and `ValueError` are now fetch failures too.
+
+- **Redirects stay on the source's host.** Any `Location` was followed, so a text served by another
+  host was labelled "verified against Cellar". Cellar may redirect only to publications.europa.eu,
+  EUR-Lex only to eur-lex.europa.eu and Normattiva only to www.normattiva.it, on the default port; the
+  http:// hop Cellar makes is still taken over HTTPS. Any other target ends the fetch before a request
+  is sent to it, and the hosts in `docs/nis2-compliance.md` are now the only ones the law check can
+  reach.
+
+- **A page is read up to 32 MiB, and a fetch ends after 120 seconds.** The timeout bounded each read,
+  not the whole: a server sending a byte every few seconds held the audit for as long as it liked, and
+  nothing limited the size of the page. The body is now streamed, refused past `MAX_RESPONSE_BYTES`
+  (32 MiB; the GDPR from Cellar is 823981 bytes) and abandoned past `FETCH_DEADLINE` (120 s, redirects
+  included); either one is a fetch failure, so the fallbacks apply.
+
+- **A change in the law is reported even when the cache cannot be written.** The comparison with the
+  previous text was made by the save, so with a read-only cache a law whose text changed was cited
+  without the warning, and an unchanged wording was dated to the day of the audit. The merge is now
+  `law_cache.merge`, made before the save and kept whether the save succeeds or not.
+
+- **Errors and statuses name the source that was tried.** A missing article always read "not found in
+  the EUR-Lex page", for Normattiva and Cellar pages too; it now names the source. `LawFetchError`
+  carries `source` and `reached`, and `ActStatus` carries `tried` ("Cellar", "Normattiva", "Cellar and
+  EUR-Lex") and `failure` ("unreachable", or "not_in_text" when a page came back without the text
+  cited), with `reason` as a report should say it: "Cellar answered without the text cited" rather
+  than "EUR-Lex unreachable".
+
+- **The NIS2 scope note goes with a NIS2 citation.** The note on D.Lgs. 138/2024 was added whenever
+  DMARC or MTA-STS was not present, including when their DNS lookup had failed and nothing was cited.
+  It is now derived from the findings, so it appears exactly when art. 24 of the decree is cited.
+
+- **A corrupt law cache is an empty one.** A deeply nested `law_cache.json` made `json.loads` raise
+  `RecursionError`, which is neither `OSError` nor `ValueError`, and the whole law check failed. It is
+  now read as an empty cache, like any other unreadable file.
+
+- **Normattiva's "-bis" paragraphs can be cited.** Paragraph numbers were read as `\d+`, so paragraphs
+  3-bis and 4-bis of art. 21 of the Consumer Code were part of the article's text and had no reference
+  of their own. `21(3-bis)` and `21(4-bis)` now exist, as do -ter, -quater and the later Latin
+  numbers (every one after quater ends in -ies), with their lettered points.
+
+- **A malformed BIMI URL no longer ends the analysis.** `default._bimi` publishing
+  `l=https://[::1/logo.svg` made `urlsplit` raise `ValueError: Invalid IPv6 URL`, and a port past
+  65535 did the same on `.port`; nothing caught either, so `analyze_domain` stopped for the whole
+  domain. A logo URL that cannot be parsed is now a BIMI issue ("logo URL is malformed") and is not
+  fetched. `a=` was counted as a VMC whatever it held: it now has to be a well-formed `https://` URL,
+  or it earns no VMC points and says why.
+
+- **The BIMI logo filter catches every IPv4 literal `getaddrinfo` reads.** `https://127.1/`,
+  `https://2130706433/`, `https://0x7f000001/` and `https://0177.0.0.1/` passed as host names, since
+  `ipaddress` reads only dotted quads, while glibc's `inet_aton`, which `getaddrinfo` tries before
+  DNS, reads all of them as 127.0.0.1: in the Docker image the logo fetch reached the loopback. A host
+  made of numbers alone is now parsed the way `inet_aton` parses it (one to four parts, decimal, octal
+  or hex) and fetched only if that gives a global address; numbers that give no address are not
+  fetched either. Host names are still not resolved before the fetch, as the README says.
+
+- **DKIM scores a key only once it decodes as one.** The key size used to fall back to the length of
+  `p=`: a 2048-bit key cut at 255 characters scored as 1024-bit (10 points), `p=` plus 400 `A` as
+  2048-bit (15), `v=DKIM1; k=rsa` with no `p=` as a weak 0-bit key (3), an RSA key under `k=ecdsa` as
+  2048-bit (15), and a DMARC record under a selector, matched because it holds `p=`, as 512-bit RSA.
+  A key that does not decode as its declared type (SubjectPublicKeyInfo or PKCS#1 for RSA, 32 bytes
+  for Ed25519), an unknown `k=`, or a record with no `p=` (RFC 6376 §3.6.1 requires it; an empty `p=`
+  is still a revoked key) is now "malformed — signatures cannot be verified" and scores 0. Only
+  `v=DKIM1` records, or records without `v=` that carry DKIM tags, are read as keys. A malformed key
+  verifies nothing and lets nobody forge, so beside a working key it is reported without setting the
+  score: the posture is the weakest key that works. `DKIMResult.keys` names it `malformed RSA key`.
+
+- **A DKIM key in testing mode is no longer full marks.** RFC 6376 §3.6.1: verifiers must not treat
+  mail from a signer with `t=y` differently from unsigned mail. Such a key is reported, and scores 0
+  unless another key without `t=y` works; `DKIMResult.keys` marks it `(testing, t=y)`.
+
+- **MTA-STS reads the record and the policy as senders do (RFC 8461 §3.1, §3.2).** A policy file
+  holding only `mode: enforce`, one with `version: STSv2`, two `v=STSv1` records and a record with no
+  `id=` each scored 5 with mode enforce, and any record containing `v=STSv1` counted. Now only
+  records that begin with `v=STSv1` count; none, several, or one without a valid `id=` mean no policy,
+  and the file is not fetched. The policy needs `version: STSv1`, `mode`, `max_age` and, in enforce or
+  testing mode, an `mx`: without them it is no policy, scores 0, and the issue names what is missing.
+  `MTASTSResult.mode` is set only from a valid policy.
+
+- **TLS-RPT follows RFC 8460 §3.** `v=TLSRPTv1;` with no `rua` scored 3, so did two TLS-RPT records
+  (senders then assume none), and `rua=https://x.example/?rua=1;` was read as `rua='1'`, from the last
+  `rua=` in the text. The record is now parsed as tags, needs a `rua` with at least one `mailto:` or
+  `https:` URI, and several records count as none.
+
+- **DMARC discovery asks the domain and its organizational domain, nothing in between.** RFC 7489
+  §6.6.3 queries `_dmarc.<domain>` and, if it has no record, `_dmarc.<organizational domain>` (from the
+  Public Suffix List). MailRadar removed one label at a time: for `sub.a.example.com` it reported the
+  `p=none` of `_dmarc.a.example.com`, while receivers apply `example.com`'s `p=reject`. The
+  intermediate names are no longer queried, and `found_at` shows where the record was found.
+
+- **An invalid DMARC `p=` or `sp=` is no longer shown as the policy.** `p=rejected` became
+  `policy='rejected'`, an empty `p=` became `''`, an inherited `sp=bogus` became `'bogus'`. As §6.6.3
+  says, a record with no valid `p` (or an `sp` that is not valid) acts as `p=none` when its `rua`
+  names a valid URI, and otherwise no DMARC applies; the issue names the value. `rua=a@example.com`,
+  an address without `mailto:`, earned the 3 points of reports configured: entries that are not URIs
+  now count for nothing and are reported.
+
+- **A name DNS cannot hold is no longer reported as a DNS failure.** dnspython raises `LabelTooLong`,
+  `NameTooLong` and `IDNAException` as `DNSException`s, so they became `DNSLookupError`, "DNS lookup
+  failed", and `check` suggested trying again or another resolver. `domain_exists` and the checks now
+  raise `InvalidDomainError` (a `DNSLookupError`, so existing callers still catch it) saying the name
+  is not a valid domain name and why, without asking a resolver. A domain so long that every
+  `<selector>._domainkey.<domain>` passes 255 octets is told that no DKIM selector can be checked,
+  rather than left not verified for ever; `_dmarc.<domain>` past the limit falls back to the
+  organizational domain.
+
+- **BIMI earns nothing while DMARC does not enforce.** Mail clients show a BIMI logo only under DMARC
+  quarantine or reject, and `p=none` beside a logo and a VMC scored 10 of 10 with no issue.
+  `analyze_domain` now withholds BIMI's points when the DMARC policy that applies is neither, and says
+  so; the dependency lives there, where the two results meet.
+
+- **An HTTP request that gets no answer leaves its check not verified.** As for DNS since 2026.47,
+  "not measured is not zero": a policy fetch that timed out scored MTA-STS 0 with "policy file not
+  accessible", and graded the domain. A transport error (timeout, reset, a refused connection) on the
+  MTA-STS policy or the BIMI logo now sets the check's `error`, so `total_score` is None and `report`
+  and `send` refuse. An HTTP status such as 404 is the domain's server answering and stays a finding;
+  so does a connection that fails because DNS has no address for the host (`mta-sts.<domain>` never
+  set up), which is checked with one A/AAAA query after the failure.
+
+- **Informational SPF findings are printed and written as notes.** `SPFResult.notes` holds what is not a
+  problem — a range written from an inner address, a range an include already authorises, 10 lookups of 10.
+  `check` prints them under "Notes", apart from the issues and through the same sanitising; the letter lists
+  them as "Note:"/"Nota:" in the SPF section, which stays "Properly configured" when they are all there is.
+
+- **`--sign` that fails stops the send.** A wrong passphrase, or no secret key for the address, sent the report
+  unsigned without a word (`sender.py`, the signature was used only if there was one), and `--sign` without
+  `--from` signed nothing and said nothing. A failed signature now ends `send` with exit code 1 and the reason;
+  `--sign` without `--from` is a usage error, refused before the analysis. The passphrase is asked before the
+  "Checking GPG keys and sending" spinner starts, not under it, where the status line was redrawn over the
+  prompt.
+
+- **SMTP failures are told apart, and a sent report counts as sent.** Every exception meant "try the next
+  address": a wrong password (535) cost five logins on five connections, which is how an account gets locked,
+  and a server that accepted the message after `DATA` but answered `QUIT` with 250 instead of 221 made
+  `SMTP.__exit__` raise, so the report was delivered five times and the user told it had not gone. Only a
+  refused recipient now moves on to the next address; authentication, TLS and connection errors end the
+  attempt at once and are reported with the server's answer. A message accepted after `DATA` is sent, whatever
+  `QUIT` gets back. Whenever delivery was configured and did not happen `send` exits 1, in every branch, and an
+  encrypted report whose SMTP delivery failed is no longer printed under "no SMTP configured".
+
+- **`send` can use STARTTLS.** `use_tls` was never set from the command line, so on port 587 the TLS handshake
+  met a plain-text greeting five times and the command exited 0. `--smtp-starttls` connects in plain text and
+  upgrades with STARTTLS, and port 587, the submission port (RFC 6409), uses it without being told; the
+  certificate and the host name are verified either way.
+
+- **`report`, `send` and `batch` check the name before analysing it.** Only `check` asked DNS whether the
+  domain exists: `report no-such-domain.example` wrote a letter grading it CRITICAL, and `send` would have
+  mailed security@ it. `report` and `send` now go through `check`'s handling — not found, no answer from DNS,
+  TLD variants to choose from — and `batch` reports a name that does not exist as failed, without prompting.
+  A URL (`https://example.com/`) or an address (`security@example.com`) is refused in every command, with the
+  host or the domain to pass instead.
+
+- **`send` and `discover` use the name as analysed.** `send StartPage.COM.` sent
+  `RCPT TO:<security@StartPage.COM.>` and titled its panels with the raw argument; `discover` queried crt.sh,
+  the website and RDAP with it. Both now use the lower-case name without the trailing dot.
+
+- **`--lang` is `it` or `en`, in any case.** On Windows `--lang IT` found `report_IT.j2`, since NTFS ignores
+  case, while the code compared `lang == "it"`: an Italian letter with English lines in it, saved as `_IT.txt`.
+  `--lang de` gave an English letter saved as `_de.txt`. Other values are now refused, and `generate_report`
+  no longer hides a template that is missing or broken behind `except Exception` and an English fallback.
+
+- **The Score column says what was measured, on each check's own scale.** A check whose lookup got no answer
+  showed 0; it shows `—`. Each check's points were coloured on the 0-100 scale of the total, so a perfect SPF
+  (20 of 20) came out red; they are coloured by their share of `MAX_SCORES[check]`.
+
+- **The letter says what was found.** A malformed Ed25519 DKIM key was told to "Upgrade to RSA 2048-bit"; the
+  letter now says the key is malformed and asks for it to be republished. A declined BIMI (`v=BIMI1; l=; a=;`)
+  was "present but with errors" with a record to publish; it is reported as the domain's choice, with no
+  recommendation. An incomplete analysis no longer reads "None/100". The mailed body no longer repeats the
+  "Subject:"/"Oggetto:" line under the Subject header; `report` still prints it, for whoever copies the letter.
+
+- **Records are printed as published.** Rich read `:100:` as the emoji shortcode for 💯, so
+  `ip6:2001:db8:100::/48` showed as `2001:db8💯:/48`, in the table and under `--verbose` alike. The console no
+  longer replaces emoji shortcodes.
+
+- **`discover` reports the keyservers that did not answer, and reads addresses whole.** A keyserver error was
+  dropped, so "No GPG public keys found" was printed when the keyservers had answered 429; those addresses are
+  now listed as not verified. The address pattern cut local parts — `o'brien@` to `brien@`, `josé.dpo@` to
+  `.dpo@`, `mailto:%20dpo@` to `%20dpo@` — and reported the cut: it now reads RFC 5322's dot-atom (with the
+  letters of other scripts RFC 6532 allows), decodes `mailto:` values, and leaves out a local part that is not
+  valid. An SOA contact with an escaped dot (`john\.doe.example.com.`, RFC 1035 §8) was dropped; it is
+  `john.doe@`.
+
+- **A keyserver index entry past its expiration date is not a key.** `_machine_readable` read the `r`, `d`
+  and `e` flags and ignored the expiration field: a key a keyserver had not flagged was taken although gpg
+  cannot encrypt to it.
+
+- **A 429 from keys.openpgp.org is not lost when keyserver.ubuntu.com answers.** The lookup returned the
+  unverified key and forgot that the keyserver that verifies addresses had not answered. `GPGResult.unanswered`
+  keeps it, the issues say a verified key may exist, and `send` repeats it when it refuses the key.
+
+- **What one fix found, the others now say in their own words.** The bug-fix pass of 2026-11-17
+  changed what the checks find, and four places still spoke of the old answers. A DKIM key that
+  cannot be used, malformed or only in testing mode, was shown as `0-bit RSA` with a ✅, described by
+  its length in the letter and cited as `DKIM 0 bit`; it is now named as the check describes it
+  (`malformed RSA key`, `chiave RSA malformata` in Italian, `(testing, t=y)`), marked ❌, and cited
+  as such, through `checker.dkim_unusable`. A record made permissive under `-all` by a pass /0 range
+  was cited as `SPF -all`, which reads as the remedy; it is now `SPF authorises every address before
+  -all`, and a record with no `all` that applies is no longer cited as `SPF permissivo`. A law text
+  whose source was reached but lacked the point cited was printed as `EUR-Lex unreachable` whichever
+  source was tried; the CLI now prints the reason the status carries. And `check` answered a name
+  DNS cannot hold with "try again, or with another DNS resolver"; it now says the name is not a
+  valid domain name, with exit code 64, as for any other usage error.
+  `tests/test_findings_named_as_they_are.py` holds the cases.
+
+### Security
+
+- **Text from outside no longer reaches the terminal as commands.** `rich.markup.escape` neutralises `[tag]`
+  and nothing else, and Rich strips only BEL, BS, VT, FF and CR: an ESC in a DNS TXT record, a keyserver's
+  answer or an MTA-STS policy went to the terminal as it was, in the table, the issues, `--verbose` and the
+  letter's panel. A record such as `v=spf1 \x1b[2J\x1b]8;;https://evil.example\x1b\click\x1b]8;;\x1b\ -all`
+  cleared the screen of whoever audited the domain and put a hyperlink in the output. C0 controls, DEL and C1
+  controls are now written out (`\x1b`) before anything from outside is printed, in `check`, `check -v`,
+  `batch`, `report`, `send` and `discover`, and in the letter that is saved or mailed.
+
+- **`send` encrypts on its own only to a key whose address was verified.** It encrypted to the first key any
+  keyserver listed, keyserver.ubuntu.com included, where anyone can upload a key under any address: the report
+  could go to whoever uploaded it. Owner's decision: a key from keys.openpgp.org (its owner confirmed the
+  address) is used as before; one from keyserver.ubuntu.com only with its fingerprint confirmed through the
+  new `--gpg-fingerprint` option, which must match the key found, and gpg then encrypts to that fingerprint and
+  no other. Without it nothing is sent, neither encrypted nor in plaintext, and `send` prints the fingerprint,
+  the reason and the report for a manual send, with exit code 1. Given when no key is found at all, the
+  option stops the send too, rather than letting it go in plaintext.
+
+- **`discover` follows redirects by hand, to public https only.** With `follow_redirects=True` on crt.sh, the
+  website pages and RDAP, a redirect could send the tool anywhere, `http://127.0.0.1` included. A redirect is
+  now followed only to `https://`, and only to a host of the same registrable domain as the first request or to
+  one whose addresses are all public; a 302 to `http://127.0.0.1:8080/admin` is not requested.
+
+- **`report --save` writes where it says, under a plain name.** The file name was built from the raw argument:
+  `x/../../../evil.com` wrote outside the current directory, `example.com:x` wrote an NTFS alternate data
+  stream, and `https://example.com/` ended in an uncaught OSError. The name is now
+  `mailradar_<domain>_<date>_<lang>.txt` in the current directory, `<domain>` the analysed name reduced to
+  `a-z`, `0-9`, `.` and `-`; a file that cannot be written is reported, with exit code 1.
+
+- **gpg stays local, and stops what it started.** Encrypting to a key that turned out unusable (expired,
+  say), gpg's default `auto-key-locate local,wkd` looked the address up through WKD at `openpgpkey.<domain>`,
+  and the dirmngr it started kept running after the throwaway homedir was deleted. `send` now passes
+  `--auto-key-locate clear,local` and `--no-auto-key-retrieve`, and runs `gpgconf --homedir <dir> --kill all`
+  before the homedir goes.
 
 ## [2026.47.1] - 2026-11-17
 

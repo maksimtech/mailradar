@@ -1,0 +1,41 @@
+{
+ "_derived": {
+  "from": "dns/cnn_com.json, default._bimi.cnn.com. TXT (recorded 2026-10-07): \"v=BIMI1; l=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.svg; a=https://amplify.valimail.com/bimi/time-warner/R4Ezf5xK5ac-CNN.pem\"",
+  "changed": "published under default._bimi.<case>.example.com, one name per case, with a URL that urllib cannot parse: malformed-l has l=https://[::1/logo.svg (an IPv6 literal never closed) and an empty a=; malformed-port has l=https://example.com:99999/logo.svg (a port past 65535) and an empty a=; malformed-a has an empty l= and a=https://[::1/vmc.pem"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.malformed-l.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.malformed-l.example.com. 300 IN TXT \"v=BIMI1; l=https://[::1/logo.svg; a=\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.malformed-port.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.malformed-port.example.com. 300 IN TXT \"v=BIMI1; l=https://example.com:99999/logo.svg; a=\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "default._bimi.malformed-a.example.com. IN TXT",
+   ";ANSWER",
+   "default._bimi.malformed-a.example.com. 300 IN TXT \"v=BIMI1; l=; a=https://[::1/vmc.pem\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

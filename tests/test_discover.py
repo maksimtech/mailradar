@@ -185,11 +185,15 @@ class TestDiscoverViaWhois:
             result = _discover_via_whois("example.com")
             assert result == []
 
-    def test_does_not_accept_addresses_of_other_domains(self, http_replay):
+    def test_does_not_accept_addresses_of_other_domains(self, http_replay, dns_replay):
         """'admin@example.com.evil.org' is not an address of example.com (as the text extractor already knows)."""
-        http_replay("rdap_example_com_foreign_contact")
+        # rdap.org redirects to rdap.verisign.com, whose addresses are asked before following (recorded)
+        dns_replay("rdap_verisign_com")
+        proxy = http_replay("rdap_example_com_foreign_contact")
         emails = _discover_via_whois("example.com")
         assert "admin@example.com.evil.org" not in emails
+        # Followed, so the registry's answer was read and not merely missed
+        assert "GET https://rdap.verisign.com/com/v1/domain/example.com" in proxy.requests
 
 
 def _mx(*exchanges):
@@ -221,24 +225,25 @@ class TestCheckGpgForEmails:
     def test_returns_only_found_preserving_order(self):
         found = {"a@example.com", "c@example.com"}
         with patch("mailradar.gpg.lookup_gpg_by_email",
-                   side_effect=lambda e: MagicMock(found=e in found)):
-            result = _check_gpg_for_emails(
+                   side_effect=lambda e: MagicMock(found=e in found, error="")):
+            result, unverified = _check_gpg_for_emails(
                 ["a@example.com", "b@example.com", "c@example.com"]
             )
         assert result == ["a@example.com", "c@example.com"]
+        assert unverified == []
 
     def test_returns_email_if_found(self):
         mock_result = MagicMock()
         mock_result.found = True
         with patch("mailradar.gpg.lookup_gpg_by_email", return_value=mock_result):
-            result = _check_gpg_for_emails(["security@example.com"])
+            result, _ = _check_gpg_for_emails(["security@example.com"])
             assert isinstance(result, list)
 
     def test_returns_empty_if_not_found(self):
         mock_result = MagicMock()
         mock_result.found = False
         with patch("mailradar.gpg.lookup_gpg_by_email", return_value=mock_result):
-            result = _check_gpg_for_emails(["nobody@example.com"])
+            result, _ = _check_gpg_for_emails(["nobody@example.com"])
             assert isinstance(result, list)
 
 
@@ -251,7 +256,7 @@ class TestDiscover:
             patch("mailradar.discover._discover_via_dns", return_value=[]),
             patch("mailradar.discover._discover_via_whois", return_value=[]),
             patch("mailradar.discover._discover_common_contacts", return_value=[]),
-            patch("mailradar.discover._check_gpg_for_emails", return_value=[]),
+            patch("mailradar.discover._check_gpg_for_emails", return_value=([], [])),
         ):
             result = discover("example.com", check_gpg=False)
             assert isinstance(result, DiscoveryResult)
@@ -264,7 +269,7 @@ class TestDiscover:
             patch("mailradar.discover._discover_via_dns", return_value=[]),
             patch("mailradar.discover._discover_via_whois", return_value=[]),
             patch("mailradar.discover._discover_common_contacts", return_value=[]),
-            patch("mailradar.discover._check_gpg_for_emails", return_value=["security@example.com"]),
+            patch("mailradar.discover._check_gpg_for_emails", return_value=(["security@example.com"], [])),
         ):
             result = discover("example.com", check_gpg=True)
             assert isinstance(result, DiscoveryResult)
@@ -276,7 +281,7 @@ class TestDiscover:
             patch("mailradar.discover._discover_via_dns", return_value=[]),
             patch("mailradar.discover._discover_via_whois", return_value=[]),
             patch("mailradar.discover._discover_common_contacts", return_value=[]),
-            patch("mailradar.discover._check_gpg_for_emails", return_value=[]),
+            patch("mailradar.discover._check_gpg_for_emails", return_value=([], [])),
         ):
             result = discover("example.com", check_gpg=False)
             assert result.emails == []
@@ -309,7 +314,7 @@ class TestDiscoverCandidatesSeparation:
              patch("mailradar.discover._discover_via_whois", return_value=[]), \
              patch("mailradar.discover._discover_common_contacts", return_value=common), \
              patch("mailradar.discover._check_gpg_for_emails",
-                   return_value=list(gpg_capable)) as mock_gpg:
+                   return_value=(list(gpg_capable), [])) as mock_gpg:
             return discover("example.com", check_gpg=True), mock_gpg
 
     def test_guessed_contacts_are_not_reported_as_found_emails(self):
@@ -330,3 +335,94 @@ class TestDiscoverCandidatesSeparation:
             website=["jane@example.com"], common=["security@example.com"],
         )
         mock_gpg.assert_called_once_with(["jane@example.com", "security@example.com"])
+
+
+# ─── Redirects are followed by hand ──────────────────────────────────────────
+
+class TestRedirects:
+    """httpx followed every redirect, to any host and scheme: a page, or anyone on the path, could send
+    the tool to http://127.0.0.1 on the network it runs from."""
+
+    def test_a_redirect_to_loopback_is_not_followed(self, http_replay):
+        """rdap_example_com_redirect_loopback.json (derived): rdap.org's 302, Location http://127.0.0.1:8080/admin."""
+        proxy = http_replay("rdap_example_com_redirect_loopback")
+        assert _discover_via_whois("example.com") == []
+        assert not any("127.0.0.1" in request for request in proxy.requests), proxy.requests
+
+    def test_a_redirect_to_a_public_host_of_another_domain_is_followed(self, http_replay, dns_replay):
+        """rdap.org sends example.com to rdap.verisign.com (recorded), whose addresses are global (recorded)."""
+        dns_replay("rdap_verisign_com")
+        proxy = http_replay("rdap_example_com")
+        _discover_via_whois("example.com")
+        assert "GET https://rdap.verisign.com/com/v1/domain/example.com" in proxy.requests
+
+    @pytest.mark.parametrize("target", [
+        "http://www.example.com/",           # not https
+        "https://127.0.0.1/",                 # loopback
+        "https://10.0.0.1/admin",             # private
+        "https://[::1]/",                     # loopback, IPv6
+        "https://169.254.169.254/latest",     # link-local: cloud metadata
+        "file:///etc/passwd",
+    ])
+    def test_refused_targets(self, target):
+        from mailradar.discover import _may_follow
+        assert _may_follow(target, "https://example.com/contact") is False
+
+    def test_the_same_registrable_domain_is_followed_without_asking_dns(self, dns_replay):
+        from mailradar.discover import _may_follow
+        server = dns_replay()
+        assert _may_follow("https://www.example.com/contatti", "https://example.com/contatti") is True
+        assert server.queries == []
+
+
+# ─── Keyservers that did not answer ──────────────────────────────────────────
+
+class TestUnansweredKeyservers:
+
+    def test_an_address_no_keyserver_answered_for_is_not_verified(self, http_replay):
+        """keys.openpgp.org answered 429 for security@github.com (recorded): not "no key"."""
+        http_replay("keyservers_github_com")
+        found, unverified = _check_gpg_for_emails(["security@github.com"])
+        assert found == []
+        assert unverified == ["security@github.com"]
+
+    def test_discover_says_not_verified_instead_of_no_keys(self):
+        from typer.testing import CliRunner
+
+        from mailradar.cli import app
+        result_ = DiscoveryResult(domain="github.com", emails=["security@github.com"],
+                                  sources={"website": ["security@github.com"]},
+                                  gpg_unverified=["security@github.com"])
+        with patch("mailradar.discover.discover", return_value=result_):
+            out = CliRunner().invoke(app, ["discover", "github.com"], env={"COLUMNS": "300"}).output
+        assert "No GPG public keys found" not in out
+        assert "not verified" in out.lower()
+
+
+# ─── Addresses whole or not at all ───────────────────────────────────────────
+
+class TestWholeAddresses:
+
+    @pytest.mark.parametrize("text,address", [
+        ("Write to o'brien@example.com today", "o'brien@example.com"),
+        ("DPO: josé.dpo@example.com", "josé.dpo@example.com"),
+        ('<a href="mailto:%20dpo@example.com">', "dpo@example.com"),
+        ('<a href="mailto:Privacy%40example.com">', "privacy@example.com"),
+        ("first.last+tag@example.com", "first.last+tag@example.com"),
+        ("data-x='info@example.com'", "info@example.com"),
+    ])
+    def test_the_local_part_is_read_whole(self, text, address):
+        """`o'brien@` came out as `brien@`, `josé.dpo@` as `.dpo@`, `mailto:%20dpo@` as `%20dpo@`."""
+        assert _extract_emails_from_text(text, "example.com") == [address]
+
+    @pytest.mark.parametrize("text", [".dpo@example.com", "a..b@example.com", "x.@example.com"])
+    def test_a_local_part_that_is_no_dot_atom_is_not_reported_in_part(self, text):
+        assert _extract_emails_from_text(text, "example.com") == []
+
+
+class TestSOAEscapedDot:
+
+    def test_an_escaped_dot_belongs_to_the_local_part(self, dns_replay):
+        """RFC 1035 §8: john\\.doe.example.com. is john.doe@example.com; the rname was dropped."""
+        dns_replay("example_com", "example_com_soa_escaped_dot")
+        assert "john.doe@example.com" in _discover_via_dns("example.com")

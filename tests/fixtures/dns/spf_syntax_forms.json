@@ -1,0 +1,96 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "one name per known mechanism or modifier written in a form RFC 7208 §5 and §6 do not allow, each record otherwise valid: a/33 and mx//129 (past the prefix length of their family), mx; (a character after the name), include: and exists with no domain, redirect= with a qualifier and with no domain; and one name whose record uses every allowed form of a, mx, ptr, ip4, ip6 and exp=, which must stay valid; documentation addresses (RFC 5737)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "a-cidr.example.com. IN TXT",
+   ";ANSWER",
+   "a-cidr.example.com. 300 IN TXT \"v=spf1 a/33 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "mx-cidr6.example.com. IN TXT",
+   ";ANSWER",
+   "mx-cidr6.example.com. 300 IN TXT \"v=spf1 mx//129 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "mx-semicolon.example.com. IN TXT",
+   ";ANSWER",
+   "mx-semicolon.example.com. 300 IN TXT \"v=spf1 mx; -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "include-empty.example.com. IN TXT",
+   ";ANSWER",
+   "include-empty.example.com. 300 IN TXT \"v=spf1 include: -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "exists-bare.example.com. IN TXT",
+   ";ANSWER",
+   "exists-bare.example.com. 300 IN TXT \"v=spf1 exists -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "redirect-qualified.example.com. IN TXT",
+   ";ANSWER",
+   "redirect-qualified.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 -redirect=a.example.net\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "redirect-empty.example.com. IN TXT",
+   ";ANSWER",
+   "redirect-empty.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 redirect=\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "valid-forms.example.com. IN TXT",
+   ";ANSWER",
+   "valid-forms.example.com. 300 IN TXT \"v=spf1 a/24 mx//64 a:mail.example.com/24//64 MX:mail.example.com ptr ptr:example.com ip6:::ffff:192.0.2.1 ip4:192.0.2.1 ip4:192.0.2.0/32 exp=explain.example.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

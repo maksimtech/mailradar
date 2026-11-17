@@ -1,0 +1,85 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "one name per range with a prefix length of 0, which covers every address of its family (RFC 7208 §5.6) and so passes any server, as +all does: ip4:0.0.0.0/0, ip6:::/0, +ip4 written from an inner address (192.0.2.1/0, RFC 5737), and ip4:0.0.0.0/0 in the record a redirect= hands the verdict to (open.example.net); and two that pass nobody more: -ip4:0.0.0.0/0, and ip4:0.0.0.0/0 after -all, which is never tested"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "open4.example.com. IN TXT",
+   ";ANSWER",
+   "open4.example.com. 300 IN TXT \"v=spf1 ip4:0.0.0.0/0 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "open6.example.com. IN TXT",
+   ";ANSWER",
+   "open6.example.com. 300 IN TXT \"v=spf1 ip6:::/0 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "open-inner.example.com. IN TXT",
+   ";ANSWER",
+   "open-inner.example.com. 300 IN TXT \"v=spf1 +ip4:192.0.2.1/0 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "open-redirect.example.com. IN TXT",
+   ";ANSWER",
+   "open-redirect.example.com. 300 IN TXT \"v=spf1 redirect=open.example.net\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "open.example.net. IN TXT",
+   ";ANSWER",
+   "open.example.net. 300 IN TXT \"v=spf1 ip4:0.0.0.0/0 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "closed.example.com. IN TXT",
+   ";ANSWER",
+   "closed.example.com. 300 IN TXT \"v=spf1 -ip4:0.0.0.0/0 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "after-all.example.com. IN TXT",
+   ";ANSWER",
+   "after-all.example.com. 300 IN TXT \"v=spf1 -all ip4:0.0.0.0/0\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

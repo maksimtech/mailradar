@@ -10,13 +10,15 @@ Shared by the Radar tools: only the mapping section is specific to MailRadar.
 """
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import httpx
 
 from mailradar import law_fetcher
-from mailradar.law_cache import Key, LawCache
+from mailradar.checker import dkim_unusable
+from mailradar.law_cache import Key, LawCache, merge
 from mailradar.law_fetcher import DLGS_138_2024, GDPR, Act, LawFetchError, Provision
 
 # ─── Mapping: MailRadar findings → provisions ─────────────────────────────────
@@ -27,7 +29,6 @@ FINDING_ARTICLES = {
     "spf_dkim_weak": ((GDPR, "32"),),
     "cleartext": ((GDPR, "32(1)(a)"), (DLGS_138_2024, "24")),     # MTA-STS absent
     "cleartext_testing": ((GDPR, "32(1)(a)"),),            # MTA-STS not enforced
-    "gpg_missing": ((GDPR, "32"),),
 }
 
 FINDING_TITLES = {
@@ -35,11 +36,18 @@ FINDING_TITLES = {
     "spf_dkim_weak": "SPF/DKIM weak",
     "cleartext": "Cleartext delivery possible",
     "cleartext_testing": "Cleartext delivery possible",
-    "gpg_missing": "GPG not available",
 }
 
 # Articles downloaded and cached even when not cited, by act
 ALSO_FETCH: dict = {}
+
+# No published GPG key is a suggestion, not a gap: GDPR art. 32 asks for
+# measures appropriate to the risk, and none of them is a key on a keyserver
+# (owner's decision, 2026-11-17). Until then it was cited as art. 32.
+GPG_SUGGESTION = (
+    "No public GPG key for the domain's contact addresses: publishing one (keys.openpgp.org) lets "
+    "security reports reach it encrypted — a suggestion, not a legal requirement"
+)
 
 NIS2_SCOPE_NOTE = (
     "D.Lgs. 138/2024 art. 24 binds essential and important entities (art. 3 of the decree): "
@@ -70,12 +78,25 @@ def findings_of(report) -> dict[str, list[str]]:
     elif report.spf.permerror:
         weak.append("SPF permerror: receivers apply no SPF")
     elif report.spf.permissive:
-        weak.append(f"SPF {report.spf.all_mechanism or 'permissivo'}")
+        if report.spf.all_mechanism == "-all":
+            # Permissive under -all only through a pass /0 range before it:
+            # "SPF -all" would read as the remedy, not the weakness
+            weak.append("SPF authorises every address before -all")
+        elif report.spf.all_mechanism:
+            weak.append(f"SPF {report.spf.all_mechanism}")
+        else:
+            # No all, or a redirect= to a macro MailRadar does not expand
+            weak.append("SPF without an all that applies")
     # A key under none of the common selectors is not found, not absent: DNS
     # cannot list selectors, and amazon.it signs under its own. Only a key
-    # that was found, and is short, is a weakness worth citing.
-    if report.dkim.present and report.dkim.key_type == "rsa" and report.dkim.key_bits < DKIM_MIN_BITS:
-        weak.append(f"DKIM {report.dkim.key_bits} bit")
+    # that was found, and is short or unusable, is a weakness worth citing.
+    dkim = report.dkim
+    if dkim_unusable(dkim):
+        # Malformed, or only in testing mode: no signature a receiver counts.
+        # Named as the checker describes it, not by a length it does not have
+        weak.append(f"DKIM {dkim.keys.get(dkim.selector) or 'key unusable'}")
+    elif dkim.present and dkim.key_type == "rsa" and dkim.key_bits < DKIM_MIN_BITS:
+        weak.append(f"DKIM {dkim.key_bits} bit")
     if weak:
         found["spf_dkim_weak"] = weak
 
@@ -85,16 +106,22 @@ def findings_of(report) -> dict[str, list[str]]:
     elif report.mta_sts.mode != "enforce":
         found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce"]
 
-    # A keyserver that did not answer (rate limit, timeout) proved nothing
-    if not report.gpg.found and not report.gpg.error:
-        found["gpg_missing"] = ["no public key on the keyservers"]
-
     return {finding: found[finding] for finding in FINDING_ARTICLES if finding in found}
 
 
 def notes_of(report) -> list[str]:
-    cites_nis2 = not report.dmarc.present or not report.mta_sts.present
-    return [NIS2_SCOPE_NOTE] if cites_nis2 else []
+    # From the findings, so that the note goes with the citation: a DMARC or
+    # MTA-STS lookup that failed cites nothing, and used to get the note anyway
+    cites_nis2 = any(
+        act == DLGS_138_2024
+        for finding in findings_of(report)
+        for act, _ in FINDING_ARTICLES[finding]
+    )
+    notes = [NIS2_SCOPE_NOTE] if cites_nis2 else []
+    # A keyserver that did not answer (rate limit, timeout) proved nothing
+    if not report.gpg.found and not report.gpg.error:
+        notes.append(GPG_SUGGESTION)
+    return notes
 
 
 # ─── Citations ────────────────────────────────────────────────────────────────
@@ -111,11 +138,27 @@ class Citation:
 @dataclass(frozen=True)
 class ActStatus:
     act: Act
-    # "verified": downloaded now; "cache": source unreachable, cached copy; "unavailable": no text at all
+    # "verified": every reference cited was in the text downloaded now; "cache": the source was
+    # unreachable or its text lacked a reference, cached copy; "unavailable": no text at all
     source: str
     error: str | None = None
     # Where a verified text came from: "Cellar", "EUR-Lex" (the fallback) or "Normattiva"; None otherwise
     origin: str | None = None
+    # When not verified: the source tried last ("Cellar", "EUR-Lex", "Normattiva", "Cellar and
+    # EUR-Lex"; None if unknown), and why it was not used: "unreachable" (no page) or "not_in_text"
+    # (a page, without the text cited)
+    tried: str | None = None
+    failure: str | None = None
+
+    @property
+    def reason(self) -> str | None:
+        """Why the act was not verified, as a report says it: "Cellar and EUR-Lex unreachable"."""
+        if self.source == "verified":
+            return None
+        tried = self.tried or self.act.source
+        if self.failure == "not_in_text":
+            return f"{tried} answered without the text cited"
+        return f"{tried} unreachable"
 
 
 @dataclass
@@ -161,36 +204,52 @@ def check(
     acts = list(dict.fromkeys(act for _, act, _ in cited))
     # Keyed by (celex, article) — the cache's key, not the fetcher's.
     fresh: dict[Key, Provision] = {}
-    errors: dict[Act, str] = {}
+    errors: dict[Act, LawFetchError] = {}
     origins: dict[Act, str] = {}
     for act in acts:
+        refs = list(dict.fromkeys(ref for _, a, ref in cited if a == act))
         # The articles cited ("32(1)(a)" is part of article 32) and ALSO_FETCH
         articles = tuple(dict.fromkeys(
-            [ref.split("(")[0] for _, a, ref in cited if a == act] + list(ALSO_FETCH.get(act, ()))
+            [ref.split("(")[0] for ref in refs] + list(ALSO_FETCH.get(act, ()))
         ))
         try:
-            by_article, origins[act] = law_fetcher.fetch_provisions_from(act, articles, now=now, client=client)
+            by_article, origin = law_fetcher.fetch_provisions_from(act, articles, now=now, client=client)
+            # The article being there is not enough: each reference cited is
+            # checked against the text just parsed. A point the parser missed
+            # used to fall back to the cache, old hash and date included, under
+            # the "verified" label, or to no hash at all.
+            missing = [ref for ref in refs if ref not in by_article]
+            if missing:
+                raise LawFetchError(
+                    f"{act.name} art. {', '.join(missing)} not found in the text from {origin}",
+                    source=origin, reached=True,
+                )
         except LawFetchError as e:
-            errors[act] = str(e)
+            errors[act] = e
         else:
+            origins[act] = origin
             fresh.update({p.key: p for p in by_article.values()})
 
-    changed: dict[Key, str] = {}
-    try:
-        if fresh:
-            provisions, changed = cache.update(fresh, checked_at=law_fetcher.utc_stamp(now))
-        else:
-            provisions = cache.load()
-    except OSError:
-        provisions = {**cache.load(), **fresh}   # the text just downloaded can still be cited
+    # Merged here, not by the save: a cache that cannot be written (read-only,
+    # disk full) must not hide a change in the law, nor date an unchanged
+    # wording to today.
+    provisions, changed = merge(cache.load(), fresh)
+    if fresh:
+        # Unsaved, the text just downloaded can still be cited
+        with contextlib.suppress(OSError):
+            cache.update(fresh, checked_at=law_fetcher.utc_stamp(now))
 
     statuses = []
     for act in acts:
         if act not in errors:
             statuses.append(ActStatus(act, "verified", origin=origins[act]))
         else:
+            error = errors[act]
             cached = any((act.celex, ref) in provisions for _, a, ref in cited if a == act)
-            statuses.append(ActStatus(act, "cache" if cached else "unavailable", errors[act]))
+            statuses.append(ActStatus(
+                act, "cache" if cached else "unavailable", str(error),
+                tried=error.source, failure="not_in_text" if error.reached else "unreachable",
+            ))
 
     citations = []
     for finding, act, ref in cited:

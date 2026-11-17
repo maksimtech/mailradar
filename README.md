@@ -85,6 +85,16 @@ features. The Docker image already includes it.
 
 Run `mailradar COMMAND --help` for the full list of options.
 
+`DOMAIN` is a domain name, such as `example.com`. A URL (`https://example.com/`)
+or an email address (`security@example.com`) is refused with exit code 64 and a
+message that says what to pass instead. Names are read case-insensitively and
+without a trailing dot: `Example.COM.` is `example.com` everywhere, the files
+`report --save` writes and the addresses `send` writes to included.
+
+Output that comes from outside — DNS records, keyserver answers, an MTA-STS
+policy, the pages `discover` reads — is printed exactly as published, with any
+control character written out (`\x1b`) rather than sent to the terminal.
+
 ### `check`: analyze a domain
 
 ```bash
@@ -130,7 +140,8 @@ mailradar check example.com --verbose
 
 If the domain does not resolve in DNS, `check` tries common TLD variants of
 the name (`.com`, `.it`, `.eu`, `.org`, `.de`, `.co.uk` and others) and asks
-you to pick one of those that exist.
+you to pick one of those that exist. `report` and `send` do the same before
+analysing anything.
 
 **Exit codes**, useful in scripts and monitoring:
 
@@ -140,6 +151,7 @@ you to pick one of those that exist.
 | `1` | Grade MODERATE or POOR, or the domain could not be resolved |
 | `2` | Grade CRITICAL |
 | `3` | No grade: a DNS lookup got no answer (timeout, SERVFAIL), so the analysis is incomplete |
+| `64` | Usage error, for every command: an unknown option, a missing argument, a value that is not accepted (`--lang de`, a URL instead of a domain). Click's own code for this is 2, which is also CRITICAL above |
 
 ### `batch`: analyze several domains
 
@@ -149,8 +161,14 @@ mailradar batch domains.txt
 
 The file contains one domain per line. Blank lines and lines starting with `#`
 are ignored. MailRadar prints the full report for each domain, then a summary
-table sorted from the lowest to the highest score. A domain that fails
-analysis is reported and skipped; the others still run.
+table sorted from the lowest to the highest score. A line that is not a domain
+(a URL, an address), a domain that does not exist in DNS, or one whose analysis
+fails is reported and skipped; the others still run.
+
+The exit code is the highest one `check` would give any domain in the file,
+with a domain that was skipped counting as `1`, as it does in `check`: `0` only
+when every domain was analysed and graded EXCELLENT or GOOD, `2` when the worst
+is CRITICAL, `3` when an analysis could not be completed.
 
 ### `report`: generate a report for the domain owner
 
@@ -162,14 +180,17 @@ mailradar report example.com --lang en \
 
 The report is plain text, ready to paste into an email. For each check it
 shows the current record and the recommended configuration (for example a
-complete `v=DMARC1; p=reject; ...` record), followed by a short note on GDPR
-Article 32 and your signature.
+complete `v=DMARC1; p=reject; ...` record), then your signature. The note on
+GDPR Article 32 is included only when the letter lists a problem with DMARC,
+SPF or DKIM: BIMI, MTA-STS and TLS-RPT are improvements, the informational SPF
+notes (see [SPF](#spf-up-to-20-points)) are listed without turning the section
+into an action, and a missing GPG key is a suggestion, not an Article 32 gap.
 
 | Option | Description |
 |--------|-------------|
-| `--lang`, `-l` | `it` (default) or `en` |
+| `--lang`, `-l` | `it` (default) or `en`, in any case (`IT` is `it`). Any other value is refused with exit code 64 |
 | `--name`, `--role`, `--org` | Sender details. If omitted, placeholders are left in the text |
-| `--save`, `-s` | Also write the report to `mailradar_<domain>_<YYYYMMDD>_<lang>.txt` in the current directory |
+| `--save`, `-s` | Also write the report to `mailradar_<domain>_<YYYYMMDD>_<lang>.txt` in the current directory. `<domain>` is the analysed name reduced to `a-z`, `0-9`, `.` and `-`; a file that cannot be written is reported, with exit code 1 |
 
 ### `send`: deliver the report
 
@@ -183,28 +204,48 @@ mailradar send example.com --lang en \
 
 `send` runs the analysis, generates the report and delivers it as follows:
 
-1. **The domain has a published GPG key** (see [GPG](#gpg) below): the report
-   is encrypted to that key and sent to the key's address. Without SMTP
-   settings, the encrypted text is printed so you can send it yourself.
-   If encryption fails, nothing is sent, the report is printed in clear so
-   you can deliver it manually, and the command exits with code 1. MailRadar
-   never falls back to sending unencrypted.
+1. **The domain has a published GPG key** (see [GPG](#gpg-up-to-5-points)
+   below): the report is encrypted to that key and sent to the key's address.
+   Without SMTP settings, the encrypted text is printed so you can send it
+   yourself. If encryption fails, nothing is sent, the report is printed in
+   clear so you can deliver it manually, and the command exits with code 1.
+   MailRadar never falls back to sending unencrypted.
+
+   Only a key keys.openpgp.org publishes for the address (its owner confirmed
+   it) is used on its own. A key from keyserver.ubuntu.com, where anyone can
+   upload a key under any address, is used only once you have confirmed its
+   fingerprint with the domain and pass it with `--gpg-fingerprint`; it must
+   match the key found, and gpg encrypts to that fingerprint and no other.
+   Without it, nothing is sent and nothing is encrypted: `send` prints the
+   fingerprint, the reason and the report for a manual send, and exits with
+   code 1. If keys.openpgp.org did not answer while keyserver.ubuntu.com did,
+   `send` says so: a verified key may exist.
 2. **No GPG key, SMTP configured**: the report is sent in plaintext to the
    first of `security@`, `dpo@`, `privacy@`, `admin@`, `postmaster@` that the
    SMTP server accepts — only when every keyserver answered. If one did not
    (HTTP 429, a timeout), a key may exist: nothing is sent, and the command
-   exits with code 1; try again later.
+   exits with code 1; try again later. Only a refused recipient moves on to
+   the next address. Any other failure — a wrong password, a certificate that
+   does not verify, a server that cannot be reached — ends the attempt at once,
+   so a wrong password costs one login and not five.
 3. **No SMTP settings**: the report is printed for copy-paste, with suggested
    recipients.
+
+A message the server accepted after `DATA` counts as sent, whatever it answers
+to `QUIT`. Whenever SMTP delivery was configured and did not happen, `send`
+says why and exits with code 1. The letter's own "Subject:" line is left out
+of the body of the message it sends: it is already the Subject header.
 
 | Option | Description |
 |--------|-------------|
 | `--smtp-host` | SMTP server |
-| `--smtp-port` | SMTP port (default `465`). The connection uses implicit TLS (SMTPS) |
+| `--smtp-port` | SMTP port (default `465`, implicit TLS: SMTPS). On `587`, the submission port, the connection uses STARTTLS |
+| `--smtp-starttls` | Connect in plain text and upgrade with STARTTLS, on any port. The certificate and the host name are verified either way |
 | `--smtp-user` | SMTP username |
 | `--smtp-pass` | SMTP password. Prefer the `MAILRADAR_SMTP_PASS` environment variable, so the password does not end up in your shell history |
 | `--from` | Sender address |
-| `--sign` | Clear-sign the report with your own GPG private key for the `--from` address (requires `--from`). The passphrase is asked interactively |
+| `--sign` | Clear-sign the report with your own GPG private key for the `--from` address. Without `--from` it is a usage error (exit code 64). The passphrase is asked before sending starts; if signing fails (a wrong passphrase, no secret key), nothing is sent and the command exits with code 1 |
+| `--gpg-fingerprint` | The fingerprint of the recipient's key, confirmed with the domain. Required to encrypt to a key found on a keyserver that does not verify addresses, and it must match that key (spaces and a `0x` prefix are ignored). Given when no key is found, nothing is sent rather than plaintext |
 | `--lang`, `--name`, `--role`, `--org` | As in `report`. With SMTP configured they are required: a report would otherwise reach the recipient signed "[NOME]", and `send` refuses, before asking anything of the network |
 
 SMTP delivery happens only when `--smtp-host`, `--smtp-user`, the password
@@ -231,8 +272,17 @@ Addresses actually found are listed by source. Common role addresses
 records and no null MX).
 
 For every address, MailRadar checks whether a GPG public key is published
-(🔐), which tells you where an encrypted report can be sent. Skip this check
-with `--no-gpg`.
+(🔐), which tells you where an encrypted report can be sent. An address no
+keyserver answered for (HTTP 429, a timeout) is listed as not verified, not as
+an address without a key. Skip this check with `--no-gpg`.
+
+Addresses are read whole, as RFC 5322 writes them (`o'brien@`, `first.last+tag@`,
+and the letters of other scripts, `josé.dpo@`); a `mailto:` link is decoded first
+(`mailto:%20dpo@` is `dpo@`), and a local part that is not a valid one is left
+out rather than reported in part. An SOA contact written with an escaped dot
+(`john\.doe.example.com.`) is `john.doe@`. Redirects are followed only to
+`https://`, and only to a host of the same registrable domain or to one whose
+addresses are all public: a redirect to `http://127.0.0.1` is not followed.
 
 ---
 
@@ -262,7 +312,9 @@ domain can be spoofed. The other checks are hardening measures.
 
 In the table, ✅ means the check is correctly configured, ⚠️ that it is
 present but weaker than recommended, and ❌ that it is missing. Every point
-lost appears under **Issues found** with the action to take.
+lost appears under **Issues found** with the action to take. Each check's
+points are coloured by the share of that check's maximum they are (20 of 20
+for SPF is green), and a check that was not verified shows `—`, not `0`.
 
 ### DMARC (up to 50 points)
 
@@ -280,18 +332,26 @@ fails SPF and DKIM checks. It is the single most important record.
 A missing DMARC record means the domain is spoofable. The ✅ status is shown
 only for `p=reject`.
 
-Multi-level domains are resolved the way RFC 7489 §6.6.3 prescribes: if
-`_dmarc.<domain>` has no record, one label is removed at a time up to the
-organizational domain, which comes from the [Public Suffix
-List](https://publicsuffix.org/) shipped with the package. For
-`asufc.sanita.fvg.it` that means `_dmarc.asufc.sanita.fvg.it`, then
+Subdomains are resolved the way RFC 7489 §6.6.3 prescribes: if
+`_dmarc.<domain>` has no record, the record of the organizational domain
+applies, and no name in between is asked. The organizational domain comes from
+the [Public Suffix List](https://publicsuffix.org/) shipped with the package.
+For `asufc.sanita.fvg.it` that means `_dmarc.asufc.sanita.fvg.it`, then
 `_dmarc.sanita.fvg.it`: `fvg.it` is itself on the list, like `it`, `co.uk` or
-`co.at`. The public suffix itself is never queried — a record on it is not the
-domain's policy. Two DMARC records on the same name are reported as such:
-receivers then apply no DMARC policy at all. An inherited record is marked
-`via <parent domain>` in the table and listed under Issues found, since the
-subdomain has no policy of its own; where the parent publishes `sp=`, that is
-the policy scored for the subdomain.
+`co.at`. For `sub.a.example.com` it means `_dmarc.sub.a.example.com`, then
+`_dmarc.example.com`: a record on `a.example.com` is not consulted. The public
+suffix itself is never queried — a record on it is not the domain's policy.
+Two DMARC records on the same name are reported as such: receivers then apply
+no DMARC policy at all. An inherited record is marked `via <organizational
+domain>` in the table and listed under Issues found, since the subdomain has no
+policy of its own; where that record publishes `sp=`, that is the policy scored
+for the subdomain.
+
+A `p=` or `sp=` that is not `none`, `quarantine` or `reject` (or a record with
+no `p=`) is never shown as the policy. As §6.6.3 says, such a record acts as
+`p=none` when its `rua=` names a valid URI, and otherwise no DMARC applies; the
+issue names the value. `rua=` and `ruf=` count only for entries that are URIs:
+`rua=dmarc@example.com` is an address without `mailto:` and turns no reports on.
 
 ### SPF (up to 20 points)
 
@@ -308,15 +368,30 @@ the domain. What matters most is how it ends:
 The record is read term by term, as RFC 7208 defines it: `all` with no
 qualifier is `+all`, names are case-insensitive (`-ALL` is `-all`), and a
 record without `all` follows its `redirect=`; with neither, the result is
-neutral. Two SPF records on the domain, or more than 10 DNS lookups once
-`include:` and `redirect=` are followed, are a permerror: receivers apply no
-SPF, and the check scores 0. MailRadar also flags `+a` and `+mx` mechanisms as
-too permissive.
+neutral. These are a permerror, for which receivers apply no SPF and the check
+scores 0: two SPF records on the domain; more than 10 DNS lookups once
+`include:` and `redirect=` are followed; an `include:` or `redirect=` whose
+target has no SPF record, or two; and a syntax error anywhere in the record or
+in one it pulls in, named in the issue: an unknown mechanism (`foo:bar`), a typo
+of `all` (`-al`, `-all;`), `redirect=` twice, or an `ip4:`/`ip6:` value outside
+the RFC 7208 grammar (a netmask, `/027`, a prefix length past 32 or 128, a zone
+id). A modifier with an unknown name (`foo=bar`) is allowed, as the RFC says. A
+passing range of length 0 (`ip4:0.0.0.0/0`, `ip6:::/0`) lets any server pass
+and scores as `+all`.
 
-Three more findings change no points: a record at exactly 10 lookups, which the
-next `include:` breaks; an `ip4:` or `ip6:` range written from an address inside
-it (`ip4:192.0.2.98/27` authorises all of `192.0.2.96/27`, 32 addresses); and a
-range the domain lists although one of its own `include:` already authorises it.
+Three more findings change no points and are reported as notes, not issues: a
+record at exactly 10 lookups, which the next `include:` breaks (or "at least N"
+when an `include:` or `redirect=` uses a macro, which is counted but not
+followed); an `ip4:` or `ip6:` range written from an address inside it
+(`ip4:192.0.2.98/27` authorises all of `192.0.2.96/27`, 32 addresses, and
+`-ip4:` denies all of it); and a range the domain lists although a record it
+pulls in already authorises it. That one is said only when the evaluation
+reaches the other range first for every address: not when it comes after an
+`all`, or after a term that may fail or softfail those addresses first, or
+through an `include:` that does not pass. The note names the domain's own
+`include:` or `redirect=`, and the records in between.
+Kept in `SPFResult.notes`, they are printed under **Notes**, apart from the
+issues, and the letter lists them as notes without asking for action.
 
 ### DKIM (up to 15 points)
 
@@ -331,6 +406,19 @@ found is the one measured, and the table names them all (`selector1: 1024-bit
 RSA | selector2: 2048-bit RSA`). An Ed25519 key (`k=ed25519`, RFC 8463) scores
 like a 2048-bit RSA key. An empty `p=` is a revoked key (RFC 6376 §3.6.1): it
 does not count, and the revocation is reported if no active key is found.
+
+Only `v=DKIM1` records, or records without `v=` that carry DKIM's own tags, are
+read as keys: a DMARC record published under a selector is not one. The key
+size is read from the key itself, never estimated from the length of `p=`. A key
+that does not decode as the type it declares (SubjectPublicKeyInfo or PKCS#1 for
+RSA, 32 bytes for Ed25519), a `k=` no RFC defines, or a record with no `p=` at all
+is reported as malformed — signatures cannot be verified with it — and scores 0.
+A key with `t=y` is in testing mode, and RFC 6376 §3.6.1 tells verifiers to treat
+its mail as unsigned: it is reported and scores 0 too. Either kind decides the
+score only when no other key works; a domain with one malformed or testing
+selector beside a working key is scored by the working key. A domain so long
+that every `<selector>._domainkey.<domain>` passes 255 octets can publish no
+key, and is told so.
 
 | Key size | Points |
 |----------|--------|
@@ -349,8 +437,15 @@ organization's logo. MailRadar checks that the SVG logo is reachable (2
 points) and whether a Verified Mark Certificate is referenced (8 points, or 3
 without a VMC). The logo is downloaded only from an `https://` URL that does
 not name a private or loopback address, since the URL comes from the analysed
-domain's DNS. `v=BIMI1; l=; a=;` declines BIMI and scores 0. BIMI is a trust and branding feature, not a protection
-against spoofing by itself.
+domain's DNS; that includes the IPv4 forms `getaddrinfo` accepts on Linux
+(`127.1`, `2130706433`, `0x7f000001`, `0177.0.0.1`), and a host made of numbers
+alone that is no address at all. A logo or VMC URL that cannot be parsed is
+reported as malformed, and `a=` counts as a VMC only if it is an `https://` URL.
+`v=BIMI1; l=; a=;` declines BIMI and scores 0; the letter reports it as the
+domain's choice, without recommending a record. Mail clients show a BIMI logo
+only for a domain whose DMARC policy is `quarantine` or `reject`: beside
+`p=none`, or no DMARC, BIMI scores 0 and the issue says why. BIMI is a trust
+and branding feature, not a protection against spoofing by itself.
 
 ### MTA-STS (up to 5 points)
 
@@ -359,10 +454,19 @@ MTA-STS (`_mta-sts.<domain>` plus the policy file at
 deliver mail to the domain over verified TLS. `enforce` mode scores 5 points,
 `testing` mode 2.
 
+Both parts are read as senders read them (RFC 8461 §3.1 and §3.2). Only a TXT
+record that begins with `v=STSv1` counts; with two of them, or one without a
+valid `id=`, senders look for no policy, and none is fetched. The policy file
+needs `version: STSv1`, a `mode`, `max_age`, and an `mx` line in `enforce` or
+`testing` mode: a file that lacks any of them is no policy, scores 0, and the
+issue names what is missing.
+
 ### TLS-RPT (up to 3 points)
 
 TLS-RPT (`_smtp._tls.<domain>`) asks other servers to report TLS delivery
-failures. The table shows where the reports are sent.
+failures. The table shows where the reports are sent. As RFC 8460 §3 has it,
+the record needs a `rua=` with at least one `mailto:` or `https:` URI, and with
+two `v=TLSRPTv1` records senders assume there is none: either scores 0.
 
 ### GPG (up to 5 points)
 
@@ -379,7 +483,17 @@ there is shown with its fingerprint and "address not verified", scores
 nothing, and should be confirmed with the domain before use. A keyserver that
 does not answer (HTTP 429 — keys.openpgp.org allows one by-email lookup a
 minute, with a burst of 50 — or a timeout) is not asked again during the
-analysis and leaves the check "not verified", which is not "no key".
+analysis and leaves the check "not verified", which is not "no key". When
+keys.openpgp.org does not answer and keyserver.ubuntu.com lists a key, the
+issues say that a verified key may exist all the same. A key whose expiration
+date has passed is not used, whether or not the keyserver marks it expired.
+
+`send` encrypts with gpg in a throwaway keyring that only looks at the key it
+was given (`--auto-key-locate clear,local`, `--no-auto-key-retrieve`): gpg does
+not go looking for another key on the network, and whatever daemons it started
+for that keyring are stopped before the keyring is deleted. No published key
+is a suggestion, printed under the provisions applied; it is not cited as a
+GDPR Article 32 gap.
 
 ---
 
@@ -388,19 +502,28 @@ analysis and leaves the check "not verified", which is not "no key".
 - DKIM detection depends on the list of common selectors (see above).
 - A DNS lookup that fails (timeout, SERVFAIL) leaves that check "not
   verified": it scores 0 but is not reported as missing, and `report` and
-  `send` refuse to produce a report from an incomplete analysis.
+  `send` refuse to produce a report from an incomplete analysis. So does an
+  MTA-STS policy fetch or a BIMI logo fetch that gets no answer (a timeout, a
+  reset, a refused connection to a host that DNS gives an address): that says
+  something about the network the scan runs from. An HTTP status such as 404,
+  or a policy host that DNS does not know, is the domain's answer and is scored.
+- A domain that is not a valid DNS name (a label past 63 octets, a name past
+  255, invalid IDNA) is reported as such, not as a DNS failure.
 - SPF macros (`%{d}` and the like) are not expanded, so an `include:` or
-  `redirect=` that uses one is counted but not followed, and the limit of two
-  void lookups is not checked.
+  `redirect=` that uses one is counted but not followed: the lookup count is
+  then "at least N", and a verdict handed to such a `redirect=` is reported as
+  not checked. The limit of two void lookups is not checked either, nor are
+  the domain names in SPF terms against the grammar, only that they are there.
 - The BIMI logo host name is not checked for resolving to a private address,
   and the VMC is not downloaded or validated: "VMC" means that `a=` names one.
 - A key keyserver.ubuntu.com publishes for the address is reported as "not
-  verified": that server does not check who uploads a key, and `send` still
-  encrypts to the first key found. Confirm the fingerprint with the domain
-  before relying on it for sensitive reports.
-- `send` supports SMTP over implicit TLS only (SMTPS, usually port 465).
-- With `send --sign`, if signing fails (for example a wrong passphrase) the
-  report is sent unsigned.
+  verified": that server does not check who uploads a key, and `send` uses it
+  only with its fingerprint confirmed through `--gpg-fingerprint`.
+- `send` looks for a key under the five contact addresses in order and takes
+  the first one found: a key keyserver.ubuntu.com lists for `security@` comes
+  before a verified one keys.openpgp.org lists for `dpo@`.
+- `discover` checks where a redirect leads, not the addresses of the
+  subdomains it finds on crt.sh before requesting them.
 
 ---
 

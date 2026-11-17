@@ -31,10 +31,12 @@ def make_smtp_config():
     )
 
 
-def make_gpg_result(found=False, uid=None):
+def make_gpg_result(found=False, uid=None, verified=True):
+    """A key the keyserver verified unless said otherwise: only such a key is encrypted to without confirmation."""
     result = GPGResult()
     result.found = found
     result.uid = uid
+    result.verified = found and verified
     return result
 
 
@@ -223,7 +225,7 @@ def test_send_report_no_gpg_no_smtp():
 def test_send_report_plaintext_smtp():
     gpg = make_gpg_result(found=False)
     config = make_smtp_config()
-    with patch("mailradar.sender._send_smtp", return_value=True):
+    with patch("mailradar.sender._deliver", return_value=None):
         result = send_report(
             domain="example.com",
             report_text="Test report",
@@ -238,7 +240,7 @@ def test_send_report_gpg_encrypted():
     gpg = make_gpg_result(found=True, uid="test@example.com")
     config = make_smtp_config()
     with patch("mailradar.sender._encrypt_with_gpg", return_value="ENCRYPTED"), \
-         patch("mailradar.sender._send_smtp", return_value=True):
+         patch("mailradar.sender._deliver", return_value=None):
         result = send_report(
             domain="example.com",
             report_text="Test report",
@@ -254,7 +256,7 @@ def test_send_report_with_sign():
     gpg = make_gpg_result(found=False)
     config = make_smtp_config()
     with patch("mailradar.sender._sign_with_gpg", return_value="SIGNED REPORT"), \
-         patch("mailradar.sender._send_smtp", return_value=True):
+         patch("mailradar.sender._deliver", return_value=None):
         result = send_report(
             domain="example.com",
             report_text="Test report",
@@ -277,11 +279,12 @@ def test_encrypt_with_public_key_imports_into_temp_keyring():
         result = _encrypt_with_gpg("report", "security@example.com", FAKE_KEY)
 
     assert result is not None
-    assert mock_run.call_count == 2
-    import_cmd = mock_run.call_args_list[0].args[0]
-    encrypt_cmd = mock_run.call_args_list[1].args[0]
+    gpg_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "gpg"]
+    assert len(gpg_calls) == 2
+    import_cmd = gpg_calls[0].args[0]
+    encrypt_cmd = gpg_calls[1].args[0]
     assert "--import" in import_cmd
-    assert mock_run.call_args_list[0].kwargs["input"] == FAKE_KEY.encode()
+    assert gpg_calls[0].kwargs["input"] == FAKE_KEY.encode()
     homedir = import_cmd[import_cmd.index("--homedir") + 1]
     assert encrypt_cmd[encrypt_cmd.index("--homedir") + 1] == homedir
     assert encrypt_cmd[encrypt_cmd.index("--trust-model") + 1] == "always"
@@ -292,14 +295,15 @@ def test_encrypt_with_public_key_import_failure():
         mock_run.return_value = MagicMock(returncode=2, stdout=b"")
         result = _encrypt_with_gpg("report", "security@example.com", FAKE_KEY)
     assert result is None
-    assert mock_run.call_count == 1
+    # The import, and nothing after it but gpgconf stopping what it started
+    assert [c.args[0][0] for c in mock_run.call_args_list] == ["gpg", "gpgconf"]
 
 
 def test_send_report_passes_fetched_key_to_encryption():
     gpg = make_gpg_result(found=True, uid="security@example.com")
     gpg.raw_key = FAKE_KEY
     with patch("mailradar.sender._encrypt_with_gpg", return_value="ENCRYPTED") as mock_enc, \
-         patch("mailradar.sender._send_smtp", return_value=True):
+         patch("mailradar.sender._deliver", return_value=None):
         send_report("example.com", "Test report", gpg, config=make_smtp_config())
     mock_enc.assert_called_once_with("Test report", "security@example.com", FAKE_KEY)
 
@@ -307,7 +311,7 @@ def test_send_report_passes_fetched_key_to_encryption():
 def test_send_report_encryption_failure_does_not_send_plaintext():
     gpg = make_gpg_result(found=True, uid="security@example.com")
     with patch("mailradar.sender._encrypt_with_gpg", return_value=None), \
-         patch("mailradar.sender._send_smtp", return_value=True) as mock_smtp:
+         patch("mailradar.sender._deliver", return_value=None) as mock_smtp:
         result = send_report("example.com", "Test report", gpg, config=make_smtp_config())
     mock_smtp.assert_not_called()
     assert result.sent is False
@@ -385,4 +389,82 @@ def test_encrypt_with_fetched_key_real_gpg():
         assert decrypted == "secret report"
     finally:
         subprocess.run(["gpgconf", "--homedir", home, "--kill", "all"], capture_output=True)
+        shutil.rmtree(home, ignore_errors=True)
+
+
+# ─── gpg stays local and leaves nothing running ──────────────────────────────
+
+def test_encryption_never_lets_gpg_look_for_keys_on_the_network():
+    """gpg's default `auto-key-locate local,wkd` sends an unusable key's address to WKD
+    (openpgpkey.<domain>), through a dirmngr left running after the homedir is gone."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=b"-----BEGIN PGP MESSAGE-----\n")
+        _encrypt_with_gpg("report", "security@example.com", FAKE_KEY)
+
+    commands = [c.args[0] for c in mock_run.call_args_list]
+    gpg_commands = [c for c in commands if c[0] == "gpg"]
+    for command in gpg_commands:
+        assert command[command.index("--auto-key-locate") + 1] == "clear,local"
+        assert "--no-auto-key-retrieve" in command
+    homedir = gpg_commands[0][gpg_commands[0].index("--homedir") + 1]
+    assert commands[-1] == ["gpgconf", "--homedir", homedir, "--kill", "all"]
+
+
+def _dirmngrs() -> dict[int, str]:
+    """The command line of every running dirmngr, by process id."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    if sys.platform == "win32":
+        listed = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_Process -Filter \"Name='dirmngr.exe'\" | "
+             "ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        pairs =[line.split(" ", 1) for line in listed.stdout.splitlines() if line.strip()]
+        return {int(pid): command for pid, command in pairs}
+    running = {}
+    for cmdline in Path("/proc").glob("[0-9]*/cmdline"):
+        try:
+            text = cmdline.read_bytes().replace(b"\0", b" ").decode(errors="replace")
+        except OSError:
+            continue
+        if "dirmngr" in text:
+            running[int(cmdline.parent.name)] = text
+    return running
+
+
+@pytest.mark.skipif(
+    not _gpg_can_generate_a_key(),
+    reason="gpg is absent, or cannot create a keyring at the path tempfile gives it",
+)
+def test_an_expired_key_is_refused_without_starting_dirmngr(tmp_path, monkeypatch):
+    """A key that expired in 2020: gpg cannot encrypt to it, and must not go looking for another."""
+    import subprocess
+    home = tempfile.mkdtemp(prefix="mr-")
+    gpg = ["gpg", "--batch", "--homedir", home]
+    work = tmp_path / "work"
+    work.mkdir()
+    # mailradar's throwaway homedir is made under `work`, so a dirmngr started for it names `work`
+    monkeypatch.setattr(tempfile, "tempdir", str(work))
+    try:
+        subprocess.run(
+            gpg + ["--faked-system-time", "20200101T000000!", "--passphrase", "", "--pinentry-mode", "loopback",
+                   "--quick-gen-key", "Test <security@example.com>", "default", "default", "1d"],
+            check=True, capture_output=True, timeout=120,
+        )
+        public_key = subprocess.run(gpg + ["--armor", "--export", "security@example.com"],
+                                    check=True, capture_output=True, timeout=30).stdout.decode()
+
+        assert _encrypt_with_gpg("secret report", "security@example.com", public_key) is None
+        started = {pid: line for pid, line in _dirmngrs().items() if str(work) in line}
+        assert not started
+    finally:
+        import os
+        import signal
+        subprocess.run(["gpgconf", "--homedir", home, "--kill", "all"], capture_output=True)
+        # A dirmngr whose homedir is gone cannot be reached by gpgconf: stopped by its id
+        for pid, line in _dirmngrs().items():
+            if str(work) in line:
+                os.kill(pid, signal.SIGTERM)
         shutil.rmtree(home, ignore_errors=True)

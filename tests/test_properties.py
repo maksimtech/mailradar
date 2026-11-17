@@ -85,7 +85,11 @@ def test_anything_that_is_not_an_integer_is_refused(value):
 # ── Email addresses scraped off a page ──────────────────────────────────────
 
 _LABEL = st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789", min_size=1, max_size=8)
-_LOCAL = st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789._%+-", min_size=1, max_size=10)
+# A local part as RFC 5322 writes one, a dot-atom: no dot at either end, none
+# doubled. `.` or `a..b` is no address, and the extractor no longer reports
+# whatever part of one follows the dot
+_ATOM = st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789_%+-", min_size=1, max_size=5)
+_LOCAL = st.lists(_ATOM, min_size=1, max_size=3).map(".".join)
 
 
 @given(_LOCAL, _LABEL, st.sampled_from(["com", "it", "org", "co.uk"]))

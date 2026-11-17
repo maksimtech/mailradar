@@ -88,6 +88,14 @@ def _make_domain_report(domain="example.com", score=75, grade="GOOD"):
     )
 
 
+def _assume_names_exist(case: unittest.TestCase) -> None:
+    """For tests whose analysis is a report built by hand: the name's existence is not their subject,
+    and check, report, send and batch would otherwise ask the real DNS for it."""
+    patcher = patch("mailradar.checker.domain_exists", return_value=True)
+    patcher.start()
+    case.addCleanup(patcher.stop)
+
+
 class TestCLIHelp(unittest.TestCase):
 
     def setUp(self):
@@ -123,6 +131,7 @@ class TestCheckCommand(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     @patch("mailradar.cli.analyze_domain")
     def test_check_domain_good(self, mock_analyze):
@@ -165,6 +174,7 @@ class TestBatchCommand(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     def test_batch_missing_file(self):
         result = self.runner.invoke(app, ["batch", "nonexistent.txt"])
@@ -230,6 +240,7 @@ class TestReportCommand(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     @patch("mailradar.checker.analyze_domain")
     @patch("mailradar.cli.analyze_domain")
@@ -258,6 +269,7 @@ class TestSendCommand(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     def test_send_help(self):
         result = self.runner.invoke(app, ["send", "--help"])
@@ -341,6 +353,7 @@ class TestCheckCommandWithIssues(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     @patch("mailradar.cli.analyze_domain")
     def test_check_with_issues(self, mock_analyze):
@@ -419,6 +432,7 @@ class TestRichMarkupSafety(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     def _hostile_report(self):
         report = _make_domain_report("example.com", 75, "GOOD")
@@ -480,6 +494,7 @@ class TestBatchResilience(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     @patch("mailradar.cli.analyze_domain")
     def test_batch_continues_after_failing_domain(self, mock_analyze):
@@ -492,7 +507,9 @@ class TestBatchResilience(unittest.TestCase):
             tmp = f.name
         try:
             result = self.runner.invoke(app, ["batch", tmp])
-            self.assertIsNone(result.exception, result.output)
+            # Not a traceback: the exit code a failed domain gives a batch
+            self.assertEqual(result.exit_code, 1, result.output)
+            self.assertIsInstance(result.exception, SystemExit)
             self.assertEqual(mock_analyze.call_count, 2)
             self.assertIn("good.com", result.output)
             self.assertIn("Failed (1): broken.com", result.output)
@@ -504,6 +521,7 @@ class TestSendGpgFailed(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        _assume_names_exist(self)
 
     @patch("mailradar.sender.send_report")
     @patch("mailradar.checker.analyze_domain")
@@ -854,7 +872,8 @@ class TestNoScoreWithoutMeasure:
         domains = tmp_path / "domains.txt"
         domains.write_text("example.com\n", encoding="utf-8")
         result = CliRunner().invoke(app, ["batch", str(domains)])
-        assert result.exception is None, result.output
+        # check's code for an analysis that could not be graded, not a traceback
+        assert result.exit_code == 3, result.output
         # The summary row is the one whose first cell is the domain, compared whole
         cells = next(line.split() for line in result.output.splitlines() if line.split()[:1] == ["example.com"])
         assert cells[1] == "N/A"

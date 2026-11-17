@@ -1,0 +1,23 @@
+{
+ "_recorded": {
+  "date": "2026-11-17",
+  "how": "UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.9.2; the OPT record is left out of the stored message and so is the id",
+  "by": "domain_exists(\"startpage.com\"), which report, send and batch ask before the analysis from 2026-11-17 on",
+  "queried": [
+   "startpage.com. A"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "startpage.com. IN A",
+   ";ANSWER",
+   "startpage.com. 308 IN A 67.63.60.233",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}

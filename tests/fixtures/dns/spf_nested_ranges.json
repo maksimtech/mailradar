@@ -1,0 +1,118 @@
+{
+ "_derived": {
+  "from": "dns/spf_redundant_include.json",
+  "changed": "one name per path to b.example.net, whose record lists 192.0.2.0/24, from a domain that lists ip4:192.0.2.96/27 itself: through an include of an include (a.example.net); through an include whose record is a redirect= (c.example.net); through the domain's own redirect=; through a ?include nested in a passing include (d.example.net), which authorises nothing (RFC 7208 §5.2); and an include whose record lists the range with -ip4 (e.example.net), which denies it. Documentation addresses (RFC 5737)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "deep.example.com. IN TXT",
+   ";ANSWER",
+   "deep.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 include:a.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "a.example.net. IN TXT",
+   ";ANSWER",
+   "a.example.net. 300 IN TXT \"v=spf1 include:b.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "b.example.net. IN TXT",
+   ";ANSWER",
+   "b.example.net. 300 IN TXT \"v=spf1 ip4:192.0.2.0/24 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "via-redirect.example.com. IN TXT",
+   ";ANSWER",
+   "via-redirect.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 include:c.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "c.example.net. IN TXT",
+   ";ANSWER",
+   "c.example.net. 300 IN TXT \"v=spf1 redirect=b.example.net\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "redirect.example.com. IN TXT",
+   ";ANSWER",
+   "redirect.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 redirect=b.example.net\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "neutral-nested.example.com. IN TXT",
+   ";ANSWER",
+   "neutral-nested.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 include:d.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "d.example.net. IN TXT",
+   ";ANSWER",
+   "d.example.net. 300 IN TXT \"v=spf1 ?include:b.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "denied-nested.example.com. IN TXT",
+   ";ANSWER",
+   "denied-nested.example.com. 300 IN TXT \"v=spf1 ip4:192.0.2.96/27 include:e.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "e.example.net. IN TXT",
+   ";ANSWER",
+   "e.example.net. 300 IN TXT \"v=spf1 -ip4:192.0.2.0/24 ~all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
