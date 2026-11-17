@@ -355,7 +355,17 @@ def _require_valid_name(name: str) -> None:
 
     dnspython raises the same errors from inside resolve(), as DNSException
     subclasses: caught there, they read as a lookup that failed.
+
+    A plain ASCII name with no escapes is judged on its lengths alone, which is
+    all dnspython checks in it: labels of 1 to 63 octets, 253 characters at most
+    (255 octets on the wire). This runs before every query, and parsing each
+    name doubled the cost of an analysis whose DNS answers were already there.
+    Every other name goes to dns.name.from_text, which also says why it fails.
     """
+    text = name[:-1] if name.endswith(".") else name
+    if (text and text.isascii() and "\\" not in text and len(text) <= 253
+            and all(0 < len(label) <= 63 for label in text.split("."))):
+        return
     try:
         dns.name.from_text(name)
     except dns.name.LabelTooLong:

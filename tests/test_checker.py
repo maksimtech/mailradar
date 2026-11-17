@@ -5,6 +5,7 @@ Uses mocks to avoid real DNS queries in CI.
 from unittest.mock import MagicMock, patch
 
 import dns.exception
+import dns.name
 import dns.resolver
 import pytest
 
@@ -1124,6 +1125,42 @@ class TestInvalidNames:
         assert "not a valid domain name" in str(raised.value)
         assert "failed" not in str(raised.value)
         assert server.queries == []
+
+    @pytest.mark.parametrize("name", [
+        "example.com",
+        "example.com.",
+        "a" * 63 + ".example.com",
+        "a" * 64 + ".example.com",
+        ".".join(["a" * 63] * 3) + "." + "a" * 61,   # 253 characters: the longest name there is
+        ".".join(["a" * 63] * 3) + "." + "a" * 62,   # 254: one octet past 255 on the wire
+        "a..example.com",
+        ".example.com",
+        "mail_.example.com",
+        "-a.example.com",
+        "xn--bcher-kva.example",
+        "bücher.example",
+        "a\\.b.example.com",
+        "",
+        ".",
+    ])
+    def test_the_verdict_on_a_name_is_dnspython_s(self, name):
+        """A plain ASCII name is judged on its lengths alone, without parsing it: the
+        check runs before every query, and parsing each name doubled the cost of
+        an analysis (CodSpeed, 2026-11-17). dns.name.from_text stays the reference,
+        and the fast path has to agree with it on every name."""
+        from mailradar.checker import InvalidDomainError, _require_valid_name
+
+        try:
+            dns.name.from_text(name)
+            valid_for_dnspython = True
+        except dns.exception.DNSException:
+            valid_for_dnspython = False
+        try:
+            _require_valid_name(name)
+            valid_for_mailradar = True
+        except InvalidDomainError:
+            valid_for_mailradar = False
+        assert valid_for_mailradar == valid_for_dnspython
 
     def test_a_check_on_a_name_that_is_not_valid_says_so(self, dns_replay):
         server = dns_replay()
