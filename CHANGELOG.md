@@ -12,6 +12,19 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Changed
+
+- **A short DKIM key names the rule it breaks.** A 1024-bit RSA key was told "upgrade to 2048-bit
+  recommended", which reads as a preference: NIST SP 800-131A Rev. 2 disallows RSA under 2048 bits for
+  generating signatures, and the issue now says so. A key under 1024 bits was "weak" with no length;
+  it now says how many bits it has (`is a weak 768-bit RSA key`) and cites the same rule. That branch
+  had no test: it now has one, on a 768-bit key made for `tests/fixtures/dns/dkim_short_key.json`
+  (`_derived`, since no recording has one). No score changes.
+  Sources: [NIST SP 800-131A Rev. 2](https://csrc.nist.gov/pubs/sp/800/131/a/r2/final), the rule;
+  [dmarcdkim.com, "Cracking a 1024-bit DKIM key"](https://dmarcdkim.com/blog/cracking-a-1024-bit-dkim-key)
+  (2026), why it matters now: from the GPU factorings of RSA-260 and RSA-896 it estimates RSA-1024 at
+  about 1,000 GPU-years. That figure is a vendor's extrapolation, cited for context, not a measurement.
+
 ## [2026.48] - 2026-11-17
 
 ### Added

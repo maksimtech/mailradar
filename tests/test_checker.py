@@ -607,6 +607,25 @@ class TestCheckDKIM:
         assert result.score == 10
         assert any("1024" in issue for issue in result.issues)
 
+    def test_a_1024_bit_key_names_the_rule_it_breaks(self, dns_replay):
+        """NIST SP 800-131A Rev. 2 disallows RSA keys under 2048 bits for generating signatures.
+        The issue said "upgrade to 2048-bit recommended", which reads as a preference."""
+        dns_replay("polimi_it")
+        result = check_dkim("polimi.it", selectors=["selector1"])
+        issue = next(issue for issue in result.issues if "1024" in issue)
+        assert "NIST SP 800-131A" in issue
+        assert "recommended" not in issue
+
+    def test_a_key_under_1024_bits_is_measured_and_names_the_rule(self, dns_replay):
+        """A 768-bit key (derived: no recording has one) scores 3 and says how long it is:
+        the issue read only "is weak", and no test reached this branch."""
+        dns_replay("dkim_short_key")
+        result = check_dkim("example.com", selectors=["short"])
+        assert (result.key_bits, result.score) == (768, 3)
+        issue = next(issue for issue in result.issues if "short" in issue)
+        assert "768-bit" in issue
+        assert "NIST SP 800-131A" in issue
+
     def test_dkim_missing(self):
         with patch('mailradar.checker.dns.resolver.resolve', side_effect=dns.resolver.NXDOMAIN):
             result = check_dkim("example.com")
