@@ -1,0 +1,33 @@
+X-Fixture: _derived. The header block of a newsletter delivered on 2026-11-18,
+ sent through Amazon SES (eu-central-1) and signed twice: once for the
+ sender's domain under a random SES selector, once for amazonses.com. The
+ sender's domain is replaced by example.com, the recipient left out (the
+ original had no To: either), Received and Authentication-Results dropped;
+ the tags and folding are as received. The selectors, t=, bh=, b=, the
+ Message-ID and the Date are replaced by made-up values of the same shape
+ (a 32-character SES selector, base64 of the same length), so that none of
+ them points back to the sender. A third signature, for example.com with an
+ s= that is no DNS name, is added: it must be ignored.
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=sy1ziwiwe1ghbrfucyeaz6ou950rk4o1; d=example.com; t=1795000000;
+	h=From:Subject:MIME-Version:Content-Type:Message-ID:Date;
+	bh=i9v6K3wDXiZJ8fRJ+EPLaI+wsPnqmXf228NwLfKMwzd=;
+	b=Pph3OJ6BZD9xvp47pvsaPw/6L5i/WcoiusTeSPzoIjGxFP5HQ3fv6FAHCqGOZsCr
+	YKdYr0Q89y2elHodt+p6grU3tTe5pXqMYB7+cAqF2Idgtsfu0EdHl1b8JfMEOpYCcCs
+	VFgkigWjRB11Rzt2JBBbYUMLTGc+nM01Yrws4ju8=
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=6ytbqojtdm1e0w7ef08zzslbsagycb45; d=amazonses.com; t=1795000000;
+	h=From:Subject:MIME-Version:Content-Type:Message-ID:Date:Feedback-ID;
+	bh=i9v6K3wDXiZJ8fRJ+EPLaI+wsPnqmXf228NwLfKMwzd=;
+	b=Bo0fPBDvNS4wuD16ajvtYczVV3O9JtOvZXhGsUNBpkl564bZA1tsnbFQSTKoRvg/
+	FJ2OpG2ZvC4CZ5/o7hv4fK2sQ5opSIjQPh2hzc/22CDze9XoR6wUorq4uO+egdU2ziQ
+	avUHX6GO1wfbJOlO//+sUSpAip+XGzNvYECG4wIc=
+DKIM-Signature: v=1; a=rsa-sha256; d=example.com; s=../../etc; b=AAAA
+From: Example News <nl@example.com>
+Subject: Aggiornamento della Privacy Policy e della Cookie Policy
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Message-ID: <c080e2ca152b5dc6-fa06ed56-def1-49c7-b241-0a514166b86a-000000@eu-central-1.amazonses.com>
+Date: Wed, 18 Nov 2026 12:00:00 +0000
+
+(body left out)

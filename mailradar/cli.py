@@ -551,17 +551,22 @@ def _existing_domain(domain: str) -> str:
 def check(
     domain: str = typer.Argument(..., help="Domain to analyze", callback=_domain_argument),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show raw DNS records"),
+    headers: str = typer.Option(
+        None, "--headers",
+        help="A message from the domain (.eml): also check the DKIM selectors its signatures name",
+    ),
 ):
     """
     Analyze the email security posture of a domain.
     If the domain does not exist, scan TLD variants and let you choose.
     """
     domain = _existing_domain(domain)
+    selectors = _selectors_from(headers, domain) if headers else []
 
     console.print(f"\n[dim]Analyzing [bold]{_s(domain)}[/bold]...[/dim]")
 
     with _status("[cyan]Running DNS checks...[/cyan]"):
-        report = analyze_domain(domain)
+        report = analyze_domain(domain, dkim_selectors=selectors)
 
     _print_report(report)
 
@@ -584,6 +589,32 @@ def check(
     code = _grade_exit_code(report)
     if code:
         raise typer.Exit(code)
+
+
+def _selectors_from(path: str, domain: str) -> list[str]:
+    """The DKIM selectors the message at `path` was signed with for `domain`, said aloud.
+
+    The message is read, not trusted: only s= values that are DNS names are
+    kept, and only from signatures whose d= is the domain analysed.
+    """
+    from mailradar.checker import dkim_selectors_in
+
+    try:
+        with open(path, "rb") as f:
+            message = f.read()
+    except FileNotFoundError:
+        console.print(f"[red]File not found: {_s(path)}[/red]")
+        raise typer.Exit(1) from None
+    except OSError as e:
+        console.print(f"[red]Cannot read {_s(path)}: {_s(str(e.strerror or e))}[/red]")
+        raise typer.Exit(1) from None
+    selectors = dkim_selectors_in(message, domain)
+    if selectors:
+        console.print(f"[dim]DKIM selectors from {_s(path)}: {_s(', '.join(selectors))}[/dim]")
+    else:
+        console.print(f"[yellow]No DKIM signature for {_s(domain)} in {_s(path)}: "
+                      f"only the common selectors are checked[/yellow]")
+    return selectors
 
 
 def _grade_exit_code(report: DomainReport) -> int:

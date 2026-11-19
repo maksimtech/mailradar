@@ -1214,6 +1214,37 @@ DKIM_SELECTORS = [
 ]
 
 
+# A DKIM selector is one or more DNS labels (RFC 6376 §3.1); anything else in
+# s= is not a name a key can be published under
+_DKIM_LABEL = r"[A-Za-z0-9_](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?"
+_DKIM_SELECTOR = re.compile(rf"{_DKIM_LABEL}(?:\.{_DKIM_LABEL})*")
+
+
+def dkim_selectors_in(message: bytes, domain: str) -> list[str]:
+    """The selectors (s=) of the DKIM-Signature headers of `message` signed for `domain` (d=), in order.
+
+    Common selectors miss most of what bulk senders use: Amazon SES signs with
+    a random 32-letter selector, and a received message names it in clear.
+    Signatures for another domain (the sending service's own) are left out:
+    they say nothing about `domain`'s keys. RFC 6376 §3.5: d= and s= are tags
+    of the header's tag list; folding whitespace may sit anywhere in it.
+    """
+    import email.parser
+    import email.policy
+
+    headers = email.parser.BytesHeaderParser(policy=email.policy.compat32).parsebytes(message)
+    domain = domain.removesuffix(".").lower()
+    found: list[str] = []
+    for value in headers.get_all("DKIM-Signature") or []:
+        tags = {key: re.sub(r"\s+", "", tag) for key, tag in _parse_tags(re.sub(r"\s+", " ", str(value))).items()}
+        if tags.get("d", "").removesuffix(".").lower() != domain:
+            continue
+        selector = tags.get("s", "")
+        if _DKIM_SELECTOR.fullmatch(selector) and selector not in found:
+            found.append(selector)
+    return found
+
+
 @dataclass(frozen=True)
 class _DKIMKey:
     """What a DKIM key record publishes, as far as scoring goes."""
@@ -1877,8 +1908,12 @@ def _bimi_under_dmarc(bimi: BIMIResult, dmarc: DMARCResult) -> None:
     bimi.score = 0
 
 
-def analyze_domain(domain: str) -> DomainReport:
-    """Run full email security analysis on a domain."""
+def analyze_domain(domain: str, dkim_selectors: list[str] | None = None) -> DomainReport:
+    """Run full email security analysis on a domain.
+
+    `dkim_selectors` are asked for first, then the common ones: the selectors a
+    received message names (dkim_selectors_in), which no list of common ones has.
+    """
     # Once, here: `Example.COM.` otherwise reached the keyservers as
     # security@Example.COM. and MTA-STS as https://mta-sts.Example.COM./
     domain = ".".join(_labels(domain))
@@ -1886,7 +1921,8 @@ def analyze_domain(domain: str) -> DomainReport:
 
     report.dmarc = check_dmarc(domain)
     report.spf = check_spf(domain)
-    report.dkim = check_dkim(domain)
+    extra = [selector for selector in dkim_selectors or [] if selector not in DKIM_SELECTORS]
+    report.dkim = check_dkim(domain, extra + DKIM_SELECTORS if extra else None)
     report.bimi = check_bimi(domain)
     # The one check whose worth depends on another's result
     _bimi_under_dmarc(report.bimi, report.dmarc)
