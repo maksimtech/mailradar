@@ -58,6 +58,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   (2026), why it matters now: from the GPU factorings of RSA-260 and RSA-896 it estimates RSA-1024 at
   about 1,000 GPU-years. That figure is a vendor's extrapolation, cited for context, not a measurement.
 
+- **Every job has a time limit, so a hung job no longer holds a pull request for six hours.** No job
+  but mutmut set `timeout-minutes`, and GitHub's default is 360 minutes; on a required check the pull
+  request waited that long. Each limit is about three times the job's longest run in its last 40 (ten
+  minutes at least): 15 for SonarCloud, 20 for the image, 10 for the rest. Security Posture gets 30,
+  past the 20 minutes it waits for the scanners, so it still says they did not finish
+  (`tests/test_job_timeouts.py`, maksimtech/apkradar#113).
+
 ### Security
 
 - **Three OpenSSL issues are accepted until Debian ships a fix.** At the first scan of main since

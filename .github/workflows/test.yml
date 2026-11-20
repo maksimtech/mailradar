@@ -9,6 +9,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +68,7 @@ jobs:
     needs: [test]
     if: always()
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     steps:
       - name: All test jobs succeeded
         env:
