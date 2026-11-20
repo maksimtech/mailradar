@@ -87,3 +87,12 @@ class TestCheckCommand:
         result = CliRunner().invoke(app, ["check", "example.com", "--headers", str(tmp_path / "none.eml")], env=ENV)
         assert result.exit_code == 1
         assert "File not found" in result.output
+
+    def test_a_file_that_cannot_be_read_is_a_message_not_a_traceback(self, dns_replay, tmp_path):
+        """A directory given as the message: IsADirectoryError on Linux, PermissionError
+        on Windows, both an OSError that is not FileNotFoundError."""
+        dns_replay("example_com")
+        result = CliRunner().invoke(app, ["check", "example.com", "--headers", str(tmp_path)], env=ENV)
+        assert result.exit_code == 1
+        assert "Cannot read" in result.output
+        assert result.exception is None or isinstance(result.exception, SystemExit)
