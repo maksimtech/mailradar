@@ -10,6 +10,7 @@ jobs:
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-26.04
+    timeout-minutes: 15
     # GitHub passes no Actions secrets to Dependabot or fork PRs: there the
     # token is empty and the scan fails with "Not authorized". A step's `if:`
     # cannot read `secrets`, so the job publishes only whether it exists; the
