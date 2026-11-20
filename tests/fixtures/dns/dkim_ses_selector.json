@@ -1,0 +1,19 @@
+{
+  "_derived": {
+    "from": "dns/dkim_short_key.json: its record layout (v=DKIM1; k=rsa; p=), itself from google._domainkey.startpage.com. TXT (recorded 2026-10-07)",
+    "changed": "published under sy1ziwiwe1ghbrfucyeaz6ou950rk4o1._domainkey.example.com, the selector of mail/dkim_ses_newsletter.eml; p= is a 1024-bit RSA public key in SubjectPublicKeyInfo form, made for this file with `openssl genrsa 1024 | openssl rsa -pubout -outform DER | base64` (OpenSSL 3.0.13), as long as the key of the newsletter it stands for; its private half was discarded"
+  },
+  "responses": [
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "sy1ziwiwe1ghbrfucyeaz6ou950rk4o1._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "sy1ziwiwe1ghbrfucyeaz6ou950rk4o1._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCpLRrqCp3TLtJsbvHHOn3kqqVSBsBa0wFQ91UOjoPakxZ0HylpyC1lMDB8rMw7XSwZOv2bO1gjUtzs5fWYSByHTmKsKa6wP0riJSYDq82vpkOAxZsfnqht2VnNku/6f74MAtvK2bQdJk3d2noSxD0kyU13olumv/z30vC6nLfE6wIDAQAB\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ]
+  ]
+}

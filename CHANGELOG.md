@@ -14,6 +14,18 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Added
 
+- **`check --headers mail.eml`: the DKIM selectors a message names.** DKIM keys were looked for under
+  common selectors only, and bulk senders use others: a newsletter signed through Amazon SES, under a
+  random 32-letter selector, read "DKIM not found" while its own `DKIM-Signature` named the selector in
+  clear. Given a message the domain sent, `check` now asks first for the selectors of the signatures
+  whose `d=` is the domain analysed (not the sending service's own), keeping only an `s=` that is a DNS
+  name, and says which it found or that there were none. `analyze_domain` takes them as
+  `dkim_selectors`. Tests use `tests/fixtures/mail/dkim_ses_newsletter.eml` and
+  `tests/fixtures/dns/dkim_ses_selector.json` (both `_derived`, from a newsletter delivered on
+  2026-11-18: the sender's domain replaced by example.com, a 1024-bit key as long as its own).
+  Sources: [RFC 6376](https://www.rfc-editor.org/rfc/rfc6376.html) §3.1 (selectors), §3.5 (the
+  `DKIM-Signature` tags `d=` and `s=`).
+
 - **MX of a domain that sends mail.** `check` now reads the domain's MX records (`MXResult`, no
   points). A domain that sends mail (SPF names a sender, or a DKIM key is published) and has no MX gets
   a note: replies and bounces go to its own address, and some spam filters score a From domain without

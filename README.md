@@ -138,6 +138,21 @@ Show the raw DMARC, SPF, DKIM and BIMI records as well:
 mailradar check example.com --verbose
 ```
 
+**DKIM keys under an uncommon selector.** `check` looks for DKIM keys under a
+list of common selectors. Many bulk senders use others: Amazon SES signs with a
+random 32-letter selector, so a domain that signs through it reads "not found".
+Give `check` a message the domain sent, saved as `.eml`, and it also asks for
+the selectors that message was signed with for that domain:
+
+```bash
+mailradar check example.com --headers newsletter.eml
+```
+
+Only the `DKIM-Signature` headers whose `d=` is the domain analysed are used
+(the sending service's own signature, `d=amazonses.com`, is not), and only an
+`s=` that is a DNS name. The message is read, not verified: the signature is
+not checked, only the key it names.
+
 If the domain does not resolve in DNS, `check` tries common TLD variants of
 the name (`.com`, `.it`, `.eu`, `.org`, `.de`, `.co.uk` and others) and asks
 you to pick one of those that exist. `report` and `send` do the same before
