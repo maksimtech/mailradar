@@ -495,6 +495,23 @@ for that keyring are stopped before the keyring is deleted. No published key
 is a suggestion, printed under the provisions applied; it is not cited as a
 GDPR Article 32 gap.
 
+### MX (no points)
+
+MailRadar reads the domain's MX records to see whether a domain that sends
+mail can also receive it. A domain sends mail when its SPF record names a
+sender or it publishes a DKIM key; one that publishes only `v=spf1 -all` and no
+key sends none, and nothing is said about its MX.
+
+- **No MX** is a note: replies and bounces go to the domain's own A/AAAA
+  address, if it has one (RFC 5321 §5.1, implicit MX), and some spam filters
+  score mail whose From domain has no MX.
+- **A null MX** (`0 .`, RFC 7505) is an issue: the domain declares it accepts
+  no mail, RFC 7505 §4.2 says a domain used to send mail should not publish
+  one, and §4.1 gives receivers a code (550 5.7.27) to reject its mail with.
+
+An MX lookup that gets no answer says nothing either way; it does not make the
+analysis "not verified", since MX is not scored.
+
 ---
 
 ## Known limitations

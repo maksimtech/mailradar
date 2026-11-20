@@ -360,7 +360,8 @@ def _print_report(report: DomainReport) -> None:
         report.bimi.issues +
         report.mta_sts.issues +
         report.tls_rpt.issues +
-        report.gpg.issues
+        report.gpg.issues +
+        report.mx.issues
     )
 
     if all_issues:
@@ -370,11 +371,13 @@ def _print_report(report: DomainReport) -> None:
             console.print(f"  [dim]•[/dim] {_s(issue)}")
 
     # Findings that are not problems and cost no points: a range written from
-    # an inner address, a range an include already holds, 10 lookups of 10
-    if report.spf.notes:
+    # an inner address, a range an include already holds, 10 lookups of 10,
+    # a domain that sends mail with no MX
+    notes = report.spf.notes + report.mx.notes
+    if notes:
         console.print()
         console.print("[bold cyan]ℹ️  Notes (informational, no points lost):[/bold cyan]")
-        for note in report.spf.notes:
+        for note in notes:
             console.print(f"  [dim]·[/dim] {_s(note)}")
 
     console.print()

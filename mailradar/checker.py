@@ -127,6 +127,22 @@ class TLSRPTResult:
 
 
 @dataclass
+class MXResult:
+    """The domain's MX records. Not scored: it says where replies and bounces go.
+
+    `hosts` empty and `null` False, with no `error`, is a domain that publishes
+    no MX at all. A failed lookup sets `error` and says nothing either way.
+    """
+    hosts: list[str] = field(default_factory=list)
+    # RFC 7505 §3: a single MX of preference 0 with exchange "." — the domain
+    # declares that it accepts no mail
+    null: bool = False
+    error: str = ""
+    issues: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DomainReport:
     domain: str = ""
     dmarc: DMARCResult = field(default_factory=DMARCResult)
@@ -136,6 +152,8 @@ class DomainReport:
     mta_sts: MTASTSResult = field(default_factory=MTASTSResult)
     tls_rpt: TLSRPTResult = field(default_factory=TLSRPTResult)
     gpg: GPGResult = field(default_factory=GPGResult)
+    # Not among the scored checks (MAX_SCORES) nor in `unverified`
+    mx: MXResult = field(default_factory=MXResult)
     # None, with grade "N/A", when a DNS lookup or an HTTP request got no
     # answer: a check that was not verified scored 0, and the total read as a
     # measured bottom of scale.
@@ -1773,6 +1791,72 @@ MAX_SCORES = {
 MAX_RAW_SCORE = sum(MAX_SCORES.values())
 
 
+def check_mx(domain: str) -> MXResult:
+    """The MX records of `domain`, and whether they are a null MX (RFC 7505)."""
+    result = MXResult()
+    try:
+        _require_valid_name(domain)
+        answers = dns.resolver.resolve(domain, "MX")
+    except InvalidDomainError as e:
+        result.error = str(e)
+        return result
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return result
+    except dns.exception.DNSException as e:
+        # Not measured, which is not "no MX": the report says nothing about it
+        result.error = f"DNS lookup for {domain} MX failed: {type(e).__name__}"
+        return result
+    records = sorted((rdata.preference, rdata.exchange.to_text()) for rdata in answers)
+    result.null = records == [(0, ".")]
+    if not result.null:
+        result.hosts = [exchange for _, exchange in records]
+    return result
+
+
+def _spf_authorises_senders(spf: SPFResult) -> bool:
+    """True when the SPF record names a sender: any term but `all` and `exp=`.
+
+    `v=spf1 -all` is how a domain that sends no mail says so (RFC 7505 §4.2).
+    """
+    if not spf.present:
+        return False
+    terms = spf.raw.split()[1:]
+    return any(term.lstrip("+-~?").split(":")[0].split("/")[0].split("=")[0].lower() not in ("all", "exp")
+               for term in terms)
+
+
+def _mx_findings(report: DomainReport) -> None:
+    """What the MX records mean for a domain that sends mail. No points either way.
+
+    A domain sends mail when its SPF record names a sender or it publishes a
+    DKIM key. For one that does not, a missing or null MX is what it should be.
+    """
+    mx = report.mx
+    if mx.error or mx.hosts:
+        return
+    if not (_spf_authorises_senders(report.spf) or report.dkim.present):
+        return
+    domain = report.domain
+    if mx.null:
+        # RFC 7505 §4.2: a domain used as envelope sender or From SHOULD NOT
+        # publish a null MX; §4.1: a receiver that rejects mail for it uses
+        # 550 5.7.27. https://www.rfc-editor.org/rfc/rfc7505.html
+        mx.issues.append(
+            f"{domain} publishes a null MX (it accepts no mail) yet sends mail — receivers may reject "
+            "mail from it with 550 5.7.27, and no reply or bounce can reach it (RFC 7505 §4.1, §4.2)"
+        )
+        return
+    # RFC 5321 §5.1: with no MX, the domain's own address is used as an
+    # implicit MX of preference 0. https://www.rfc-editor.org/rfc/rfc5321.html#section-5.1
+    # Spam filters score a From domain without MX: Infomaniak's rspamd added
+    # MIME_FROM_MX_NONE (+4.45) to a message seen on 2026-11-19 (context, one
+    # receiver, not a measurement of all of them).
+    mx.notes.append(
+        f"{domain} sends mail but publishes no MX — replies and bounces go to its A/AAAA address, if any "
+        "(RFC 5321 §5.1 implicit MX), and some spam filters score a From domain without MX"
+    )
+
+
 def _bimi_under_dmarc(bimi: BIMIResult, dmarc: DMARCResult) -> None:
     """Withhold BIMI's points when DMARC does not enforce.
 
@@ -1808,6 +1892,8 @@ def analyze_domain(domain: str) -> DomainReport:
     _bimi_under_dmarc(report.bimi, report.dmarc)
     report.mta_sts = check_mta_sts(domain)
     report.tls_rpt = check_tls_rpt(domain)
+    report.mx = check_mx(domain)
+    _mx_findings(report)
 
     # GPG lookup
     from mailradar.gpg import lookup_gpg

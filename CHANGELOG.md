@@ -12,6 +12,21 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ## [Unreleased]
 
+### Added
+
+- **MX of a domain that sends mail.** `check` now reads the domain's MX records (`MXResult`, no
+  points). A domain that sends mail (SPF names a sender, or a DKIM key is published) and has no MX gets
+  a note: replies and bounces go to its own address, and some spam filters score a From domain without
+  MX. One with a null MX gets an issue: it declares it accepts no mail, and receivers may reject its
+  mail with 550 5.7.27. A domain that sends nothing (`v=spf1 -all`, no key) gets neither, and an MX
+  lookup with no answer says nothing and leaves the grade as it was. The letter (`report`, `send`) does
+  not list them yet. Tests use `tests/fixtures/dns/mx_kinds.json` (`_derived`: no recording has an MX
+  answer); `example_com.json` and `startpage_com.json` gain the `MX` answers `analyze_domain` now asks for.
+  Sources: [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505.html) §3, §4.1, §4.2, the null MX;
+  [RFC 5321 §5.1](https://www.rfc-editor.org/rfc/rfc5321.html#section-5.1), the implicit MX; the
+  `MIME_FROM_MX_NONE` (+4.45) symbol in a message Infomaniak's rspamd delivered on 2026-11-19, why it
+  matters to delivery (context, one receiver, not a measurement).
+
 ### Changed
 
 - **A short DKIM key names the rules it breaks.** A 1024-bit RSA key was told "upgrade to 2048-bit
