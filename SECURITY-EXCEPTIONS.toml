@@ -468,3 +468,73 @@ checked on 2026-11-02). Accepted on that ground, not on waiting for \
 Debian: the review date is when to look for a base image with a fixed sqlite3.
 """
 review_by = "2026-12-31"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OpenSSL issues Docker Scout reported on main on 2026-11-20, against the trixie
+# libssl3t64 of the base image: one of the 2026-11-10 advisory, one of the
+# 2026-11-17 advisory, and CVE-2026-84786 (DANE, no advisory yet). The other
+# four of those advisories, accepted in the other Radars, are not reported here:
+# an entry for them would fail the gate as unused. Review on 2026-12-15.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-107496"
+source = "Docker Scout"
+where = "openssl 3.5.7-1~deb13u3 (libssl3t64), python:3.14-slim-trixie base image"
+why = """
+OpenSSL advisory of 2026-11-10, which rates it Low; Docker Scout reports it as \
+high. Fixed upstream in 3.5.10; Debian lists trixie (security) and unstable as \
+unfixed, so there is no package to upgrade to yet. `apt-get upgrade` runs at build time, and the image is rebuilt at every \
+release: the DSA arrives here without anyone chasing it, and this entry then \
+fails the build as unused.
+
+It is reached only by CMS_encrypt() to a recipient certificate an attacker \
+supplies; nothing in mailradar encrypts a CMS message. mailradar's own TLS is Python's ssl module over TCP (httpx, dnspython's DoH \
+when used, and smtplib/imaplib with STARTTLS); it runs no server at all. \
+cryptography only loads DKIM public keys to measure them, and its wheel \
+carries its own OpenSSL, not the image's.
+"""
+review_by = "2026-12-15"
+
+[[exception]]
+id = "CVE-2026-107493"
+source = "Docker Scout"
+where = "openssl 3.5.7-1~deb13u3 (libssl3t64), python:3.14-slim-trixie base image"
+why = """
+OpenSSL advisory of 2026-11-17, which rates it Low; Docker Scout reports it as \
+high. Fixed upstream in 3.5.10; Debian has no trixie package with the fix yet, \
+so there is nothing to upgrade to. `apt-get upgrade` runs at build time, and the image is rebuilt at every \
+release: the DSA arrives here without anyone chasing it, and this entry then \
+fails the build as unused.
+
+It is reached only by an application that passes a stack of its own to \
+PEM_X509_INFO_read_bio_ex() and keeps using it after a failed read. OpenSSL \
+itself never does, and Python's ssl loads its CA bundle through \
+SSL_CTX_load_verify_locations(), which passes no stack of its own. mailradar's own TLS is Python's ssl module over TCP (httpx, dnspython's DoH \
+when used, and smtplib/imaplib with STARTTLS); it runs no server at all. \
+cryptography only loads DKIM public keys to measure them, and its wheel \
+carries its own OpenSSL, not the image's.
+"""
+review_by = "2026-12-15"
+
+[[exception]]
+id = "CVE-2026-84786"
+source = "Docker Scout"
+where = "openssl 3.5.7-1~deb13u3 (libssl3t64), python:3.14-slim-trixie base image"
+why = """
+A DANE-enabled TLS client may dereference a NULL pointer on an unusual pair of \
+certificate and TLSA records (Debian security tracker). No OpenSSL advisory yet; \
+the fix is openssl/openssl#33634, open on 2026-11-20 and marked for the 3.5 \
+branch. Debian lists trixie and sid as vulnerable, with no fixed version. \
+Docker Scout reports it as high. `apt-get upgrade` runs at build time, and the image is rebuilt at every \
+release: the DSA arrives here without anyone chasing it, and this entry then \
+fails the build as unused.
+
+It is reached only by a TLS client that enables DANE (SSL_dane_enable) and checks \
+TLSA records. Python's ssl module exposes no DANE at all, and mailradar reads no \
+TLSA record. mailradar's own TLS is Python's ssl module over TCP (httpx, dnspython's DoH \
+when used, and smtplib/imaplib with STARTTLS); it runs no server at all. \
+cryptography only loads DKIM public keys to measure them, and its wheel \
+carries its own OpenSSL, not the image's.
+"""
+review_by = "2026-12-15"

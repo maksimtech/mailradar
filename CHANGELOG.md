@@ -29,6 +29,18 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   (2026), why it matters now: from the GPU factorings of RSA-260 and RSA-896 it estimates RSA-1024 at
   about 1,000 GPU-years. That figure is a vendor's extrapolation, cited for context, not a measurement.
 
+### Security
+
+- **Three OpenSSL issues are accepted until Debian ships a fix.** At the first scan of main since
+  2026.48 (2026-11-20), Docker Scout reported CVE-2026-107496 (advisory of 2026-11-10),
+  CVE-2026-107493 (advisory of 2026-11-17) and CVE-2026-84786 (a DANE client crash, no OpenSSL advisory
+  yet, fix in openssl/openssl#33634) as high against the base image's openssl 3.5.7-1~deb13u3, and
+  Security Posture failed. Debian has no trixie package with any of the fixes. None is reachable here:
+  they need `CMS_encrypt()`, a stack passed to `PEM_X509_INFO_read_bio_ex()`, or a TLS client with
+  DANE enabled, and Python's ssl does none of these; mailradar reads no TLSA record. The other four
+  issues of those advisories, accepted in the other Radars, are not reported here and get no entry,
+  since an unused one fails the gate. Reviewed on 2026-12-15.
+
 ## [2026.48] - 2026-11-17
 
 ### Added
