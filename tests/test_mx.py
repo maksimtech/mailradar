@@ -39,6 +39,14 @@ class TestCheckMX:
         assert result.error
         assert (result.hosts, result.null) == ([], False)
 
+    def test_a_name_that_cannot_be_a_domain_is_not_asked_for(self, dns_replay):
+        """A label over 63 octets is no DNS name: the error says so and no query
+        leaves (the replay server fails any query nobody recorded)."""
+        dns_replay("mx_kinds")
+        result = check_mx("a" * 64 + ".example.com")
+        assert result.error
+        assert (result.hosts, result.null) == ([], False)
+
 
 class TestFindings:
     def test_a_sending_domain_without_mx_gets_a_note(self):

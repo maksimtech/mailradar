@@ -1,6 +1,7 @@
 """CodSpeed benchmarks for MailRadar checker."""
 from unittest.mock import MagicMock, patch
 
+import dns.name
 import dns.resolver
 import pytest
 
@@ -30,6 +31,17 @@ class _TXT:
 
 def make_txt_answer(strings):
     return [_TXT(s) for s in strings]
+
+
+class _MX:
+    """One MX rdata as dnspython hands it over: `preference` and `exchange` are
+    all check_mx reads."""
+
+    __slots__ = ("preference", "exchange")
+
+    def __init__(self, preference: int, exchange: str):
+        self.preference = preference
+        self.exchange = dns.name.from_text(exchange)
 
 
 DMARC_TXT = "v=DMARC1; p=reject; pct=100; adkim=s; aspf=s; rua=mailto:rua@example.com; ruf=mailto:ruf@example.com"
@@ -87,6 +99,10 @@ def test_bench_full_analysis(benchmark):
     mock_gpg.issues = []
 
     def mock_resolve(name, rtype):
+        if rtype == "MX":
+            # analyze_domain asks for MX since check_mx; before, every query on
+            # example.com got the SPF TXT, which has no `preference`
+            return [_MX(10, "mx.example.com.")] if name == "example.com" else []
         if "_dmarc" in name:
             return make_txt_answer([DMARC_TXT])
         elif name == "selector1._domainkey.example.com":
