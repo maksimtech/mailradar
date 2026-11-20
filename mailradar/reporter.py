@@ -123,6 +123,12 @@ def generate_report(
 
         # TLS-RPT
         "tls_rpt_issues": report.tls_rpt.issues,
+
+        # MX, not scored: an issue for a null MX on a domain that sends mail
+        # (RFC 7505 §4.1, §4.2), a note for no MX at all (RFC 5321 §5.1). Neither
+        # is in has_problems: the art. 32 paragraph is for DMARC, SPF and DKIM.
+        "mx_issues": report.mx.issues,
+        "mx_notes": report.mx.notes,
     }
 
     # The letter quotes the domain's own records: printed, saved or mailed, a

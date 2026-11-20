@@ -8,6 +8,7 @@ from mailradar.checker import (
     DomainReport,
     GPGResult,
     MTASTSResult,
+    MXResult,
     SPFResult,
     TLSRPTResult,
 )
@@ -251,3 +252,47 @@ class TestSPFNotes:
     def test_a_note_is_not_an_article_32_gap(self):
         for lang, gap in GDPR_GAP.items():
             assert gap not in generate_report(self._report(), lang=lang)
+
+
+class TestMXInTheLetter:
+    """MXResult (#125): `check` printed the MX note and issue, the letter did not (#112).
+    A null MX on a domain that sends mail is an issue (RFC 7505 §4.1, §4.2); no MX on such a
+    domain is a note (RFC 5321 §5.1). Neither is scored, and neither is an article 32 gap."""
+
+    NOTE = ("example.com sends mail but publishes no MX — replies and bounces go to its A/AAAA address, "
+            "if any (RFC 5321 §5.1 implicit MX), and some spam filters score a From domain without MX")
+    ISSUE = ("example.com publishes a null MX (it accepts no mail) yet sends mail — receivers may reject "
+             "mail from it with 550 5.7.27, and no reply or bounce can reach it (RFC 7505 §4.1, §4.2)")
+
+    def _with(self, mx: MXResult) -> DomainReport:
+        report = make_report()
+        report.mx = mx
+        return report
+
+    def test_a_null_mx_on_a_sending_domain_is_an_action_with_its_reason(self):
+        report = self._with(MXResult(null=True, issues=[self.ISSUE]))
+        for lang, head, reason in (("en", " ⚠️  Action required", "Reason:"),
+                                   ("it", " ⚠️  Attenzione richiesta", "Motivo:")):
+            section = _section(generate_report(report, lang=lang), "MX —")
+            assert section.startswith(head), section
+            assert f"{reason} {self.ISSUE}" in section
+            assert "0 ." in section
+
+    def test_no_mx_on_a_sending_domain_is_a_note_not_an_action(self):
+        report = self._with(MXResult(notes=[self.NOTE]))
+        for lang, label in (("en", "Note:"), ("it", "Nota:")):
+            section = _section(generate_report(report, lang=lang), "MX —")
+            assert section.startswith(" ℹ️"), section
+            assert f"{label} {self.NOTE}" in section
+
+    def test_nothing_is_said_when_there_is_nothing_to_say(self):
+        """An MX present, a domain that sends nothing, or a lookup with no answer: no MX section."""
+        for mx in (MXResult(hosts=["mx1.example.com."]), MXResult(), MXResult(error="timeout")):
+            for lang in ("en", "it"):
+                assert "MX —" not in generate_report(self._with(mx), lang=lang)
+
+    def test_mx_is_not_an_article_32_gap(self):
+        """Owner's decision: the art. 32 paragraph is for DMARC, SPF and DKIM problems."""
+        for mx in (MXResult(null=True, issues=[self.ISSUE]), MXResult(notes=[self.NOTE])):
+            for lang, gap in GDPR_GAP.items():
+                assert gap not in generate_report(self._with(mx), lang=lang)

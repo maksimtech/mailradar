@@ -83,6 +83,21 @@ TLS-RPT — ℹ️  Miglioramento consigliato
   Raccomandato: v=TLSRPTv1; rua=mailto:tls-rpt@{{ domain }}
 
 {% endif %}
+{% if mx_issues %}
+MX — ⚠️  Attenzione richiesta
+  Attuale:     Null MX (0 .): il dominio dichiara di non accettare posta
+  Raccomandato: Pubblicare l'MX dei server che ricevono le sue risposte e i rimbalzi,
+               oppure smettere di inviare posta da questo dominio
+  Motivo: {{ mx_issues | join(', ') }}
+
+{% elif mx_notes %}
+MX — ℹ️  Nota
+  Attuale:     Nessun record MX
+{% for note in mx_notes %}
+  Nota: {{ note }}
+{% endfor %}
+
+{% endif %}
 {% if has_problems %}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RILEVANZA GDPR
