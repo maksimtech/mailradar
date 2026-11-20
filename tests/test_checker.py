@@ -607,6 +607,38 @@ class TestCheckDKIM:
         assert result.score == 10
         assert any("1024" in issue for issue in result.issues)
 
+    def test_a_1024_bit_key_names_the_rule_it_breaks(self, dns_replay):
+        """RFC 8301 §3.2, the rule written for DKIM, asks signers for at least 2048 bits;
+        NIST SP 800-131A Rev. 2 disallows RSA keys under 2048 bits for generating signatures.
+        The issue said "upgrade to 2048-bit recommended", which reads as a preference."""
+        dns_replay("polimi_it")
+        result = check_dkim("polimi.it", selectors=["selector1"])
+        issue = next(issue for issue in result.issues if "1024" in issue)
+        assert "RFC 8301" in issue
+        assert "NIST SP 800-131A" in issue
+        assert "recommended" not in issue
+
+    def test_a_key_under_1024_bits_is_measured_and_names_the_rule(self, dns_replay):
+        """A 768-bit key (derived: no recording has one) scores 3 and says how long it is:
+        the issue read only "is weak", and no test reached this branch."""
+        dns_replay("dkim_short_key")
+        result = check_dkim("example.com", selectors=["short"])
+        assert (result.key_bits, result.score) == (768, 3)
+        issue = next(issue for issue in result.issues if "short" in issue)
+        assert "768-bit" in issue
+        assert "NIST SP 800-131A" in issue
+
+    def test_a_key_under_1024_bits_says_verifiers_reject_its_signatures(self, dns_replay):
+        """RFC 8301 §3.2: verifiers must not consider valid a signature made with an RSA key
+        under 1024 bits. For receivers such a domain has no working DKIM; the issue says so.
+        The score is unchanged here (its own issue: mailradar#111)."""
+        dns_replay("dkim_short_key")
+        result = check_dkim("example.com", selectors=["short"])
+        issue = next(issue for issue in result.issues if "short" in issue)
+        assert "RFC 8301" in issue
+        assert "verifiers" in issue and "not accept" in issue
+        assert result.score == 3
+
     def test_dkim_missing(self):
         with patch('mailradar.checker.dns.resolver.resolve', side_effect=dns.resolver.NXDOMAIN):
             result = check_dkim("example.com")

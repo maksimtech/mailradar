@@ -1271,6 +1271,25 @@ def dkim_unusable(dkim: DKIMResult) -> bool:
             or "(testing, t=y)" in dkim.keys.get(dkim.selector, ""))
 
 
+# Why an RSA DKIM key under 2048 bits is an issue, in the words of the rules it breaks.
+# RFC 8301 §3.2, the rule written for DKIM: signers must use RSA keys of at least
+# 1024 bits and should use at least 2048; verifiers must not consider valid a
+# signature made with a key under 1024 bits (RFC 6376 §3.9: it fails for good).
+# https://www.rfc-editor.org/rfc/rfc8301.html#section-3.2
+# NIST SP 800-131A Rev. 2 (2019), §3: RSA signature generation with
+# less than 112 bits of security strength (a modulus under 2048 bits) is disallowed.
+# https://csrc.nist.gov/pubs/sp/800/131/a/r2/final
+# Why it matters for DKIM in particular: the public key sits in DNS for anyone to
+# take, is rarely rotated, and whoever factors it signs mail that passes DKIM and
+# DMARC. RSA-1024 has not been factored in public; a 2026 estimate from the GPU
+# factorings of RSA-260 and RSA-896 puts it near 1,000 GPU-years
+# (https://dmarcdkim.com/blog/cracking-a-1024-bit-dkim-key, an extrapolation by a
+# DMARC vendor, cited for context and not as a measurement).
+_RSA_SIGNING_RULE = "NIST SP 800-131A Rev. 2 disallows RSA under 2048 bits for new signatures"
+_DKIM_SIGNER_RULE = "RFC 8301 §3.2 asks DKIM signers for at least 2048 bits"
+_DKIM_VERIFIER_RULE = "RFC 8301 §3.2: verifiers must not accept signatures made with it"
+
+
 def _key_strength(key: _DKIMKey) -> int:
     """A rank for 'weakest key': a valid Ed25519 key is as strong as RSA 2048 (RFC 8463), a malformed one is nothing."""
     if key.problem:
@@ -1355,10 +1374,12 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
             result.score += 15
         elif bits >= 1024:
             result.score += 10
-            result.issues.append(f"DKIM key under {selector} is 1024-bit — upgrade to 2048-bit recommended{found}")
+            result.issues.append(f"DKIM key under {selector} is 1024-bit — {_DKIM_SIGNER_RULE}, and "
+                                 f"{_RSA_SIGNING_RULE}: upgrade to 2048-bit{found}")
         else:
             result.score += 3
-            result.issues.append(f"DKIM key under {selector} is weak — upgrade to 2048-bit immediately{found}")
+            result.issues.append(f"DKIM key under {selector} is a weak {bits}-bit RSA key — {_DKIM_VERIFIER_RULE}, "
+                                 f"and {_RSA_SIGNING_RULE}: upgrade to 2048-bit immediately{found}")
         return result
 
     if failed:

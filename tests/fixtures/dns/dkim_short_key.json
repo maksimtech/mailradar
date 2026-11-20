@@ -1,0 +1,19 @@
+{
+  "_derived": {
+    "from": "dns/dkim_unusable.json, active._domainkey.example.com. TXT: its record layout (v=DKIM1; k=rsa; p=), itself from google._domainkey.startpage.com. TXT (recorded 2026-10-07)",
+    "changed": "published under short._domainkey.example.com; p= is a 768-bit RSA public key in SubjectPublicKeyInfo form, made for this file with `openssl genrsa 768 | openssl rsa -pubout -outform DER | base64` (OpenSSL 3.0.13), because no recording has a key under 1024 bits; its private half was discarded"
+  },
+  "responses": [
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "short._domainkey.example.com. IN TXT",
+      ";ANSWER",
+      "short._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MHwwDQYJKoZIhvcNAQEBBQADawAwaAJhAO7rSqVuzfyKzVM6NDnure9YCdNiJCz+fYE5k39Tdlv4ZzIDIs0l7ba8iucQ8ZcAbofx90UEbMxafOemXH1uF5pL+IyIcbmP+KQgOsb1yaJt5LCr9eLtBSfgsIzE8DJw5wIDAQAB\"",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ]
+  ]
+}

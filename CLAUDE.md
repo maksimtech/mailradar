@@ -33,6 +33,11 @@ BIMI, VMC, MTA-STS, TLS-RPT, GPG), a riga di comando. Comandi: `check`, `batch`,
   codice da `tests/test_nis2_evidence.py`: se cambiano gli host contattati, i file
   scritti, l'immagine o i workflow, il documento si aggiorna nella stessa PR.
   Nessuna affermazione che il repository non possa dimostrare.
+- **Ogni correzione dice da dove viene.** Se nasce da una norma, da una RFC o da
+  un articolo di sicurezza, la voce del CHANGELOG lo cita con un link (`Sources:`),
+  e il codice lo richiama in un commento accanto alla regola. La fonte primaria
+  (norma, RFC, advisory) giustifica la regola; un articolo di un venditore o una
+  stima si cita come contesto, dicendo che cos'è, mai come misura.
 - **Avvisi di sicurezza accettati** solo in `SECURITY-EXCEPTIONS.toml`, con motivo
   e `review_by`; mai `# nosec` o `# noqa` per zittire uno scanner.
 - **Repository di terzi**: nessuna issue, PR o commento senza conferma esplicita
