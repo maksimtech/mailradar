@@ -1,0 +1,41 @@
+{
+  "_derived": {
+    "from": "dns/asufc_sanita_fvg_it_exists.json: its message layout (opcode, rcode, flags, sections), recorded 2026-10-20",
+    "changed": "questions of type MX under example.com (RFC 2606), since no recording has an MX answer: no-mx.example.com. answers NOERROR with no record, null-mx.example.com. the null MX of RFC 7505 §3 (0 .), with-mx.example.com. two MX records, listed out of preference order"
+  },
+  "responses": [
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "no-mx.example.com. IN MX",
+      ";ANSWER",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "null-mx.example.com. IN MX",
+      ";ANSWER",
+      "null-mx.example.com. 3600 IN MX 0 .",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ],
+    [
+      "opcode QUERY",
+      "rcode NOERROR",
+      "flags QR RD RA",
+      ";QUESTION",
+      "with-mx.example.com. IN MX",
+      ";ANSWER",
+      "with-mx.example.com. 3600 IN MX 20 mx2.example.com.",
+      "with-mx.example.com. 3600 IN MX 10 mx1.example.com.",
+      ";AUTHORITY",
+      ";ADDITIONAL"
+    ]
+  ]
+}
