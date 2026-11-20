@@ -27,7 +27,18 @@
    "_mta-sts.example.com. TXT",
    "_smtp._tls.example.com. TXT",
    "example.com. A",
-   "example.com. SOA"
+   "example.com. SOA",
+   "example.com. MX"
+  ],
+  "added": [
+   {
+    "date": "2026-11-20",
+    "how": "the same method: UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+    "by": "analyze_domain(\"example.com\"), which asks for MX since check_mx",
+    "queried": [
+     "example.com. MX"
+    ]
+   }
   ]
  },
  "responses": [
@@ -294,6 +305,17 @@
    "example.com. IN SOA",
    ";ANSWER",
    "example.com. 1346 IN SOA elliott.ns.cloudflare.com. dns.cloudflare.com. 2416374680 10000 2400 604800 1800",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.com. IN MX",
+   ";ANSWER",
+   "example.com. 245 IN MX 0 .",
    ";AUTHORITY",
    ";ADDITIONAL"
   ]

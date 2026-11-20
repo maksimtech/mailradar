@@ -16,7 +16,18 @@
    "google._domainkey.startpage.com. TXT",
    "default._bimi.startpage.com. TXT",
    "_mta-sts.startpage.com. TXT",
-   "_smtp._tls.startpage.com. TXT"
+   "_smtp._tls.startpage.com. TXT",
+   "startpage.com. MX"
+  ],
+  "added": [
+   {
+    "date": "2026-11-20",
+    "how": "the same method: UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id",
+    "by": "analyze_domain(\"startpage.com\"), which asks for MX since check_mx",
+    "queried": [
+     "startpage.com. MX"
+    ]
+   }
   ]
  },
  "responses": [
@@ -165,6 +176,21 @@
    ";ANSWER",
    ";AUTHORITY",
    "startpage.com. 3600 IN SOA dns1.p01.nsone.net. hostmaster.nsone.net. 1650928550 3600 600 1209600 3600",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "startpage.com. IN MX",
+   ";ANSWER",
+   "startpage.com. 3600 IN MX 1 aspmx.l.google.com.",
+   "startpage.com. 3600 IN MX 5 alt1.aspmx.l.google.com.",
+   "startpage.com. 3600 IN MX 5 alt2.aspmx.l.google.com.",
+   "startpage.com. 3600 IN MX 10 alt3.aspmx.l.google.com.",
+   "startpage.com. 3600 IN MX 10 alt4.aspmx.l.google.com.",
+   ";AUTHORITY",
    ";ADDITIONAL"
   ]
  ]
