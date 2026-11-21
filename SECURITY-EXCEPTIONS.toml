@@ -587,3 +587,31 @@ When the release of 2026-12-07 publishes the new image, this entry stops \
 matching and fails the build as unused: delete it then.
 """
 review_by = "2026-12-08"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CVE-2026-124709 (OpenSSL advisory of 2026-11-17), reported by Trivy on
+# 2026-11-21 against the openssl 3.5.9-1~deb13u1 a fresh build now installs.
+# Docker Scout never reported it here, so it had no entry; the other Radars hold
+# it for both scanners. Review on 2026-12-15, with the other OpenSSL entries.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-124709"
+where = "openssl 3.5.9-1~deb13u1 (libssl3t64, openssl, openssl-provider-legacy), python:3.14-slim-trixie base image"
+why = """
+OpenSSL advisory of 2026-11-17, which rates it Low; Trivy reports it as high \
+against the 3.5.9-1~deb13u1 a fresh build now installs. Fixed upstream in \
+3.5.10; Debian has no trixie package with the fix yet (3.5.9 is still open, \
+`patchradar debian`, 2026-11-21), so there is nothing to upgrade to. `apt-get \
+upgrade` runs at build time, and the image is rebuilt at every release: the DSA \
+arrives here without anyone chasing it, and this entry then fails the build as \
+unused. No `source`: the reason below holds whichever scanner reports it.
+
+It is reached only by a QUIC server whose peers open streams it rejects and \
+reset them. Python's ssl module exposes no QUIC, client or server. mailradar's \
+own TLS is Python's ssl module over TCP (httpx, dnspython's DoH when used, and \
+smtplib/imaplib with STARTTLS); it runs no server at all. cryptography only \
+loads DKIM public keys to measure them, and its wheel carries its own OpenSSL, \
+not the image's.
+"""
+review_by = "2026-12-15"
