@@ -77,6 +77,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Security
 
+- **CVE-2026-124709 (OpenSSL, QUIC) is accepted until Debian ships a fix.** Debian moved trixie to
+  openssl 3.5.9-1~deb13u1, which a fresh build installs, and on 2026-11-21 Trivy reported the issue
+  against it; Docker Scout never had here, so it had no entry and Security Posture failed. 3.5.9 does
+  not fix it (fixed upstream in 3.5.10; Debian has no fixed trixie package), and it is not reachable:
+  Python's ssl exposes no QUIC and mailradar runs no server. The entry holds for any scanner. Reviewed
+  on 2026-12-15 with the other OpenSSL entries.
+
 - **Three OpenSSL issues are accepted until Debian ships a fix.** At the first scan of main since
   2026.48 (2026-11-20), Docker Scout reported CVE-2026-107496 (advisory of 2026-11-10),
   CVE-2026-107493 (advisory of 2026-11-17) and CVE-2026-84786 (a DANE client crash, no OpenSSL advisory
