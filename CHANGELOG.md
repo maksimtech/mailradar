@@ -79,6 +79,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   issues of those advisories, accepted in the other Radars, are not reported here and get no entry,
   since an unused one fails the gate. Reviewed on 2026-12-15.
 
+- **Two glibc issues Debian has already fixed are accepted for Docker Scout until this release is
+  published.** On 2026-11-21 Docker Scout reported CVE-2026-19499 (`strfmon()`) and CVE-2026-5435 (the
+  deprecated resolver printing functions) as high against glibc 2.41-12+deb13u4 in the image published
+  for 2026.48, and Security Posture failed. Debian fixed both for trixie in 2.41-12+deb13u5; the image
+  built from this source runs `apt-get upgrade` and has it, and Trivy, which reads that image, does not
+  report them. Neither is reached here anyway: Python's `locale.currency()` does not call `strfmon`, and
+  mailradar's DNS is dnspython, which prints no record through libresolv. The entries are reviewed on
+  2026-12-08 and fail the build as unused once the new image is out.
+
 ## [2026.48] - 2026-11-17
 
 ### Added
