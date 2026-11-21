@@ -75,6 +75,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   not copied. Verified by rebuilding `mutants/` from mutmut 3.8's copy rules and running the suite
   inside it: 1172 passed.
 
+- **Docker Scout no longer fails on GitHub's anonymous rate limit.** docker/scout-action downloads
+  its ~190 MB binary from api.github.com without authentication, on the 60-an-hour budget of the
+  runner's address, which GitHub-hosted runners share; when others have spent it the scan fails with
+  "Unexpected HTTP response: 403" before looking at the image, and Security Posture after it is
+  skipped. `.github/scripts/fetch_scout_binary.sh` now fetches the binary with the job's token first
+  and puts it where the action uses a binary already in place, after checking that the release tag
+  is the pinned commit and that the file has the SHA-256 GitHub publishes; a mismatch stops the job.
+  In the image workflow it runs before the checkout of the tag being built, which an older tag would
+  not have. Same as maksimtech/apkradar#122, tried on main there (`tests/test_scout_binary.py`).
+  Sources: [docker/scout-action#116](https://github.com/docker/scout-action/issues/116).
+
 ### Security
 
 - **CVE-2026-124709 (OpenSSL, QUIC) is accepted until Debian ships a fix.** Debian moved trixie to

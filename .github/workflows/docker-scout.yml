@@ -32,6 +32,15 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Fetch the Scout binary with the job's token
+        # docker/scout-action downloads its binary anonymously and fails with a 403
+        # when the runner's shared address has spent GitHub's 60-an-hour budget
+        # (docker/scout-action#116). It uses the binary when it is already in place;
+        # this puts the one of the pinned version there, checked against its digest
+        # (tests/test_scout_binary.py).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/fetch_scout_binary.sh e7e2a72bf1485d10a58f30696b6c513b261ce4fa v1.29.0
       - name: Docker Scout CVE scan
         uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa # v1.29.0
         with:
