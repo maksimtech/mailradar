@@ -67,6 +67,14 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   it waits for PyPI to show and install the new version; the test reads both waits from the
   workflows (`tests/test_job_timeouts.py`, maksimtech/apkradar#113).
 
+- **Mutation testing runs again, and a test catches the next gap on the pull request.** The run of
+  2026-11-21 stopped collecting: `tests/test_lock_agreement.py`, since 2026-11-17, reads
+  `requirements-ci.txt`, which mutmut did not copy into `mutants/`. It is now in `also_copy`. This was
+  the fourth run lost the same way since 2026-10-03, each found on a Saturday: `tests/test_mutmut_copy.py`
+  reads the tests for the files they join to the repository root and fails when one that exists is
+  not copied. Verified by rebuilding `mutants/` from mutmut 3.8's copy rules and running the suite
+  inside it: 1172 passed.
+
 ### Security
 
 - **Three OpenSSL issues are accepted until Debian ships a fix.** At the first scan of main since
