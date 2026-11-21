@@ -538,3 +538,52 @@ cryptography only loads DKIM public keys to measure them, and its wheel \
 carries its own OpenSSL, not the image's.
 """
 review_by = "2026-12-15"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Two glibc issues Debian has already fixed in trixie (2.41-12+deb13u5), reported
+# by Docker Scout on 2026-11-21 against the published image, which was built for
+# 2026.48 on deb13u4. The image built from main runs `apt-get upgrade` and has
+# the fix; Trivy, which reads that one, does not report them. Review on
+# 2026-12-08, the day after the release that rebuilds the published image.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-19499"
+source = "Docker Scout"
+where = "glibc 2.41-12+deb13u4 (libc6), python:3.14-slim-trixie base image, published image 2026.48"
+why = """
+strfmon() and strfmon_l() may write past the caller's buffer when a conversion \
+pads to a width (Debian security tracker; GLIBC-SA-2026-0017). Debian fixed it \
+for trixie in glibc 2.41-12+deb13u5 (`patchradar debian`, 2026-11-21). Docker \
+Scout reports it as high against the image published for 2026.48, built on \
+deb13u4 before that update.
+
+The image built from this source runs `apt-get upgrade` and carries deb13u5. \
+Nothing in mailradar formats money: Python's locale.currency() is written in \
+Python and does not call strfmon.
+
+When the release of 2026-12-07 publishes the new image, this entry stops \
+matching and fails the build as unused: delete it then.
+"""
+review_by = "2026-12-08"
+
+[[exception]]
+id = "CVE-2026-5435"
+source = "Docker Scout"
+where = "glibc 2.41-12+deb13u4 (libc6), python:3.14-slim-trixie base image, published image 2026.48"
+why = """
+The deprecated resolver printing functions ns_printrrf(), ns_printrr() and \
+fp_nquery() ignore the buffer length they are given and may write past it when \
+printing TSIG records (Debian security tracker; GLIBC-SA-2026-0011). Debian \
+fixed it for trixie in glibc 2.41-12+deb13u5 (`patchradar debian`, 2026-11-21). \
+Docker Scout reports it as high against the image published for 2026.48, built \
+on deb13u4 before that update.
+
+The image built from this source runs `apt-get upgrade` and carries deb13u5. \
+mailradar's DNS goes through dnspython, which is pure Python and prints no \
+record through libresolv; nothing in the image calls these debugging functions.
+
+When the release of 2026-12-07 publishes the new image, this entry stops \
+matching and fails the build as unused: delete it then.
+"""
+review_by = "2026-12-08"
