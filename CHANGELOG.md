@@ -88,6 +88,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Security
 
+- **CVE-2026-121482 (OpenSSL, CRL distribution points) is accepted until Debian ships a fix.** Docker
+  Scout reported it on 2026-11-21: a certificate with very many CRL distribution points, verified with
+  CRL checking enabled, costs CPU time quadratic in their number (openssl/openssl#33546; no advisory
+  yet, no fixed Debian package). It is not reachable here: the only TLS context mailradar builds is
+  `ssl.create_default_context()`, which enables no CRL checking, and nothing adds it. Reviewed on
+  2026-12-15 with the other OpenSSL entries (maksimtech/apkradar#124).
+
 - **CVE-2026-124709 (OpenSSL, QUIC) is accepted until Debian ships a fix.** Debian moved trixie to
   openssl 3.5.9-1~deb13u1, which a fresh build installs, and on 2026-11-21 Trivy reported the issue
   against it; Docker Scout never had here, so it had no entry and Security Posture failed. 3.5.9 does
