@@ -615,3 +615,35 @@ loads DKIM public keys to measure them, and its wheel carries its own OpenSSL, \
 not the image's.
 """
 review_by = "2026-12-15"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CVE-2026-121482 (OpenSSL, CRL distribution points; no advisory yet), reported
+# by Docker Scout on main on 2026-11-21 against the trixie openssl of the base
+# image (maksimtech/apkradar#124). Review on 2026-12-15, with the other OpenSSL
+# entries.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[exception]]
+id = "CVE-2026-121482"
+source = "Docker Scout"
+where = "openssl 3.5.7-1~deb13u3 (openssl, libssl3t64), python:3.14-slim-trixie base image"
+why = """
+crl_crldp_check() rebuilds the name of every CRL distribution point of a \
+certificate on each CRL check, so a certificate with very many of them, verified \
+with CRL checking enabled, costs CPU time quadratic in their number \
+(openssl/openssl#33546, merged upstream on 2026-11-18). No OpenSSL advisory or \
+released version yet; Debian lists trixie and sid as vulnerable, \
+3.5.9-1~deb13u1 included, with no fix (`patchradar debian`, 2026-11-21). Docker \
+Scout reports it as high. `apt-get upgrade` runs at build time, and the image is \
+rebuilt at every release: the DSA arrives here without anyone chasing it, and \
+this entry then fails the build as unused.
+
+It is reached only when a certificate is verified with CRL checking enabled. \
+Python's ssl does not enable it: ssl.create_default_context(), the only context \
+mailradar builds (sender.py, for SMTP), sets VERIFY_X509_STRICT, \
+VERIFY_X509_TRUSTED_FIRST and VERIFY_X509_PARTIAL_CHAIN and no VERIFY_CRL_CHECK \
+flag, and mailradar adds none. httpx and dnspython's DoH use the same defaults. \
+cryptography only loads DKIM public keys to measure them, and its wheel carries \
+its own OpenSSL, not the image's.
+"""
+review_by = "2026-12-15"
