@@ -157,6 +157,10 @@ also_copy = [
     # The licence file pyproject names, which tests/test_declared_files.py looks for:
     # without it the runs of 2026-10-10 and 2026-10-17 stopped in the stats phase.
     "LICENSE",
+    # The CI requirements tests/test_lock_agreement.py holds to uv.lock: the run of
+    # 2026-11-21 stopped collecting without it. tests/test_mutmut_copy.py now finds
+    # such a gap on the pull request.
+    "requirements-ci.txt",
 ]
 # mutmut 3.8 refuses to run on Windows and points at WSL, so this is a CI-only
 # configuration: the scheduled workflow runs it on ubuntu.
