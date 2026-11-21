@@ -7,6 +7,12 @@ required check the pull request waits that long, and so would an auto-merge
 The limits are about three times the longest run of the job in its last 40 runs
 (2026-11-20), and never under ten minutes: a short job is mostly installs and image pulls,
 which are slow on a bad day without being stuck.
+
+A job that waits on purpose gets more than its runs suggest: its limit has to outlast its
+own wait, or GitHub kills it before it can say what it was waiting for. The tests below
+read those waits from the workflows, so a longer wait cannot outgrow its limit unseen.
+#128 gave publishing ten minutes from its runs alone, under the fifteen it may wait for
+PyPI; maksimtech/cookieradar#98 caught it.
 """
 
 from __future__ import annotations
@@ -44,3 +50,18 @@ def test_security_posture_outlives_its_own_wait():
     script = "\n".join(step.get("run", "") for step in job["steps"])
     wait = int(re.search(r"deadline=\$\(\( SECONDS \+ (\d+) \)\)", script).group(1))
     assert job["timeout-minutes"] * 60 >= wait + 5 * 60
+
+
+def test_publishing_outlives_its_waits_for_pypi():
+    # After the upload the job waits for the index to show the version (wait_for_pypi.sh:
+    # attempts x interval, then a grace) and then installs it, asking again while a cache
+    # lags (install_from_pypi.sh: attempts x interval). A limit under those would end the
+    # job before either could say the version is not there. Ten more minutes for what the
+    # job does besides sleeping: the requests between the sleeps, the build.
+    job = dict(jobs())["publish.yml:build-and-publish"]
+    run = "\n".join(step.get("run", "") for step in job["steps"])
+    wait = re.search(r'wait_for_pypi\.sh \S+ "\$VERSION" (\d+) (\d+)(?: (\d+))?', run)
+    install = re.search(r'install_from_pypi\.sh \S+ \S+ "\$VERSION" (\d+) (\d+)', run)
+    assert wait and install, "publish.yml no longer calls the two scripts as this test reads them"
+    seconds = int(wait[1]) * int(wait[2]) + int(wait[3] or 45) + int(install[1]) * int(install[2])
+    assert job["timeout-minutes"] * 60 >= seconds + 10 * 60
