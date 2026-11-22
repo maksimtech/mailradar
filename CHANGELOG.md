@@ -48,7 +48,10 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   `3.16-dev` takes its place as the one row with `continue-on-error`, as in apkradar. The matrix jobs
   now report as `Tests (Python 3.11)` … `Tests (Python 3.16-dev)` rather than `test (3.11, false)`,
   so main's ruleset can require each stable row by a name that does not change with the matrix's
-  other values (`tests/test_ci_contract.py`).
+  other values (`tests/test_ci_contract.py`). On 3.15 every dependency installs from a published
+  wheel; nothing is built from source but MailRadar itself. The `3.16-dev` row is red today, as it
+  may be: cffi 2.1.1 has no 3.16 wheel and its source does not compile there
+  (`Py_FileSystemDefaultEncoding` is gone from 3.16's C API).
 - **A short DKIM key names the rules it breaks.** A 1024-bit RSA key was told "upgrade to 2048-bit
   recommended", which reads as a preference. The issue now cites the rule written for DKIM, RFC 8301
   §3.2, which asks signers for at least 2048 bits, and NIST SP 800-131A Rev. 2, which disallows RSA
