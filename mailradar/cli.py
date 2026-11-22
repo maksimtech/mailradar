@@ -242,6 +242,10 @@ def _print_report(report: DomainReport) -> None:
         title="📡 MailRadar Report",
         border_style=color,
     ))
+    if report.split_horizon:
+        console.print(f"[yellow]⚠️  {_s(report.split_horizon)}[/yellow]")
+    if report.public_view:
+        console.print(f"[dim]{_s(report.public_view)}[/dim]")
 
     # DMARC
     table = Table(box=box.ROUNDED, show_header=True, header_style="bold cyan")

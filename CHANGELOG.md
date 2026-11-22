@@ -108,6 +108,26 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   which repository the job runs in, and there is no secret left to mix up. The test that required the
   token now requires OIDC and forbids the secret (`tests/test_ci_contract.py`).
 
+### Fixed
+
+- **A company's internal DNS view no longer reads as a domain with no email security (#150).** On a
+  network whose resolver serves an internal (split-horizon) view of the company's own domain, `check`
+  got no SPF, DMARC or DKIM, graded the domain 0/100 and cited GDPR art. 32 for records that exist on
+  the public Internet. A private resolver is also the common case (a home router, systemd-resolved's
+  `127.0.0.53`), so its silence alone is not taken as proof. When every system resolver is on a
+  private or local address and the domain returns no SPF, no DMARC and no DKIM key, MailRadar asks the
+  public resolver `1.1.1.1` for SPF and DMARC.
+  - **It has them:** the view is internal. No score and no provisions (exit code 3), and a warning
+    that names both resolvers.
+  - **It has none:** the records are missing for everyone, and the domain is graded as before, with a
+    line saying the public resolver was asked, since that query sends the domain's name to Cloudflare.
+  - **It does not answer**, as on networks that block outgoing DNS: no score and no provisions, and
+    the warning says the comparison could not be made.
+  - The warning suggests a network with a public resolver; choosing the resolver (`--resolver`) is #156.
+  - The tests pin the resolver the analysis believes it asked (`tests/conftest.py`), since the machine
+    running them is itself behind a private one, and fail any test that reaches the real `1.1.1.1`
+    (`tests/test_split_horizon.py`).
+
 ### Security
 
 - **CVE-2026-121482 (OpenSSL, CRL distribution points) is accepted until Debian ships a fix.** Docker

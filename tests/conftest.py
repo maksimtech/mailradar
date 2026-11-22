@@ -16,6 +16,28 @@ def _isolate_law_checker(tmp_path, monkeypatch):
     monkeypatch.setattr(law_fetcher, "fetch_html", no_network)
 
 
+@pytest.fixture(autouse=True)
+def _public_resolver(monkeypatch):
+    """The resolver the analysis believes it asked: the public one the DNS
+    fixtures were recorded through (1.1.1.1, their `_recorded.how`).
+
+    Without it the machine decides the outcome. The replay server is on
+    127.0.0.1, the system resolver is a home router or systemd-resolved's
+    127.0.0.53, and all of them are private: a domain recorded without records
+    would read as a possible split-horizon view (#150) and lose its grade.
+    tests/test_split_horizon.py sets a private resolver where it means one.
+    """
+    from mailradar import checker
+
+    monkeypatch.setattr(checker, "system_resolver_addresses", lambda: ["1.1.1.1"])
+
+    def no_public_resolver(name):
+        # pytest.fail is not an Exception: the code under test cannot swallow it
+        pytest.fail(f"a test asked the real public resolver about {name}")
+
+    monkeypatch.setattr(checker, "public_txt", no_public_resolver)
+
+
 # ─── Recorded DNS, HTTP and SMTP on 127.0.0.1 (tests/replay.py) ─────────────
 
 
