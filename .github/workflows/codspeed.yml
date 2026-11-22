@@ -15,19 +15,16 @@ permissions:
 jobs:
   benchmarks:
     name: Run benchmarks
-    # The one job left behind when the rest moved to ubuntu-26.04 on 2026-10-02,
-    # and pinned rather than left on `ubuntu-latest` on purpose. CodSpeedHQ/action
-    # v5 fails on 26.04 with `##[error]Unsupported system` — measured on
-    # patchradar, run 37063015887, with `mode: simulation` already set and the
-    # action pinned, so it is the image and nothing else.
+    # The last job to move to ubuntu-26.04. It stayed on 24.04 when the rest
+    # moved on 2026-10-02: CodSpeedHQ/action v5 failed there with
+    # `##[error]Unsupported system` (patchradar, run 37063015887). CodSpeed's
+    # runner and action v5.5.0 (2026-10-14) added Ubuntu 26.04 on x86_64 and
+    # arm64: https://github.com/CodSpeedHQ/runner/releases/tag/v5.5.0
     #
-    # `ubuntu-latest` is 24.04 today, so leaving it there would work right up to
-    # the day GitHub moves that label, and then break on main at a moment nobody
-    # picked. 24.04 is supported until April 2029.
-    #
-    # Move it to 26.04 once CodSpeed supports it; nothing here will notice when
-    # that happens, so it is worth trying on a branch now and then.
-    runs-on: ubuntu-24.04
+    # A named image, never `ubuntu-latest`: that label moves on GitHub's
+    # schedule, and a job that breaks then breaks on main at a moment nobody
+    # picked (tests/test_runners.py).
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
