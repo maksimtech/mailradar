@@ -617,7 +617,7 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   holds the two apart.
 - **No score without a measurement.** When a DNS lookup got no answer (timeout, SERVFAIL), the
   checks were marked "not verified" but still counted 0 points, and `check` printed `0/100 CRITICAL`
-  with exit code 2 — reported behind a company resolver for asufc.sanita.fvg.it, which scores 19 from outside.
+  with exit code 2 — reported behind a company resolver for a domain that scored better from outside.
   The analysis now has no score: `total_score` is `None`, the grade `N/A`, `check` names the checks
   that were not verified and exits with 3, and `batch` lists the domain as N/A after the graded ones.
   `DomainReport.unverified` names those checks. A keyserver that does not answer still leaves a score.
@@ -650,16 +650,16 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   EUR-Lex" whichever answered. It now says Cellar, EUR-Lex or Normattiva, as the case was;
   `law_checker.check` takes an optional HTTP client, so the path can be tested on recorded answers.
 - **`check` no longer turns a DNS failure into "domain not found", and no longer analyses
-  somebody else's domain instead.** Reported by a user: `asufc.sanita.fvg.it` (Azienda sanitaria
-  universitaria Friuli Centrale) came out as "not found in DNS", then as 0/100 with nothing
-  configured. Three faults in a row:
+  somebody else's domain instead.** Reported by a user: a public-sector subdomain (here
+  `dept.example.co.uk`) came out as "not found in DNS", then as 0/100 with nothing configured.
+  Three faults in a row:
   - `domain_exists` read any DNS error (a timeout over a slow resolver, a SERVFAIL) as "no such
     domain", and a name with no A record as missing too. It now asks for A once: NXDOMAIN is a
-    missing name, NOERROR with no answer is a name that exists (`sanita.fvg.it` has MX and TXT,
+    missing name, NOERROR with no answer is a name that exists (`example.co.uk` has MX and TXT,
     no A), and a lookup that gets no answer raises `DNSLookupError`. `check` then says the domain
     could not be checked and stops, exit code 1;
-  - the variants scan kept only the first label, so `asufc.sanita.fvg.it` became `asufc.com` and
-    `asufc.co.uk`. Variants are now tried only for a bare name or `name.tld`; a missing subdomain
+  - the variants scan kept only the first label, so `dept.example.co.uk` became `dept.com` and
+    `dept.co.uk`. Variants are now tried only for a bare name or `name.tld`; a missing subdomain
     gets "check the domain name". A variant the DNS does not answer for is left out;
   - Enter alone at the variant prompt picked variant 1 and analysed it. The prompt has no default.
 
@@ -1049,10 +1049,10 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   never queried. The full list now ships with the package (`public_suffix_list.dat`, no
   new dependency, read offline). It is Mozilla's and stays under MPL-2.0: the file keeps
   its licence header, the README's License section credits it, and the comment where it
-  is loaded says how to refresh it. This changes one documented case: `fvg.it` is on the list,
-  so for `asufc.sanita.fvg.it` the walk stops at `sanita.fvg.it` and no longer asks
-  `_dmarc.fvg.it`. In DNS that is where the record actually is: on 2026-10-07
-  `_dmarc.sanita.fvg.it` answered and `_dmarc.fvg.it` was NXDOMAIN.
+  is loaded says how to refresh it. This changes one documented case: a two-label suffix
+  such as `co.uk` is on the list, so for `dept.example.co.uk` the walk stops at
+  `example.co.uk` and no longer asks `_dmarc.co.uk`. In DNS that is where the record actually
+  is: on 2026-10-07 the organization's record answered and the suffix's was NXDOMAIN.
 
 - **MTA-STS: what the report says matches what was found.** A policy file answering 404
   raised no issue at all, `mode: none` (valid, RFC 8461) was "mode unknown", and the report
@@ -1398,8 +1398,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 ### Fixed
 - DMARC lookup walks up the domain hierarchy as required by RFC 7489 §6.6.3:
   when `_dmarc.<domain>` has no record, one label is removed at a time up to
-  the organizational domain (`asufc.sanita.fvg.it` → `sanita.fvg.it` →
-  `fvg.it`). Multi-label public suffixes such as `co.uk` are honoured, and the
+  the organizational domain (`a.b.example.co.uk` → `b.example.co.uk` →
+  `example.co.uk`). Multi-label public suffixes such as `co.uk` are honoured, and the
   public suffix itself is never queried. An inherited record is reported with
   the domain it comes from, and the parent's `sp=` tag becomes the policy
   scored for the subdomain.

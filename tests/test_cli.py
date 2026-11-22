@@ -803,15 +803,16 @@ class TestDetailsColumn:
 class TestCheckDomainExistence:
     """`check` on names whose existence the DNS answers, or does not, on recorded DNS.
 
-    Reported by a user: asufc.sanita.fvg.it came out as "not found", then as
+    Reported by a user: a public-sector subdomain (here dept.example.co.uk)
+    came out as "not found", then as
     0/100 with nothing configured. A timed-out lookup was read as "no such
-    domain", the variants scan kept only "asufc", and Enter at the prompt
-    analysed asufc.com.
+    domain", the variants scan kept only "dept", and Enter at the prompt
+    analysed dept.com.
     """
 
     def test_a_lookup_that_gets_no_answer_is_not_a_missing_domain(self, dns_replay):
-        dns_replay("asufc_sanita_fvg_it_exists", silent=["asufc.sanita.fvg.it A"])
-        result = CliRunner().invoke(app, ["check", "asufc.sanita.fvg.it"])
+        dns_replay("dept_example_co_uk_exists", silent=["dept.example.co.uk A"])
+        result = CliRunner().invoke(app, ["check", "dept.example.co.uk"])
         assert result.exit_code == 1
         assert "not found in DNS" not in result.output
         assert "variant" not in result.output
@@ -819,22 +820,22 @@ class TestCheckDomainExistence:
         assert "Analyzing" not in result.output
 
     def test_a_missing_subdomain_is_not_swapped_for_another_domain(self, dns_replay):
-        dns_replay("asufc_sanita_fvg_it_exists")
-        result = CliRunner().invoke(app, ["check", "mailradar-nxdomain-test.sanita.fvg.it"])
+        dns_replay("dept_example_co_uk_exists")
+        result = CliRunner().invoke(app, ["check", "mailradar-nxdomain-test.example.co.uk"])
         assert result.exit_code == 1
         assert "not found in DNS" in result.output
         assert "Scanning TLD variants" not in result.output
 
     def test_enter_at_the_variant_prompt_analyses_nothing(self, dns_replay):
-        """asufc.it does not exist; asufc.com and asufc.co.uk do (recorded).
+        """dept.it does not exist; dept.com and dept.co.uk do (derived fixture).
         Enter alone used to pick variant 1 and analyse somebody else's domain."""
-        dns_replay("asufc_variants")
-        result = CliRunner().invoke(app, ["check", "asufc.it"], input="\n")
+        dns_replay("dept_variants")
+        result = CliRunner().invoke(app, ["check", "dept.it"], input="\n")
         # The offered list, compared line by line: a domain name tested as a
         # substring reads to CodeQL as URL sanitisation (py/incomplete-url-
         # substring-sanitization, alert #72), which this is not
         offered = [line.strip() for line in result.output.splitlines()]
-        assert [line for line in offered if line[:2] in ("1.", "2.")] == ["1. asufc.com", "2. asufc.co.uk"]
+        assert [line for line in offered if line[:2] in ("1.", "2.")] == ["1. dept.com", "2. dept.co.uk"]
         assert "Analyzing" not in result.output
         assert result.exit_code != 0
 
@@ -842,7 +843,7 @@ class TestCheckDomainExistence:
 class TestNoScoreWithoutMeasure:
     """`check` and `batch` on an analysis whose DNS lookups got no answer: no score is printed.
 
-    Reported behind a company resolver: asufc.sanita.fvg.it came out "0/100 CRITICAL"
+    Reported behind a company resolver: a public-sector subdomain came out "0/100 CRITICAL"
     with exit code 2 — what a script reads as a domain measured and found bad —
     because every lookup timed out and each check counted 0 points.
     """
