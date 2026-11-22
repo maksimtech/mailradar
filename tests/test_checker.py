@@ -200,11 +200,10 @@ def make_zone_resolver(zone: dict[str, list[str]], queried: list[str] = None):
 
 class TestOrganizationalDomain:
 
-    # fvg.it is itself a public suffix (ICANN section of the PSL), so the
+    # co.uk is itself a public suffix (ICANN section of the PSL), so the
     # registrable name below it is the organizational domain
     @pytest.mark.parametrize("domain,expected", [
-        ("asufc.sanita.fvg.it", "sanita.fvg.it"),
-        ("sanita.fvg.it", "sanita.fvg.it"),
+        ("dept.example.co.uk", "example.co.uk"),
         ("sub.domain.com", "domain.com"),
         ("domain.com", "domain.com"),
         ("mail.example.co.uk", "example.co.uk"),
@@ -239,9 +238,9 @@ class TestOrganizationalDomain:
 class TestDMARCLookupChain:
 
     def test_chain_multilevel_it_domain(self):
-        assert dmarc_lookup_chain("asufc.sanita.fvg.it") == [
-            "asufc.sanita.fvg.it",
-            "sanita.fvg.it",
+        assert dmarc_lookup_chain("dept.example.co.uk") == [
+            "dept.example.co.uk",
+            "example.co.uk",
         ]
 
     def test_chain_multi_label_public_suffix(self):
@@ -264,8 +263,8 @@ class TestDMARCLookupChain:
         assert dmarc_lookup_chain("a.b.c.example.com") == ["a.b.c.example.com", "example.com"]
 
     @pytest.mark.parametrize("domain,forbidden", [
-        ("asufc.sanita.fvg.it", "it"),
-        ("asufc.sanita.fvg.it", "fvg.it"),
+        ("dept.example.co.uk", "uk"),
+        ("dept.example.co.uk", "co.uk"),
         ("mail.example.co.uk", "co.uk"),
         ("mail.example.co.uk", "uk"),
         ("sub.domain.com", "com"),
@@ -283,23 +282,23 @@ class TestDMARCLookupChain:
 class TestCheckDMARCTreeWalk:
 
     def test_climbs_to_organizational_domain(self, dns_replay):
-        """asufc.sanita.fvg.it with no record of its own -> policy from sanita.fvg.it,
-        where the real one is published (_dmarc.fvg.it is NXDOMAIN, checked 2026-10-07).
+        """dept.example.co.uk with no record of its own -> policy from example.co.uk,
+        where the organisation publishes it; the suffix's own _dmarc.co.uk is never asked.
 
-        The answers are the real ones, recorded the same day: NXDOMAIN for the
-        subdomain, p=none on sanita.fvg.it.
+        The answers are derived from a recording of 2026-10-07 on a real public-sector
+        domain, names replaced: NXDOMAIN for the subdomain, p=none on example.co.uk.
         """
-        server = dns_replay("sanita_fvg_it")
-        result = check_dmarc("asufc.sanita.fvg.it")
+        server = dns_replay("dept_example_co_uk_dmarc")
+        result = check_dmarc("dept.example.co.uk")
         assert result.present is True
         assert result.policy == "none"
-        assert result.found_at == "sanita.fvg.it"
+        assert result.found_at == "example.co.uk"
         assert result.inherited is True
         assert server.queries == [
-            "_dmarc.asufc.sanita.fvg.it. TXT",
-            "_dmarc.sanita.fvg.it. TXT",
+            "_dmarc.dept.example.co.uk. TXT",
+            "_dmarc.example.co.uk. TXT",
         ]
-        assert any("sanita.fvg.it" in issue for issue in result.issues)
+        assert any("example.co.uk" in issue for issue in result.issues)
 
     def test_a_record_on_an_intermediate_name_is_not_the_policy(self, dns_replay):
         """RFC 7489 §6.6.3 asks _dmarc.<domain> and then _dmarc.<organizational domain>.
@@ -314,26 +313,26 @@ class TestCheckDMARCTreeWalk:
 
     def test_stops_at_the_first_parent_that_answers(self):
         zone = {
-            "_dmarc.sanita.fvg.it": ["v=DMARC1; p=quarantine"],
-            "_dmarc.fvg.it": ["v=DMARC1; p=reject"],
+            "_dmarc.example.co.uk": ["v=DMARC1; p=quarantine"],
+            "_dmarc.co.uk": ["v=DMARC1; p=reject"],
         }
         queried = []
         with patch('mailradar.checker.dns.resolver.resolve',
                    side_effect=make_zone_resolver(zone, queried)):
-            result = check_dmarc("asufc.sanita.fvg.it")
-        assert result.found_at == "sanita.fvg.it"
+            result = check_dmarc("dept.example.co.uk")
+        assert result.found_at == "example.co.uk"
         assert result.policy == "quarantine"
-        assert "_dmarc.fvg.it" not in queried
+        assert "_dmarc.co.uk" not in queried
 
     def test_own_record_wins_over_parent(self):
         zone = {
-            "_dmarc.asufc.sanita.fvg.it": ["v=DMARC1; p=reject; adkim=s; aspf=s"],
-            "_dmarc.fvg.it": ["v=DMARC1; p=none"],
+            "_dmarc.dept.example.co.uk": ["v=DMARC1; p=reject; adkim=s; aspf=s"],
+            "_dmarc.co.uk": ["v=DMARC1; p=none"],
         }
         with patch('mailradar.checker.dns.resolver.resolve',
                    side_effect=make_zone_resolver(zone)):
-            result = check_dmarc("asufc.sanita.fvg.it")
-        assert result.found_at == "asufc.sanita.fvg.it"
+            result = check_dmarc("dept.example.co.uk")
+        assert result.found_at == "dept.example.co.uk"
         assert result.inherited is False
         assert result.policy == "reject"
         assert not any("inherited" in issue.lower() for issue in result.issues)
@@ -1097,33 +1096,33 @@ class TestDomainExists:
         dns_replay("example_com")
         assert domain_exists("example.com.") is True
 
-    # A user reported asufc.sanita.fvg.it (Azienda sanitaria universitaria
-    # Friuli Centrale) as "not existing, score 0/100": over a slow resolver the
+    # A user reported a public-sector subdomain (here dept.example.co.uk) as
+    # "not existing, score 0/100": over a slow resolver the
     # A lookup timed out, domain_exists read the timeout as "no such domain",
-    # and the check went on to offer asufc.com. One A query is enough to tell:
+    # and the check went on to offer dept.com. One A query is enough to tell:
     # NXDOMAIN is about the name, whatever the type asked for.
 
     def test_a_name_with_an_address_exists(self, dns_replay):
-        server = dns_replay("asufc_sanita_fvg_it_exists")
-        assert domain_exists("asufc.sanita.fvg.it") is True
-        assert server.queries == ["asufc.sanita.fvg.it. A"]
+        server = dns_replay("dept_example_co_uk_exists")
+        assert domain_exists("dept.example.co.uk") is True
+        assert server.queries == ["dept.example.co.uk. A"]
 
     def test_a_name_without_an_address_exists(self, dns_replay):
-        """sanita.fvg.it has MX and TXT and no A: NOERROR with no answer is a
+        """example.co.uk has MX and TXT and no A: NOERROR with no answer is a
         name that exists, not one that does not."""
-        server = dns_replay("asufc_sanita_fvg_it_exists")
-        assert domain_exists("sanita.fvg.it") is True
-        assert server.queries == ["sanita.fvg.it. A"]
+        server = dns_replay("dept_example_co_uk_exists")
+        assert domain_exists("example.co.uk") is True
+        assert server.queries == ["example.co.uk. A"]
 
     def test_a_name_that_does_not_exist(self, dns_replay):
-        server = dns_replay("asufc_sanita_fvg_it_exists")
-        assert domain_exists("mailradar-nxdomain-test.sanita.fvg.it") is False
-        assert server.queries == ["mailradar-nxdomain-test.sanita.fvg.it. A"]
+        server = dns_replay("dept_example_co_uk_exists")
+        assert domain_exists("mailradar-nxdomain-test.example.co.uk") is False
+        assert server.queries == ["mailradar-nxdomain-test.example.co.uk. A"]
 
     def test_a_lookup_that_gets_no_answer_says_nothing_about_the_name(self, dns_replay):
-        dns_replay("asufc_sanita_fvg_it_exists", silent=["asufc.sanita.fvg.it A"])
-        with pytest.raises(DNSLookupError, match="asufc.sanita.fvg.it"):
-            domain_exists("asufc.sanita.fvg.it")
+        dns_replay("dept_example_co_uk_exists", silent=["dept.example.co.uk A"])
+        with pytest.raises(DNSLookupError, match="dept.example.co.uk"):
+            domain_exists("dept.example.co.uk")
 
 
 def _long_domain(length: int) -> str:
@@ -1223,17 +1222,17 @@ class TestInvalidNames:
 class TestDomainVariants:
 
     def test_a_subdomain_gets_no_variants(self, dns_replay):
-        """Keeping the first label and changing the rest turned the health
-        authority's asufc.sanita.fvg.it into asufc.com, somebody else's domain."""
+        """Keeping the first label and changing the rest turned a public-sector
+        subdomain (here dept.example.co.uk) into dept.com, somebody else's domain."""
         server = dns_replay()
-        assert find_domain_variants("mailradar-nxdomain-test.sanita.fvg.it") == []
+        assert find_domain_variants("mailradar-nxdomain-test.example.co.uk") == []
         assert server.queries == []
 
     def test_a_variant_the_dns_does_not_answer_for_is_left_out(self, dns_replay):
-        """asufc.com and asufc.co.uk exist (recorded); asufc.eu gets no answer:
+        """dept.com and dept.co.uk exist (derived fixture); dept.eu gets no answer:
         it cannot be offered, and the others still are."""
-        dns_replay("asufc_variants", silent=["asufc.eu A"])
-        assert find_domain_variants("asufc.it") == ["asufc.com", "asufc.co.uk"]
+        dns_replay("dept_variants", silent=["dept.eu A"])
+        assert find_domain_variants("dept.it") == ["dept.com", "dept.co.uk"]
 
 
 # ─── Full analysis ───────────────────────────────────────────────────────────
@@ -1445,10 +1444,10 @@ class TestScoreNormalization:
 class TestNoScoreWithoutMeasure:
     """A check whose DNS lookup got no answer leaves the analysis without a score.
 
-    Reported behind a company resolver: asufc.sanita.fvg.it came out 0/100
+    Reported behind a company resolver: a public-sector subdomain came out 0/100
     CRITICAL. The resolver did not answer for the records, every check ended
     "not verified" and was counted as 0 points, so the total read as a
-    measured bottom of the scale. From outside, the same domain scores 19.
+    measured bottom of the scale. From outside, the same domain scored better.
     "Bad" and "could not tell" are different answers: the score is None and
     the grade N/A, and the report names what was not verified.
     """

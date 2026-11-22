@@ -191,7 +191,7 @@ def domain_exists(domain: str) -> bool:
         return False
 
     # One A query is enough: NXDOMAIN is about the name, whatever the type
-    # asked for, and NOERROR with no answer (sanita.fvg.it: MX and TXT, no A)
+    # asked for, and NOERROR with no answer (example.co.uk: MX and TXT, no A)
     # is a name that exists. A timeout or a SERVFAIL says nothing about the
     # name: read as "no such domain", it sent the user to another domain.
     # A name DNS cannot hold is neither: InvalidDomainError says which.
@@ -211,7 +211,7 @@ def variant_base(domain: str) -> str | None:
     """The name to try other TLDs with: 'apple' for 'apple' or 'apple.con'.
 
     Only a bare name or name.tld has one. A subdomain's first label is not the
-    organisation: asufc.sanita.fvg.it became asufc.com, somebody else's domain.
+    organisation: dept.example.co.uk became dept.com, somebody else's domain.
     """
     parts = domain.removesuffix(".").split(".")
     return parts[0] if len(parts) <= 2 else None
@@ -319,7 +319,7 @@ def organizational_domain(domain: str) -> str:
     RFC 7489 §3.2 — dominio organizzativo: il nome registrabile
     immediatamente sotto il suffisso pubblico.
 
-    asufc.sanita.fvg.it -> sanita.fvg.it   (fvg.it is on the PSL)
+    dept.example.co.uk -> example.co.uk   (co.uk is on the PSL)
     mail.example.co.uk  -> example.co.uk
     sub.domain.com      -> domain.com
     """
@@ -335,7 +335,7 @@ def dmarc_lookup_chain(domain: str) -> list[str]:
     of sub.a.example.com. The public suffix itself is never queried: a record
     published on `it` or `co.uk` is not the domain's policy.
 
-    asufc.sanita.fvg.it -> [asufc.sanita.fvg.it, sanita.fvg.it]
+    dept.example.co.uk -> [dept.example.co.uk, example.co.uk]
     sub.a.example.com   -> [sub.a.example.com, example.com]
     """
     labels = _labels(domain)

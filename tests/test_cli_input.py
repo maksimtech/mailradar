@@ -41,12 +41,12 @@ def test_a_usage_error_is_not_mistaken_for_a_critical_grade(args):
 
 # ─── report, send and batch check the name first ─────────────────────────────
 
-NXDOMAIN = "mailradar-nxdomain-test.sanita.fvg.it"   # NXDOMAIN in asufc_sanita_fvg_it_exists.json (recorded)
+NXDOMAIN = "mailradar-nxdomain-test.example.co.uk"   # NXDOMAIN in dept_example_co_uk_exists.json (derived)
 
 
 def test_report_does_not_grade_a_domain_that_does_not_exist(dns_replay):
     """`report no-such-domain.example` wrote a letter grading it CRITICAL."""
-    dns_replay("asufc_sanita_fvg_it_exists")
+    dns_replay("dept_example_co_uk_exists")
     result = CliRunner().invoke(app, ["report", NXDOMAIN], env=ENV)
     assert result.exit_code == 1, result.output
     assert "not found in DNS" in result.output
@@ -57,7 +57,7 @@ def test_send_does_not_write_to_a_domain_that_does_not_exist(dns_replay, smtp_se
     """...and `send` would have mailed security@ that name."""
     monkeypatch.setenv("SSL_CERT_FILE", str(trusted_ca.path))
     server = smtp_server("tls", trusted_ca.server_context("127.0.0.1"))
-    dns_replay("asufc_sanita_fvg_it_exists")
+    dns_replay("dept_example_co_uk_exists")
     result = CliRunner().invoke(app, [
         "send", NXDOMAIN, "--smtp-host", "127.0.0.1", "--smtp-port", str(server.port), "--smtp-user", "a@b.c",
         "--smtp-pass", "x", "--from", "a@b.c", "--name", "N", "--role", "R", "--org", "O"], env=ENV)
@@ -67,15 +67,15 @@ def test_send_does_not_write_to_a_domain_that_does_not_exist(dns_replay, smtp_se
 
 
 def test_send_without_an_answer_from_dns_does_not_go_on(dns_replay):
-    dns_replay("asufc_sanita_fvg_it_exists", silent=["asufc.sanita.fvg.it A"])
-    result = CliRunner().invoke(app, ["send", "asufc.sanita.fvg.it"], env=ENV)
+    dns_replay("dept_example_co_uk_exists", silent=["dept.example.co.uk A"])
+    result = CliRunner().invoke(app, ["send", "dept.example.co.uk"], env=ENV)
     assert result.exit_code == 1, result.output
     assert "could not be checked" in result.output
     assert "Analyzing" not in result.output
 
 
 def test_batch_reports_a_domain_that_does_not_exist_as_failed(dns_replay, http_replay, tmp_path):
-    dns_replay("startpage_com", "startpage_com_dkim_selectors", "startpage_com_exists", "asufc_sanita_fvg_it_exists")
+    dns_replay("startpage_com", "startpage_com_dkim_selectors", "startpage_com_exists", "dept_example_co_uk_exists")
     http_replay("startpage_com", "startpage_com_keyservers_index")
     domains = tmp_path / "domains.txt"
     domains.write_text(f"{NXDOMAIN}\nstartpage.com\n", encoding="utf-8")
@@ -194,7 +194,7 @@ def test_batch_exits_with_the_worst_code_check_would_give(tmp_path, grades, code
 
 
 def test_batch_with_a_domain_that_failed_does_not_exit_0(dns_replay, http_replay, tmp_path):
-    dns_replay("asufc_sanita_fvg_it_exists")
+    dns_replay("dept_example_co_uk_exists")
     domains = tmp_path / "domains.txt"
     domains.write_text(f"{NXDOMAIN}\n", encoding="utf-8")
     result = CliRunner().invoke(app, ["batch", str(domains)], env=ENV)

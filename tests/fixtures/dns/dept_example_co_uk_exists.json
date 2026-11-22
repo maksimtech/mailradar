@@ -1,0 +1,46 @@
+{
+ "_derived": {
+  "from": "a recording of 2026-10-20 (UDP query with EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.8.0; the OPT record is left out of the stored message and so is the id), domain_exists() on a name with an address, a name with no address (MX and TXT, no A) and a name that does not exist, on the names of a real public-sector organisation",
+  "changed": "every name of that organisation replaced: the subdomain by dept.example.co.uk, its organizational domain by example.co.uk (co.uk is a public suffix of two labels, as the original one was), the variants' first label by dept; addresses by RFC 5737 documentation addresses, the DMARC report address by one under example.net. Message layout, rcodes, flags, TTLs, SOA timers and record types are as recorded",
+  "queried": [
+   "dept.example.co.uk. A",
+   "example.co.uk. A",
+   "mailradar-nxdomain-test.example.co.uk. A"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "dept.example.co.uk. IN A",
+   ";ANSWER",
+   "dept.example.co.uk. 84273 IN A 192.0.2.50",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "example.co.uk. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "example.co.uk. 86400 IN SOA ns1.example.co.uk. postmaster.example.co.uk. 2026102000 86400 7200 604800 86400",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "mailradar-nxdomain-test.example.co.uk. IN A",
+   ";ANSWER",
+   ";AUTHORITY",
+   "example.co.uk. 86400 IN SOA ns1.example.co.uk. postmaster.example.co.uk. 2026102000 86400 7200 604800 86400",
+   ";ADDITIONAL"
+  ]
+ ]
+}
