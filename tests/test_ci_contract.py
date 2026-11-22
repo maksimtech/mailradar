@@ -243,8 +243,8 @@ def test_every_declared_python_is_a_stable_matrix_entry():
 
 def test_the_experimental_row_is_the_next_minor_as_dev():
     """One `-dev` row, the minor after the last stable one, marked experimental:
-    3.15.0 is final on 2026-10-09, and the day it is, this test says what to
-    promote and what to add next (3.16-dev)."""
+    when 3.16.0 goes final (October 2027, PEP 602), this test says what to
+    promote and what to add next (3.17-dev)."""
     stable = _stable_versions()
     major, minor = stable[-1].split(".")
     expected = f"{major}.{int(minor) + 1}-dev"
@@ -264,3 +264,11 @@ def test_only_the_experimental_row_may_fail():
     matrix = _matrix()
     assert matrix["continue-on-error"] == "${{ matrix.experimental }}"
     assert matrix["strategy"]["matrix"]["experimental"] == [False]
+
+
+def test_each_row_reports_under_a_name_the_ruleset_can_require():
+    """The ruleset of main requires the stable rows by name, "Tests (Python
+    3.11)" and so on, as in every Radar. Without a job name GitHub reports the
+    raw matrix values, "test (3.11, false)", and a renamed row is a required
+    check that never arrives."""
+    assert _matrix()["name"] == "Tests (Python ${{ matrix.python-version }})"
