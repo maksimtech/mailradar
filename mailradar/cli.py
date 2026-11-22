@@ -196,6 +196,22 @@ def _bool_icon(value: bool) -> str:
 
 # A check whose DNS lookup failed is neither configured nor missing
 _UNVERIFIED = "[yellow]Not verified: DNS lookup failed[/yellow]"
+# The local resolver returned no records and nothing could be compared (#150).
+# Each label says exactly what is known and stands on its own: a private
+# resolver alone is the common case, not a cause, and outside the terminal
+# there is no warning "above" to point at.
+_NO_COMPARISON = ("[yellow]Not verified: the local resolver returned no records, "
+                  "and no public resolver could be reached to compare[/yellow]")
+
+
+def _internal_view(report: DomainReport) -> str:
+    """The label of a check an internal view left empty, shown by the public resolver (#150)."""
+    from mailradar.checker import PUBLIC_RESOLVER
+
+    seen = report.public_records
+    verb = "is" if len(seen) == 1 else "are"
+    return (f"[yellow]Not graded: the local resolver shows an internal view "
+            f"({_s(' and '.join(seen))} {verb} visible through {PUBLIC_RESOLVER})[/yellow]")
 
 # The Details column
 _DETAILS_WIDTH = 55
@@ -228,8 +244,18 @@ def _unverified(report: DomainReport) -> list[str]:
 def _print_report(report: DomainReport) -> None:
     color = _score_color(report.total_score)
     emoji = _grade_emoji(report.grade)
+    # Answered by an internal view is not the same as unanswered (#150)
+    if report.public_records:
+        unverified = _internal_view(report)
+    elif report.split_horizon:
+        unverified = _NO_COMPARISON
+    else:
+        unverified = _UNVERIFIED
 
-    if report.total_score is None:
+    if report.public_records:
+        # Shown, not guessed: nothing was left unanswered, the view is another
+        score = f"[{color}]N/A — not graded: the local resolver shows an internal view[/{color}]"
+    elif report.total_score is None:
         # No number: every check a lookup did not answer would have counted 0
         score = (f"[{color}]N/A — analysis incomplete, not verified: "
                  f"{_s(', '.join(report.unverified))}[/{color}]")
@@ -242,6 +268,10 @@ def _print_report(report: DomainReport) -> None:
         title="📡 MailRadar Report",
         border_style=color,
     ))
+    if report.split_horizon:
+        console.print(f"[yellow]⚠️  {_s(report.split_horizon)}[/yellow]")
+    if report.public_view:
+        console.print(f"[dim]{_s(report.public_view)}[/dim]")
 
     # DMARC
     table = Table(box=box.ROUNDED, show_header=True, header_style="bold cyan")
@@ -264,7 +294,7 @@ def _print_report(report: DomainReport) -> None:
             # Record trovato su un dominio padre (RFC 7489 §6.6.3)
             dmarc_detail += f" | [yellow]via {_s(d.found_at)}[/yellow]"
     elif d.error:
-        dmarc_detail = _UNVERIFIED
+        dmarc_detail = unverified
     else:
         dmarc_detail = "[red]Not configured[/red]"
 
@@ -274,7 +304,7 @@ def _print_report(report: DomainReport) -> None:
     # SPF row
     s = report.spf
     spf_detail = (escape(_fit(visible(s.raw))) if s.present
-                  else (_UNVERIFIED if s.error else "[red]Not configured[/red]"))
+                  else (unverified if s.error else "[red]Not configured[/red]"))
     spf_ok = s.present and not s.permissive and not s.permerror
     spf_icon = "✅" if spf_ok else ("⚠️ " if s.present or s.error else "❌")
     table.add_row("SPF", spf_icon, spf_detail, _check_score_cell("spf", s))
@@ -291,7 +321,7 @@ def _print_report(report: DomainReport) -> None:
         key = k.keys.get(k.selector) or ("Ed25519" if k.key_type == "ed25519" else f"{k.key_bits}-bit RSA")
         dkim_detail = f"selector: {_s(k.selector)} | {_s(key)}"
     elif k.error:
-        dkim_detail = _UNVERIFIED
+        dkim_detail = unverified
     elif k.selector:
         # Found, but revoked (empty p=): there is no key to sign with
         dkim_detail = f"[red]selector: {_s(k.selector)} | key revoked[/red]"
@@ -311,7 +341,7 @@ def _print_report(report: DomainReport) -> None:
     if b.present:
         bimi_detail = f"SVG: {'✓' if b.svg_valid else '✗'} | VMC: {'✓' if b.vmc_present else '✗'}"
     elif b.error:
-        bimi_detail = _UNVERIFIED
+        bimi_detail = unverified
     else:
         bimi_detail = "[dim]Not configured[/dim]"
     bimi_icon = "✅" if (b.present and b.vmc_present) else ("⚠️ " if b.present or b.error else "❌")
@@ -319,7 +349,7 @@ def _print_report(report: DomainReport) -> None:
 
     # MTA-STS row
     m = report.mta_sts
-    mts_detail = f"mode: {_s(m.mode)}" if m.present else (_UNVERIFIED if m.error else "[dim]Not configured[/dim]")
+    mts_detail = f"mode: {_s(m.mode)}" if m.present else (unverified if m.error else "[dim]Not configured[/dim]")
     mts_icon = "✅" if (m.present and m.mode == "enforce") else ("⚠️ " if m.present or m.error else "❌")
     table.add_row("MTA-STS", mts_icon, mts_detail, _check_score_cell("mta_sts", m))
 
@@ -327,7 +357,7 @@ def _print_report(report: DomainReport) -> None:
     t = report.tls_rpt
     tls_detail = (
         f"rua: {escape(_fit(visible(t.rua), _DETAILS_WIDTH - len('rua: ')))}" if t.present
-        else (_UNVERIFIED if t.error else "[dim]Not configured[/dim]")
+        else (unverified if t.error else "[dim]Not configured[/dim]")
     )
     tls_icon = "✅" if t.present else ("⚠️ " if t.error else "❌")
     table.add_row("TLS-RPT", tls_icon, tls_detail, _check_score_cell("tls_rpt", t))

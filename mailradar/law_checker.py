@@ -67,6 +67,11 @@ def findings_of(report) -> dict[str, list[str]]:
     """
     found: dict[str, list[str]] = {}
 
+    # The analysis may describe an internal view of the domain (#150): nothing
+    # in it is evidence about what other mail servers see, GPG included
+    if getattr(report, "split_horizon", ""):
+        return found
+
     # A check whose DNS lookup failed (`error`) is neither missing nor weak
     if not report.dmarc.present and not report.dmarc.error:
         found["dmarc_missing"] = ["no DMARC record"]

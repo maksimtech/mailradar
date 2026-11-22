@@ -159,6 +159,14 @@ class DomainReport:
     # measured bottom of scale.
     total_score: int | None = 0
     grade: str = "F"
+    # Why the analysis may describe an internal view of the domain, not what
+    # other mail servers see; empty when there is no reason to think so (#150)
+    split_horizon: str = ""
+    # That the public resolver was asked to compare, and found nothing either
+    public_view: str = ""
+    # What the public resolver returned when the local one returned nothing
+    # ("SPF", "DMARC"): non-empty only when an internal view is shown, not guessed
+    public_records: list[str] = field(default_factory=list)
 
     @property
     def unverified(self) -> list[str]:
@@ -1908,6 +1916,133 @@ def _bimi_under_dmarc(bimi: BIMIResult, dmarc: DMARCResult) -> None:
     bimi.score = 0
 
 
+def system_resolver_addresses() -> list[str]:
+    """The addresses of the resolvers dnspython asks, as text.
+
+    A separate function so the tests can say which resolver answered: the
+    machine running the suite must not decide whether a view looks internal.
+    """
+    servers = dns.resolver.get_default_resolver().nameservers
+    return [str(getattr(server, "address", server)) for server in servers]
+
+
+def resolver_is_private(addresses: list[str]) -> bool:
+    """Whether every resolver is on a private or local address (RFC 1918, RFC 4193, loopback, link-local).
+
+    One public resolver among them means answers may come from the public view,
+    and something that is not an address (a DoH URL) says nothing either way.
+    """
+    if not addresses:
+        return False
+    for address in addresses:
+        try:
+            if not ipaddress.ip_address(address).is_private:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
+# The checks that read TXT records, in report order: the ones an internal view
+# without TXT records leaves empty
+_TXT_CHECKS = (("DMARC", "dmarc"), ("SPF", "spf"), ("DKIM", "dkim"),
+               ("BIMI", "bimi"), ("MTA-STS", "mta_sts"), ("TLS-RPT", "tls_rpt"))
+
+
+# The public resolver asked to compare when a private one returns nothing
+# (Cloudflare's, which the DNS fixtures were recorded through). Asking it sends
+# the domain's name to Cloudflare: the README and the output say so.
+PUBLIC_RESOLVER = "1.1.1.1"
+
+
+def public_txt(name: str) -> list[str]:
+    """The TXT strings `name` has through PUBLIC_RESOLVER, joined per record as _query_txt joins them.
+
+    [] when the name has none; a DNSException when the resolver did not answer
+    (a network that blocks outgoing DNS, typically at work).
+    """
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = [PUBLIC_RESOLVER]
+    resolver.lifetime = 5.0
+    try:
+        answers = resolver.resolve(name, "TXT")
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return []
+    return [b"".join(rdata.strings).decode("utf-8", errors="replace") for rdata in answers]
+
+
+def _public_view(domain: str) -> list[str]:
+    """Which of SPF and DMARC the public resolver sees for `domain`; raises when it does not answer."""
+    seen = []
+    if any(r.lower().startswith("v=spf1") for r in public_txt(domain)):
+        seen.append("SPF")
+    if any(r.lower().startswith("v=dmarc1") for r in public_txt(f"_dmarc.{domain}")):
+        seen.append("DMARC")
+    return seen
+
+
+def _suspect_split_horizon(report: DomainReport, resolvers: list[str]) -> None:
+    """Compare with the public view when a private resolver returned no TXT record at all (#150).
+
+    An internal (split-horizon) view often holds only the hosts the network
+    needs: no SPF, no DMARC, no DKIM, while the public view has them. Graded,
+    that read 0/100 with GDPR art. 32 for records that exist.
+
+    A private resolver is also the common case (127.0.0.53 on Ubuntu, a home
+    router), so its silence alone proves nothing. The public resolver decides:
+    - it sees SPF or DMARC: an internal view, and every TXT check that found
+      nothing becomes "not verified", which takes away the grade and the
+      provisions through the path a failed lookup already follows;
+    - it sees neither: the records are really missing, graded as before, with
+      a note that the public resolver was asked;
+    - it does not answer: the same as an internal view, said as a doubt.
+    """
+    if not resolver_is_private(resolvers):
+        return
+    core = (report.dmarc, report.spf, report.dkim)
+    if any(check.present or check.error for check in core):
+        return
+    where = ", ".join(resolvers)
+    domain = report.domain
+    try:
+        seen = _public_view(domain)
+    except dns.exception.DNSException as e:
+        report.split_horizon = (
+            f"Your resolver ({where}) is on a private network and returned no TXT record for {domain}, "
+            f"and the public resolver {PUBLIC_RESOLVER} could not be asked to compare "
+            f"({type(e).__name__}): this may be an internal (split-horizon) view of the domain, not "
+            "what other mail servers see. Run the check again from a network that uses a public resolver."
+        )
+        # Every reason stands on its own: batch and a refused report print it
+        # with no warning around it
+        reason = (f"the local resolver ({where}) returned no records, and the public resolver "
+                  f"{PUBLIC_RESOLVER} could not be reached to compare ({type(e).__name__})")
+        verdict = "not verified"
+    else:
+        if not seen:
+            report.public_view = (
+                f"Your resolver ({where}) is on a private network and returned no TXT record for "
+                f"{domain}; the public resolver {PUBLIC_RESOLVER} was asked and has no SPF or DMARC "
+                "for it either, so the records are missing for every mail server."
+            )
+            return
+        report.split_horizon = (
+            f"Your resolver ({where}) is on a private network and returned no TXT record for {domain}, "
+            f"but the public resolver {PUBLIC_RESOLVER} returns {' and '.join(seen)} for it: this is an "
+            "internal (split-horizon) view of the domain, not what other mail servers see. Run the "
+            "check again from a network that uses a public resolver."
+        )
+        report.public_records = seen
+        verb = "is" if len(seen) == 1 else "are"
+        reason = (f"the local resolver ({where}) shows an internal view: {' and '.join(seen)} "
+                  f"{verb} visible through {PUBLIC_RESOLVER}")
+        verdict = "not graded"
+    for name, attr in _TXT_CHECKS:
+        result = getattr(report, attr)
+        if not result.present and not result.error:
+            setattr(report, attr, type(result)(error=reason, issues=[f"{name} {verdict} — {reason}"]))
+
+
 def analyze_domain(domain: str, dkim_selectors: list[str] | None = None) -> DomainReport:
     """Run full email security analysis on a domain.
 
@@ -1934,6 +2069,8 @@ def analyze_domain(domain: str, dkim_selectors: list[str] | None = None) -> Doma
     # GPG lookup
     from mailradar.gpg import lookup_gpg
     report.gpg = lookup_gpg(domain)
+
+    _suspect_split_horizon(report, system_resolver_addresses())
 
     if report.unverified:
         # Nothing to grade: "could not tell" is not "bad"

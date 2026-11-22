@@ -322,6 +322,24 @@ code 3. Counting them as 0 points read as a domain measured at the bottom of
 the scale. A keyserver that does not answer is the exception: it withholds at
 most the 5 GPG points, and the GPG check says it was not verified.
 
+**A private resolver that returns nothing.** On a company network the
+resolver often serves an internal view of the company's own domain
+(split-horizon DNS), with no SPF, DMARC or DKIM in it. When every resolver
+the system uses is on a private or local address (RFC 1918, RFC 4193,
+loopback, such as a router or systemd-resolved's `127.0.0.53`) and the domain
+returns no SPF, no DMARC and no DKIM key, MailRadar asks the public resolver
+`1.1.1.1` (Cloudflare) for the domain's SPF and DMARC. **That query sends the
+domain's name to Cloudflare**, and the output says when it happened.
+- **The public resolver has them:** the view is internal. No score, no legal
+  provisions, a warning that names both resolvers, exit code 3.
+- **It has none either:** the records are missing for every mail server, and
+  the domain is scored as such.
+- **It does not answer** (outgoing DNS blocked): no score and no provisions,
+  and the warning says the comparison could not be made.
+
+Run the check again from a network that uses a public resolver to grade such
+a domain.
+
 DMARC, SPF and DKIM account for 85 of the 108 points. They decide whether the
 domain can be spoofed. The other checks are hardening measures.
 
