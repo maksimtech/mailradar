@@ -27,13 +27,14 @@ from unittest.mock import MagicMock, patch
 import dns.nameserver
 import dns.resolver
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 from mailradar import checker
 from mailradar.checker import analyze_domain, resolver_is_private
 from mailradar.checker import public_txt as real_public_txt
 from mailradar.checker import system_resolver_addresses as read_system_resolvers
-from mailradar.cli import app
+from mailradar.cli import _NO_COMPARISON, _internal_view, app
 from mailradar.gpg import GPGResult
 from mailradar.law_checker import findings_of
 
@@ -213,23 +214,76 @@ def test_the_public_resolver_is_asked_and_nobody_else(monkeypatch):
 
 # ─── the command ────────────────────────────────────────────────────────────
 
-def test_check_prints_the_warning_and_exits_3():
+def _check(public):
     with patch.object(checker, "system_resolver_addresses", return_value=["192.168.178.1"]), \
-         patch.object(checker, "public_txt", _public(PUBLIC_RECORDS)), \
+         patch.object(checker, "public_txt", public), \
          patch("mailradar.checker.dns.resolver.resolve", side_effect=_resolve_from({})), \
          patch("mailradar.gpg.lookup_gpg", return_value=_no_gpg()):
         result = CliRunner().invoke(app, ["check", "example.com"])
+    return result, " ".join(result.output.split())
+
+
+# Each label says exactly what is known, and stands on its own: a batch summary,
+# a refused report or a log has no warning "above" it. Found live on
+# 2026-11-22, the table first said "DNS lookup failed" for lookups that were
+# answered, then "private resolver, see above", which named the common case
+# as the cause and pointed at nothing outside the terminal.
+INTERNAL_VIEW = ("Not graded: the local resolver shows an internal view "
+                 "(SPF and DMARC are visible through 1.1.1.1)")
+NO_COMPARISON = ("Not verified: the local resolver returned no records, "
+                 "and no public resolver could be reached to compare")
+
+
+def _plain(markup: str) -> str:
+    return Text.from_markup(markup).plain
+
+
+def test_the_two_labels_say_exactly_what_is_known():
+    """Checked on the labels themselves: in the table they wrap inside a narrow
+    column, between cell borders and the score column."""
+    shown = _analyze("192.168.178.1", {}, _public(PUBLIC_RECORDS))
+    assert _plain(_internal_view(shown)) == INTERNAL_VIEW
+    assert _plain(_NO_COMPARISON) == NO_COMPARISON
+
+    only_spf = _analyze("192.168.178.1", {}, _public({"example.com": ["v=spf1 -all"]}))
+    assert _plain(_internal_view(only_spf)) == (
+        "Not graded: the local resolver shows an internal view (SPF is visible through 1.1.1.1)")
+
+
+def test_check_with_an_internal_view_shown_says_not_graded_and_why():
+    result, out = _check(_public(PUBLIC_RECORDS))
 
     assert result.exit_code == 3, result.output
-    out = " ".join(result.output.split())
-    assert "N/A" in out
     assert "internal (split-horizon) view" in out
     assert "CRITICAL" not in out
-    # Found live on 2026-11-22: the table said "DNS lookup failed" for lookups
-    # that were answered, by an internal view. The label must hold whether the
-    # public resolver confirmed the internal view or could not be asked.
-    assert "DNS lookup failed" not in out
-    assert "Not verified: private resolver, see above" in out
+    assert "N/A — not graded: the local resolver shows an internal view" in out
+    assert out.count("Not graded: the local resolver shows") == 6   # the six TXT checks
+    for wrong in ("DNS lookup failed", "see above", "Not verified: the local resolver"):
+        assert wrong not in out
+
+
+def test_check_without_a_public_resolver_says_not_verified_and_why():
+    result, out = _check(_public_unreachable)
+
+    assert result.exit_code == 3, result.output
+    assert "N/A — analysis incomplete, not verified" in out
+    assert out.count("Not verified: the local resolver returned") == 6
+    for wrong in ("DNS lookup failed", "see above", "Not graded"):
+        assert wrong not in out
+
+
+def test_the_reason_each_check_keeps_stands_on_its_own():
+    """The error is what batch and a refused report print, with nothing around it."""
+    shown = _analyze("192.168.178.1", {}, _public(PUBLIC_RECORDS))
+    unknown = _analyze("192.168.178.1", {}, _public_unreachable)
+
+    assert shown.dmarc.error == ("the local resolver (192.168.178.1) shows an internal view: "
+                                 "SPF and DMARC are visible through 1.1.1.1")
+    assert unknown.dmarc.error == ("the local resolver (192.168.178.1) returned no records, and "
+                                   "the public resolver 1.1.1.1 could not be reached to compare "
+                                   "(LifetimeTimeout)")
+    assert shown.public_records == ["SPF", "DMARC"]
+    assert unknown.public_records == []
 
 
 def test_check_says_the_public_resolver_was_asked():

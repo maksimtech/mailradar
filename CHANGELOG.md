@@ -124,8 +124,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   - **It does not answer**, as on networks that block outgoing DNS: no score and no provisions, and
     the warning says the comparison could not be made.
   - The warning suggests a network with a public resolver; choosing the resolver (`--resolver`) is #156.
-  - In the table, those checks read "Not verified: private resolver, see above", not "DNS lookup
-    failed": the lookups were answered, by the private resolver.
+  - Each label says exactly what is known, and stands on its own in a batch summary, a refused
+    report or a log:
+    - a lookup that failed: "Not verified: DNS lookup failed", as before;
+    - an internal view shown: "Not graded: the local resolver shows an internal view (SPF and DMARC
+      are visible through 1.1.1.1)", and the score reads "N/A — not graded";
+    - an internal view that could not be compared: "Not verified: the local resolver returned no
+      records, and no public resolver could be reached to compare".
+
+    A private resolver alone is never given as the cause, since it is the common case.
   - The tests pin the resolver the analysis believes it asked (`tests/conftest.py`), since the machine
     running them is itself behind a private one, and fail any test that reaches the real `1.1.1.1`
     (`tests/test_split_horizon.py`).

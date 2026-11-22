@@ -196,9 +196,22 @@ def _bool_icon(value: bool) -> str:
 
 # A check whose DNS lookup failed is neither configured nor missing
 _UNVERIFIED = "[yellow]Not verified: DNS lookup failed[/yellow]"
-# The lookups were answered, by a private resolver that may serve an internal
-# view of the domain (#150); the warning above the table says which case it is
-_UNVERIFIED_INTERNAL = "[yellow]Not verified: private resolver, see above[/yellow]"
+# The local resolver returned no records and nothing could be compared (#150).
+# Each label says exactly what is known and stands on its own: a private
+# resolver alone is the common case, not a cause, and outside the terminal
+# there is no warning "above" to point at.
+_NO_COMPARISON = ("[yellow]Not verified: the local resolver returned no records, "
+                  "and no public resolver could be reached to compare[/yellow]")
+
+
+def _internal_view(report: DomainReport) -> str:
+    """The label of a check an internal view left empty, shown by the public resolver (#150)."""
+    from mailradar.checker import PUBLIC_RESOLVER
+
+    seen = report.public_records
+    verb = "is" if len(seen) == 1 else "are"
+    return (f"[yellow]Not graded: the local resolver shows an internal view "
+            f"({_s(' and '.join(seen))} {verb} visible through {PUBLIC_RESOLVER})[/yellow]")
 
 # The Details column
 _DETAILS_WIDTH = 55
@@ -232,9 +245,17 @@ def _print_report(report: DomainReport) -> None:
     color = _score_color(report.total_score)
     emoji = _grade_emoji(report.grade)
     # Answered by an internal view is not the same as unanswered (#150)
-    unverified = _UNVERIFIED_INTERNAL if report.split_horizon else _UNVERIFIED
+    if report.public_records:
+        unverified = _internal_view(report)
+    elif report.split_horizon:
+        unverified = _NO_COMPARISON
+    else:
+        unverified = _UNVERIFIED
 
-    if report.total_score is None:
+    if report.public_records:
+        # Shown, not guessed: nothing was left unanswered, the view is another
+        score = f"[{color}]N/A — not graded: the local resolver shows an internal view[/{color}]"
+    elif report.total_score is None:
         # No number: every check a lookup did not answer would have counted 0
         score = (f"[{color}]N/A — analysis incomplete, not verified: "
                  f"{_s(', '.join(report.unverified))}[/{color}]")

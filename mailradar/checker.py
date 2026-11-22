@@ -164,6 +164,9 @@ class DomainReport:
     split_horizon: str = ""
     # That the public resolver was asked to compare, and found nothing either
     public_view: str = ""
+    # What the public resolver returned when the local one returned nothing
+    # ("SPF", "DMARC"): non-empty only when an internal view is shown, not guessed
+    public_records: list[str] = field(default_factory=list)
 
     @property
     def unverified(self) -> list[str]:
@@ -2010,8 +2013,11 @@ def _suspect_split_horizon(report: DomainReport, resolvers: list[str]) -> None:
             f"({type(e).__name__}): this may be an internal (split-horizon) view of the domain, not "
             "what other mail servers see. Run the check again from a network that uses a public resolver."
         )
-        reason = (f"no TXT record from the private resolver {where}, and no answer from "
-                  f"{PUBLIC_RESOLVER} to compare: possibly an internal (split-horizon) view")
+        # Every reason stands on its own: batch and a refused report print it
+        # with no warning around it
+        reason = (f"the local resolver ({where}) returned no records, and the public resolver "
+                  f"{PUBLIC_RESOLVER} could not be reached to compare ({type(e).__name__})")
+        verdict = "not verified"
     else:
         if not seen:
             report.public_view = (
@@ -2026,12 +2032,15 @@ def _suspect_split_horizon(report: DomainReport, resolvers: list[str]) -> None:
             "internal (split-horizon) view of the domain, not what other mail servers see. Run the "
             "check again from a network that uses a public resolver."
         )
-        reason = (f"no TXT record from the private resolver {where}, while {PUBLIC_RESOLVER} "
-                  f"returns {' and '.join(seen)}: an internal (split-horizon) view")
+        report.public_records = seen
+        verb = "is" if len(seen) == 1 else "are"
+        reason = (f"the local resolver ({where}) shows an internal view: {' and '.join(seen)} "
+                  f"{verb} visible through {PUBLIC_RESOLVER}")
+        verdict = "not graded"
     for name, attr in _TXT_CHECKS:
         result = getattr(report, attr)
         if not result.present and not result.error:
-            setattr(report, attr, type(result)(error=reason, issues=[f"{name} not verified — {reason}"]))
+            setattr(report, attr, type(result)(error=reason, issues=[f"{name} {verdict} — {reason}"]))
 
 
 def analyze_domain(domain: str, dkim_selectors: list[str] | None = None) -> DomainReport:
