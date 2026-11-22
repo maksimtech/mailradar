@@ -10,6 +10,12 @@ jobs:
   test:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    # id-token: write lets the coverage upload prove to Codecov, through GitHub's
+    # OIDC, which repository it comes from. Job permissions replace the workflow's,
+    # so contents: read is repeated here.
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -50,7 +56,10 @@ jobs:
         if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          # OIDC, not a CODECOV_TOKEN secret: Codecov files an upload under the
+          # project its token belongs to, and this repository's secret held
+          # exeradar's, so the reports went there (tests/test_ci_contract.py).
+          use_oidc: true
           files: coverage.xml
           # A failed upload loses a metric, it does not invalidate the tests that
           # just passed. What it must not do is stay silent forever — ask Codecov
