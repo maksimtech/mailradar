@@ -298,7 +298,12 @@ class TestCheckDMARCTreeWalk:
             "_dmarc.dept.example.co.uk. TXT",
             "_dmarc.example.co.uk. TXT",
         ]
-        assert any("example.co.uk" in issue for issue in result.issues)
+        # The whole message, not a substring of it: it names both the domain and
+        # where the policy came from
+        assert result.issues[0] == (
+            "No DMARC record on dept.example.co.uk — policy inherited from its "
+            "organizational domain example.co.uk"
+        )
 
     def test_a_record_on_an_intermediate_name_is_not_the_policy(self, dns_replay):
         """RFC 7489 §6.6.3 asks _dmarc.<domain> and then _dmarc.<organizational domain>.
