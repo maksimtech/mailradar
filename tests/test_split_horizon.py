@@ -225,6 +225,11 @@ def test_check_prints_the_warning_and_exits_3():
     assert "N/A" in out
     assert "internal (split-horizon) view" in out
     assert "CRITICAL" not in out
+    # Found live on 2026-11-22: the table said "DNS lookup failed" for lookups
+    # that were answered, by an internal view. The label must hold whether the
+    # public resolver confirmed the internal view or could not be asked.
+    assert "DNS lookup failed" not in out
+    assert "Not verified: private resolver, see above" in out
 
 
 def test_check_says_the_public_resolver_was_asked():

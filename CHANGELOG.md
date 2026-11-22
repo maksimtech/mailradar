@@ -124,6 +124,8 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   - **It does not answer**, as on networks that block outgoing DNS: no score and no provisions, and
     the warning says the comparison could not be made.
   - The warning suggests a network with a public resolver; choosing the resolver (`--resolver`) is #156.
+  - In the table, those checks read "Not verified: private resolver, see above", not "DNS lookup
+    failed": the lookups were answered, by the private resolver.
   - The tests pin the resolver the analysis believes it asked (`tests/conftest.py`), since the machine
     running them is itself behind a private one, and fail any test that reaches the real `1.1.1.1`
     (`tests/test_split_horizon.py`).
