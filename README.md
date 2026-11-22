@@ -369,8 +369,8 @@ Subdomains are resolved the way RFC 7489 §6.6.3 prescribes: if
 `_dmarc.<domain>` has no record, the record of the organizational domain
 applies, and no name in between is asked. The organizational domain comes from
 the [Public Suffix List](https://publicsuffix.org/) shipped with the package.
-For `asufc.sanita.fvg.it` that means `_dmarc.asufc.sanita.fvg.it`, then
-`_dmarc.sanita.fvg.it`: `fvg.it` is itself on the list, like `it`, `co.uk` or
+For `dept.example.co.uk` that means `_dmarc.dept.example.co.uk`, then
+`_dmarc.example.co.uk`: `co.uk` is itself on the list, like `it`, `gov.uk` or
 `co.at`. For `sub.a.example.com` it means `_dmarc.sub.a.example.com`, then
 `_dmarc.example.com`: a record on `a.example.com` is not consulted. The public
 suffix itself is never queried — a record on it is not the domain's policy.
