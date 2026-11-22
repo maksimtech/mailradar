@@ -8,6 +8,9 @@ permissions:
   contents: read
 jobs:
   test:
+    # The ruleset of main requires the stable rows under this name
+    # (tests/test_ci_contract.py).
+    name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     # id-token: write lets the coverage upload prove to Codecov, through GitHub's
@@ -19,10 +22,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        # The same list as the classifiers in pyproject.toml, which
+        # tests/test_ci_contract.py checks.
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
         experimental: [false]
         include:
-          - python-version: "3.15-dev"
+          # The next Python, from its development branch, allowed to fail:
+          # 3.16 goes final in October 2027 (PEP 602's yearly cadence), and a
+          # dependency without a wheel for it should show up here first, not
+          # after the classifier.
+          - python-version: "3.16-dev"
             experimental: true
     continue-on-error: ${{ matrix.experimental }}
     steps:

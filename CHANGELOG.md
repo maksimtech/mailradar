@@ -43,6 +43,12 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **Python 3.15 is supported, and 3.16 is the row allowed to fail.** 3.15.0 went final on 2026-10-09;
+  it moves from the experimental `3.15-dev` row to the stable matrix and to the classifiers, and
+  `3.16-dev` takes its place as the one row with `continue-on-error`, as in apkradar. The matrix jobs
+  now report as `Tests (Python 3.11)` … `Tests (Python 3.16-dev)` rather than `test (3.11, false)`,
+  so main's ruleset can require each stable row by a name that does not change with the matrix's
+  other values (`tests/test_ci_contract.py`).
 - **A short DKIM key names the rules it breaks.** A 1024-bit RSA key was told "upgrade to 2048-bit
   recommended", which reads as a preference. The issue now cites the rule written for DKIM, RFC 8301
   §3.2, which asks signers for at least 2048 bits, and NIST SP 800-131A Rev. 2, which disallows RSA
