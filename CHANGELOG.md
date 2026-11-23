@@ -139,6 +139,14 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Security
 
+- **CVE-2026-107494 (OpenSSL, QUIC) is accepted until Debian ships a fix.** Trivy reports it since
+  2026-11-23 against openssl 3.5.9-1~deb13u1 in the image. The fix for CVE-2026-84784 (OpenSSL
+  advisory of 2026-09-29, rated Low) was incomplete, and a malicious QUIC peer can still exhaust the
+  QUIC stack's memory with retransmitted NEW_CONNECTION_ID frames. There is no OpenSSL advisory yet
+  and no fixed Debian package. It is not reachable here: Python's ssl exposes no QUIC, mailradar's
+  TLS runs over TCP, and dnspython would use QUIC only with aioquic, which is not installed. The entry
+  has no `source`, since Docker Scout reads the same package. Review by 2026-12-15, with the other
+  OpenSSL entries (maksimtech/apkradar#134).
 - **CVE-2026-121482 (OpenSSL, CRL distribution points) is accepted until Debian ships a fix.** Docker
   Scout reported it on 2026-11-21: a certificate with very many CRL distribution points, verified with
   CRL checking enabled, costs CPU time quadratic in their number (openssl/openssl#33546; no advisory
