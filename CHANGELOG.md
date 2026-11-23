@@ -43,6 +43,11 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **Every action's pin names a full release.** `tests/test_actions_pinned.py` already held every
+  action to a full commit with a version comment, but its pattern accepted `# v7.1`, a line of
+  releases rather than the one pinned. The comment must now be a full `vX.Y.Z`, as the Radars'
+  shared rule asks; a test of the pattern itself covers `# v7`, `# v7.1` and `# release/v1`. All 57
+  action uses already comply, so no workflow changes.
 - **Every job runs on ubuntu-26.04, CodSpeed's too.** The benchmarks stayed on ubuntu-24.04 when the
   other jobs moved on 2026-10-02, because CodSpeed's action failed on 26.04 with "Unsupported system".
   CodSpeed's runner and action v5.5.0 (2026-10-14) support it, and the action here is already v5.6.3.
