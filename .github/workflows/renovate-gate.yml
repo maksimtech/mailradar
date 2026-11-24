@@ -1,0 +1,30 @@
+name: Renovate gate
+# A required check (tests/test_renovate_gate.py): GitHub's auto-merge waits only
+# for required checks, and Renovate's own statuses (renovate/artifacts,
+# renovate/stability-days) are not and cannot be. This reads them on the head
+# commit of a Renovate pull request and fails when one is not green; any other
+# pull request passes at once. No `paths:` filter: a required check that does
+# not run leaves the pull request waiting forever.
+on:
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+  statuses: read
+jobs:
+  gate:
+    name: Renovate gate
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Renovate's own checks are green
+        env:
+          BRANCH: ${{ github.head_ref }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/renovate_gate.py
