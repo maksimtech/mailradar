@@ -472,9 +472,10 @@ review_by = "2026-12-31"
 # ─────────────────────────────────────────────────────────────────────────────
 # OpenSSL issues Docker Scout reported on main on 2026-11-20, against the trixie
 # libssl3t64 of the base image: one of the 2026-11-10 advisory, one of the
-# 2026-11-17 advisory, and CVE-2026-84786 (DANE, no advisory yet). The other
-# four of those advisories, accepted in the other Radars, are not reported here:
-# an entry for them would fail the gate as unused. Review on 2026-12-15.
+# 2026-11-17 advisory, and CVE-2026-84786 (DANE, in the 2026-11-24 advisory).
+# The other four of the first two advisories, accepted in the other Radars, are
+# not reported here: an entry for them would fail the gate as unused. Review by
+# 2026-12-15.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [[exception]]
@@ -523,18 +524,21 @@ source = "Docker Scout"
 where = "openssl 3.5.7-1~deb13u3 (libssl3t64), python:3.14-slim-trixie base image"
 why = """
 A DANE-enabled TLS client may dereference a NULL pointer on an unusual pair of \
-certificate and TLSA records (Debian security tracker). No OpenSSL advisory yet; \
-the fix is openssl/openssl#33634, open on 2026-11-20 and marked for the 3.5 \
-branch. Debian lists trixie and sid as vulnerable, with no fixed version. \
-Docker Scout reports it as high. `apt-get upgrade` runs at build time, and the image is rebuilt at every \
-release: the DSA arrives here without anyone chasing it, and this entry then \
-fails the build as unused.
+certificate and TLSA records. OpenSSL's advisory of 2026-11-24 \
+(secadv/20261124.txt) rates it Low and names 3.5.10 as the fixed version, \
+scheduled for release on 2026-12-01; the fix, openssl/openssl#33634, was applied \
+to every active branch that morning. Until 3.5.10 no release contains it, and \
+Debian lists trixie and sid as vulnerable, with no fixed version, \
+3.5.9-1~deb13u1 included (2026-11-24). Docker Scout reports it as high. \
+`apt-get upgrade` runs at build time, and the image is rebuilt at every release: \
+the DSA arrives here without anyone chasing it, and this entry then fails the \
+build as unused.
 
 It is reached only by a TLS client that enables DANE (SSL_dane_enable) and checks \
 TLSA records. Python's ssl module exposes no DANE at all, and mailradar reads no \
-TLSA record. mailradar's own TLS is Python's ssl module over TCP (httpx, dnspython's DoH \
-when used, and smtplib/imaplib with STARTTLS); it runs no server at all. \
-cryptography only loads DKIM public keys to measure them, and its wheel \
+TLSA record. mailradar's own TLS is Python's ssl module over TCP (httpx, \
+dnspython's DoH when used, and smtplib/imaplib with STARTTLS); it runs no server \
+at all. cryptography only loads DKIM public keys to measure them, and its wheel \
 carries its own OpenSSL, not the image's.
 """
 review_by = "2026-12-15"
@@ -619,7 +623,8 @@ review_by = "2026-12-15"
 # ─────────────────────────────────────────────────────────────────────────────
 # CVE-2026-107494 (OpenSSL, QUIC; incomplete fix of CVE-2026-84784), reported by
 # Trivy on 2026-11-23 against the base image's openssl 3.5.9-1~deb13u1
-# (maksimtech/apkradar#134). Review by 2026-12-15, with the other OpenSSL entries.
+# (maksimtech/apkradar#134). Fixed upstream in 3.5.10, due 2026-12-01. Review by
+# 2026-12-15, with the other OpenSSL entries.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [[exception]]
@@ -629,29 +634,37 @@ why = """
 The fix for CVE-2026-84784 (OpenSSL advisory of 2026-09-29, rated Low, fixed in \
 3.5.9) was incomplete: OpenSSL's QUIC stack still queues a RETIRE_CONNECTION_ID \
 frame for every retransmitted NEW_CONNECTION_ID frame, without limit, so a \
-malicious QUIC peer can exhaust memory. Trivy reports it as high. No OpenSSL \
-advisory yet, and Debian marks trixie, trixie-security and sid vulnerable with \
-no fixed package (security-tracker.debian.org, 2026-11-23), so there is nothing \
-to upgrade to. `apt-get upgrade` runs at build time, and the image is rebuilt at \
+malicious QUIC peer can exhaust memory. Trivy reports it as high, from \
+CISA-ADP's CVSS 7.5; OpenSSL rates it Low. The fix was committed to the 3.5 \
+branch on 2026-11-22 (openssl/openssl#33544, closed as applied by hand), and \
+OpenSSL's advisory of 2026-11-24 (secadv/20261124.txt) names 3.5.10 as the fixed \
+version, scheduled for release on 2026-12-01: until then no OpenSSL release \
+contains it. Debian marks trixie, trixie-security and sid vulnerable with no \
+fixed package (security-tracker.debian.org, 2026-11-24), so there is nothing to \
+upgrade to. `apt-get upgrade` runs at build time, and the image is rebuilt at \
 every release: the DSA arrives here without anyone chasing it, and this entry \
 then fails the build as unused. No `source`: Docker Scout reads the same \
 package, and the reason below holds whichever scanner reports it.
 
-It is reached only through OpenSSL's QUIC stack. Python's ssl module exposes no \
-QUIC, client or server, and nothing in this image speaks it.
-mailradar's own TLS is Python's ssl module over TCP (httpx, dnspython's DoH when \
-used, and smtplib/imaplib with STARTTLS); it runs no server at all. dnspython \
-would speak DNS over QUIC or HTTP/3 only with aioquic, which is not installed. \
-cryptography only loads DKIM public keys to measure them, and its wheel carries \
-its own OpenSSL, not the image's.
+It is reached only through OpenSSL's QUIC stack, and nothing in this image \
+speaks QUIC. In the image built from main on 2026-11-24 (`--pull --no-cache`, \
+then `ldd` on every ELF file), the system libssl is loaded only by Python's \
+`_ssl`, apt's http method and the `openssl` binary. Python's ssl module exposes \
+no QUIC, client or server. There is no curl or wget, and no Python package that \
+speaks QUIC or HTTP/3 (aioquic, qh3, niquests, h2, pycurl, curl_cffi: none \
+installed); dnspython would speak DNS over QUIC only with aioquic, and in the \
+image `dns.quic.have_quic` is False. mailradar's own TLS is Python's ssl module \
+over TCP (httpx, dnspython's DoH when used, and smtplib/imaplib with STARTTLS); \
+it runs no server at all. cryptography only loads DKIM public keys to measure \
+them, and its wheel carries its own OpenSSL, not the image's.
 """
 review_by = "2026-12-15"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CVE-2026-121482 (OpenSSL, CRL distribution points; no advisory yet), reported
-# by Docker Scout on main on 2026-11-21 against the trixie openssl of the base
-# image (maksimtech/apkradar#124). Review on 2026-12-15, with the other OpenSSL
-# entries.
+# CVE-2026-121482 (OpenSSL, CRL distribution points), reported by Docker Scout on
+# main on 2026-11-21 against the trixie openssl of the base image
+# (maksimtech/apkradar#124). Fixed upstream in 3.5.10, due 2026-12-01. Review by
+# 2026-12-15, with the other OpenSSL entries.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [[exception]]
@@ -662,9 +675,11 @@ why = """
 crl_crldp_check() rebuilds the name of every CRL distribution point of a \
 certificate on each CRL check, so a certificate with very many of them, verified \
 with CRL checking enabled, costs CPU time quadratic in their number \
-(openssl/openssl#33546, merged upstream on 2026-11-18). No OpenSSL advisory or \
-released version yet; Debian lists trixie and sid as vulnerable, \
-3.5.9-1~deb13u1 included, with no fix (`patchradar debian`, 2026-11-21). Docker \
+(openssl/openssl#33546, merged upstream on 2026-11-18). OpenSSL's advisory of \
+2026-11-24 (secadv/20261124.txt) rates it Low and names 3.5.10 as the fixed \
+version, scheduled for release on 2026-12-01; until then no release contains \
+it. Debian lists trixie and sid as vulnerable, 3.5.9-1~deb13u1 included, with \
+no fix (security-tracker.debian.org, 2026-11-24). Docker \
 Scout reports it as high. `apt-get upgrade` runs at build time, and the image is \
 rebuilt at every release: the DSA arrives here without anyone chasing it, and \
 this entry then fails the build as unused.
