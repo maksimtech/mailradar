@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
+  "timezone": "Europe/Rome",
+  "schedule": ["before 6am on thursday"],
+  "minimumReleaseAge": "14 days",
+  "internalChecksFilter": "strict",
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "minimumReleaseAge": null,
+    "schedule": ["at any time"],
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "description": "Lower bounds in pyproject.toml are raised by hand; Renovate moves uv.lock within them.",
+      "matchManagers": ["pep621"],
+      "rangeStrategy": "update-lockfile"
+    },
+    {
+      "description": "Every action in one pull request a week.",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Minor, patch and digest updates merge on their own once the required checks pass.",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
+      "automerge": true
+    },
+    {
+      "description": "Pinning an action to the commit its tag names today changes no code that runs: no release to let age, and no timestamp to wait on (tests/test_renovate_config.py).",
+      "matchUpdateTypes": ["pinDigest"],
+      "minimumReleaseAge": null
+    },
+    {
+      "description": "The Python of the image and of the matrix is a decision (tests/test_docker_python.py).",
+      "matchDepNames": ["python"],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    }
+  ]
+}

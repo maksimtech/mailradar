@@ -68,6 +68,12 @@ Changelog = "https://github.com/maksimtech/mailradar/blob/main/CHANGELOG.md"
 [tool.hatch.version]
 path = "mailradar/__init__.py"
 
+# A release is locked only once it is 14 days old, whoever writes the lock:
+# Renovate's own wait does not reach `uv lock --upgrade-package`
+# (tests/test_dependency_age.py).
+[tool.uv]
+exclude-newer = "14 days"
+
 [tool.pytest.ini_options]
 # The one pytest setting mailradar was missing. asyncio_mode is deliberately
 # absent: unlike the other four Radar, mailradar has no async tests at all.

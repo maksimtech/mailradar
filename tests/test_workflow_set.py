@@ -54,6 +54,9 @@ CAPABILITY = {
     "sbom": lambda: (ROOT / "Dockerfile").is_file(),
     "codspeed": lambda: (ROOT / "tests" / "benchmarks").is_dir()
     or (ROOT / "benchmarks").is_dir(),
+    # A required check wherever Renovate's auto-merge runs: it fails a Renovate
+    # pull request whose own statuses are not green (tests/test_renovate_gate.py).
+    "renovate-gate": lambda: (ROOT / ".github" / "renovate.json").is_file(),
 }
 
 KNOWN_GAPS = {

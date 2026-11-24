@@ -90,7 +90,14 @@ notifica ai clienti, procedura di rollback. In sintesi:
   ricostruzioni settimanali non sovrascrivono, e un digest SHA256 immutabile; il
   rollback consiste nel tornare a quel tag o a quel digest;
 - l'immagine `latest` viene ricostruita ogni settimana per incorporare le patch di
-  sicurezza di Debian.
+  sicurezza di Debian;
+- dal 2026-11-24 gli aggiornamenti delle dipendenze li chiede Renovate
+  (`.github/renovate.json`), come in apkradar, al posto di Dependabot
+  (`.github/dependabot.yml`, tolto quel giorno): ogni giovedì le dipendenze Python,
+  `uv.lock` e le GitHub Actions, prese almeno 14 giorni dopo l'uscita (la regola è anche
+  in `uv`, `[tool.uv] exclude-newer`); gli aggiornamenti per una vulnerabilità nota
+  arrivano subito, senza attesa. I limiti inferiori in `pyproject.toml` si alzano a mano,
+  quando il codice ne ha bisogno.
 
 Contatto per le segnalazioni: security@maksimtech.com.
 
