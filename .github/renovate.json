@@ -7,6 +7,12 @@
   "internalChecksFilter": "strict",
   "prConcurrentLimit": 5,
   "labels": ["dependencies"],
+  "pip-compile": {
+    "managerFilePatterns": ["/(^|/)requirements-build\\.txt$/"]
+  },
+  "pip_requirements": {
+    "enabled": false
+  },
   "vulnerabilityAlerts": {
     "enabled": true,
     "minimumReleaseAge": null,
