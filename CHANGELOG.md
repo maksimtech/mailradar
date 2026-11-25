@@ -33,6 +33,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   only for required checks. Tests: `tests/test_renovate_config.py`, `tests/test_renovate_gate.py`,
   `tests/test_dependency_age.py`. Alignment to apkradar, step 4 (#115).
 
+- **One lock: `requirements-ci.txt` is removed, with `tests/test_lock_agreement.py`.** No workflow
+  had installed from it since 2026-09-05, when the monolithic CI was split; the only thing keeping
+  it was the test that held it to `uv.lock`. Renovate reads a `requirements*.txt` as one more
+  manager and bumps it in pull requests of its own: its first dashboard (#169) queued typer twice,
+  once per file, plus certifi, annotated-doc and markdown-it-py in that file alone, and every one of
+  those pull requests would have failed the agreement test. `uv.lock` is now the only lock, as in
+  the other five Radar, and `tests/test_renovate_config.py` keeps it so. The file also leaves
+  mutmut's `also_copy`.
+
 ### Added
 
 - **`check --headers mail.eml`: the DKIM selectors a message names.** DKIM keys were looked for under

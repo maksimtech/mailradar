@@ -5,8 +5,8 @@ mutated `source_paths`, what it copies of its own accord (`tests/`, `test/`,
 `setup.cfg`, `pyproject.toml`, the lock files, `test*.py`) and `also_copy`. A test
 that reads anything else from the root finds nothing there, and the Saturday run
 dies before trying a mutant. It happened on 2026-10-03, 2026-10-10 and 2026-10-17,
-and again on 2026-11-21: tests/test_lock_agreement.py had started reading
-requirements-ci.txt four days earlier.
+and again on 2026-11-21: a test had started reading requirements-ci.txt four
+days earlier (the file and that test were removed on 2026-11-25).
 
 This reads the tests for the root they join a name to (`ROOT / "name"`,
 `parents[1] / "name"`, `parent.parent / "name"`) and holds every such name that
