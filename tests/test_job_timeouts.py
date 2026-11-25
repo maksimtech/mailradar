@@ -58,7 +58,8 @@ def test_publishing_outlives_its_waits_for_pypi():
     # lags (install_from_pypi.sh: attempts x interval). A limit under those would end the
     # job before either could say the version is not there. Ten more minutes for what the
     # job does besides sleeping: the requests between the sleeps, the build.
-    job = dict(jobs())["publish.yml:build-and-publish"]
+    # Since the split (tests/test_publish_contract.py) the waits are in verify, after publish.
+    job = dict(jobs())["publish.yml:verify"]
     run = "\n".join(step.get("run", "") for step in job["steps"])
     wait = re.search(r'wait_for_pypi\.sh \S+ "\$VERSION" (\d+) (\d+)(?: (\d+))?', run)
     install = re.search(r'install_from_pypi\.sh \S+ \S+ "\$VERSION" (\d+) (\d+)', run)

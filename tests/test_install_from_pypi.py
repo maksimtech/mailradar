@@ -161,9 +161,14 @@ def test_the_default_interval_between_installs_is_a_wait_and_not_zero(fake_venv)
 yaml = pytest.importorskip("yaml")
 
 
+def _jobs():
+    return yaml.safe_load(PUBLISH.read_text(encoding="utf-8"))["jobs"]
+
+
 def _publish_steps():
-    workflow = yaml.safe_load(PUBLISH.read_text(encoding="utf-8"))
-    return workflow["jobs"]["build-and-publish"]["steps"]
+    """The check runs in verify, after publish, without the token
+    (tests/test_publish_contract.py)."""
+    return _jobs()["verify"]["steps"]
 
 
 def _check_step(steps):
@@ -171,11 +176,15 @@ def _check_step(steps):
 
 
 def test_the_published_wheel_is_installed_after_the_upload_through_the_script():
-    steps = _publish_steps()
-    upload = next(i for i, s in enumerate(steps) if "gh-action-pypi-publish" in s.get("uses", ""))
-    check = steps.index(_check_step(steps))
+    jobs = _jobs()
+    uploads = [
+        name for name, job in jobs.items()
+        if any("gh-action-pypi-publish" in s.get("uses", "") for s in job["steps"])
+    ]
+    assert uploads == ["publish"]
+    assert jobs["verify"]["needs"] in ("publish", ["publish"]), "the check waits for the upload"
 
-    assert upload < check, [s.get("name", s.get("uses", "")) for s in steps]
+    steps = _publish_steps()
     arguments = _check_step(steps)["run"].split("install_from_pypi.sh", 1)[1].split()
     assert arguments[1:3] == [PACKAGE, '"$VERSION"'], "it has to be the version just uploaded"
     assert "--version" in _check_step(steps)["run"], "installed is not yet runs"

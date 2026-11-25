@@ -23,7 +23,10 @@ che il fornitore è in grado di dare, non un attestato di conformità.
 - Provenienza firmata: le wheel su PyPI hanno un'attestazione PEP 740 firmata con
   Sigstore dal workflow di pubblicazione; le immagini su Docker Hub
   (`maksimtech/mailradar`) hanno un'attestazione di provenienza SLSA generata da
-  BuildKit al momento del push.
+  BuildKit al momento del push. Dalle release successive al 2026-11-25 il pacchetto
+  è costruito in un job senza il token di PyPI, con strumenti di build fissati per
+  hash, e caricato da un job che non installa né esegue nulla: l'unico che può
+  ottenere quel token (`tests/test_publish_contract.py`).
 - Licenze: il workflow Licenses fallisce se una dipendenza è sotto GPL, AGPL o LGPL.
 
 ## 2. Chi può vedere cosa, dentro l'applicazione

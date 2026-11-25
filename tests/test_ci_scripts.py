@@ -235,7 +235,11 @@ def _wait_step():
 
 
 def _publish_steps():
-    return _workflow("publish.yml")["jobs"]["build-and-publish"]["steps"]
+    """publish uploads and verify checks, in that order; verify waits for publish
+    (tests/test_publish_contract.py). Read as one sequence of steps."""
+    jobs = _workflow("publish.yml")["jobs"]
+    assert jobs["verify"]["needs"] in ("publish", ["publish"])
+    return jobs["publish"]["steps"] + jobs["verify"]["steps"]
 
 
 def test_the_release_image_is_built_from_the_tag_and_not_from_the_index():

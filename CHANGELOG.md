@@ -174,6 +174,24 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Security
 
+- **The job PyPI trusts installs and runs nothing, as in releaseradar, exeradar and patchradar.**
+  `publish.yml`'s `build-and-publish` held `id-token: write` while it installed the newest `build`
+  and `hatchling` of that minute, built in an isolated environment that fetched an unpinned
+  hatchling again, and after the upload installed the release with all its runtime dependencies
+  from PyPI. A package compromised like `agent-framework` on 2026-11-18, whose `.pth` file mints
+  OIDC tokens at every Python start-up, could have published a release under this project's name
+  from there (maksimtech/apkradar#135, #166). The workflow now has three jobs:
+  - `build`, without the token: installs the build tools with `pip install --require-hashes` from
+    `.github/requirements-build.txt` (compiled with `uv pip compile --universal` under the 14-day
+    rule, kept by Renovate's pip-compile manager), builds with `--no-isolation`, and uploads `dist/`;
+  - `publish`, the only job with `id-token: write`: downloads `dist/` and uploads it with
+    `pypa/gh-action-pypi-publish`, with no checkout, no Python and no command of its own;
+  - `verify`, without the token: the wait for the index and the install check, unchanged.
+
+  `publish` and `verify` run on a `v*` tag only, so a dispatch from a branch is a dry run of the
+  build. The GPG signature of the distributions is gone: PyPI drops it on upload ("silently
+  ignored by the index", twine on releaseradar's v2026.8), the Sigstore attestation remains, and the
+  private key no longer enters the job. `tests/test_publish_contract.py` holds the layout.
 - **The three open OpenSSL entries now state OpenSSL's advisory of 2026-11-24.** The entries for
   CVE-2026-107494 (QUIC), CVE-2026-84786 (DANE) and CVE-2026-121482 (CRL distribution points) said
   there was no OpenSSL advisory yet. Since that morning `secadv/20261124.txt` rates all three Low and
