@@ -114,3 +114,13 @@ def test_no_bot_moves_the_python_we_run():
     ]
     assert frozen, "a rule has to keep Renovate off the Python version"
     assert set(frozen[0]["matchUpdateTypes"]) >= {"major", "minor"}
+
+
+def test_uv_lock_is_the_only_lock_renovate_moves():
+    """Renovate reads a `requirements*.txt` as one more manager and bumps it in
+    pull requests of its own, apart from uv.lock. mailradar had one until
+    2026-11-25: requirements-ci.txt, which no workflow had installed from since
+    2026-09-05, and which a test held to uv.lock. Its first dashboard (#169)
+    queued typer twice, once per file, and every one of those pull requests
+    would have failed that test. One lock, as in the other five Radar."""
+    assert sorted(p.name for p in ROOT.glob("requirements*.txt")) == []
