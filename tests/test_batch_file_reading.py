@@ -124,3 +124,64 @@ def test_comments_and_blank_lines_are_still_skipped(tmp_path, line):
     assert "commented" not in result.output, result.output
     assert "indented" not in result.output, result.output
     assert "real.example" in result.output, result.output
+
+
+# ─── mailradar#143: inline comments and equivalent names ────────────────────
+
+def _batch_calls(path):
+    """`_batch`, keeping the names `analyze_domain` and `domain_exists` were asked about."""
+    from unittest.mock import MagicMock
+
+    from mailradar.checker import DomainReport
+
+    def analysed(domain, *args, **kwargs):
+        report = DomainReport(domain=domain)
+        report.total_score = 100
+        report.grade = "EXCELLENT"
+        return report
+
+    analyse = MagicMock(side_effect=analysed)
+    exists = MagicMock(return_value=True)
+    with patch("mailradar.checker.domain_exists", exists), \
+            patch("mailradar.cli.analyze_domain", analyse):
+        result = runner.invoke(app, ["batch", str(path)])
+    return result, [c.args[0] for c in analyse.call_args_list], [c.args[0] for c in exists.call_args_list]
+
+
+def test_an_inline_comment_is_not_part_of_the_domain(tmp_path):
+    """`gpdp.it # Garante` was looked up whole and reported "not found in DNS":
+    a reading problem blamed on DNS, and a real domain silently skipped."""
+    listing = tmp_path / "domains.txt"
+    listing.write_text("authority.example # the regulator\n", encoding="utf-8")
+
+    result, analysed, asked = _batch_calls(listing)
+
+    assert analysed == ["authority.example"], result.output
+    assert asked == ["authority.example"]
+    assert "not found in DNS" not in result.output
+    assert "regulator" not in result.output
+
+
+def test_a_name_with_a_space_inside_is_refused_as_not_a_domain_name(tmp_path):
+    listing = tmp_path / "domains.txt"
+    listing.write_text("authority example.com\n", encoding="utf-8")
+
+    result, analysed, asked = _batch_calls(listing)
+
+    assert analysed == [] and asked == [], "DNS is not asked about a name with a space in it"
+    assert "not found in DNS" not in result.output
+    assert "not a domain name" in result.output, result.output
+
+
+def test_equivalent_names_are_analysed_once_and_their_lines_are_named(tmp_path):
+    """`example.com.`, `EXAMPLE.COM` and `example.com` were four analyses and
+    four summary rows all reading `example.com`."""
+    listing = tmp_path / "domains.txt"
+    listing.write_text("example.com.\nEXAMPLE.COM\n# a comment\nexample.com\nexample.com\nother.example\n",
+                       encoding="utf-8")
+
+    result, analysed, _ = _batch_calls(listing)
+
+    assert analysed == ["example.com", "other.example"], result.output
+    flat = " ".join(result.output.split())
+    assert "example.com: lines 1, 2, 4, 5" in flat, result.output

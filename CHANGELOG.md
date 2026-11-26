@@ -170,6 +170,20 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
     -all" stays in the issues and in the letter.
   - The heading names only what is weak: "SPF weak", "DKIM weak", or "SPF/DKIM weak" when both
     are. A domain with a 2048-bit DKIM key was headed "SPF/DKIM weak" for its `~all`.
+- **`batch` reads an inline comment as a comment, and analyses each domain once (#143).**
+  - `gpdp.it # Garante` was looked up whole and reported "not found in DNS", so a real domain was
+    skipped and DNS was blamed. What follows whitespace and `#` on a line is now a comment, as in
+    most list formats.
+  - A name with a space still inside is refused as "not a domain name", without asking DNS; `check`
+    refuses it the same way.
+  - `example.com.`, `EXAMPLE.COM` and `example.com` were analysed separately, with every query
+    repeated, and shown as identical summary rows. Names are compared without case and without the
+    trailing dot, analysed once, and the summary lists the lines that named each one more than once.
+- **`discover` lists as guessed exactly the role addresses it counts (#144).** It printed "15 common
+  role address(es) guessed" and then listed 16: the count left out an address a real source had
+  found (`privacy@`, on the website), but the "common contacts" list still showed it. That list is
+  now the guesses no source confirmed; an address that was found appears once, under the source
+  that found it.
 - **A company's internal DNS view no longer reads as a domain with no email security (#150).** On a
   network whose resolver serves an internal (split-horizon) view of the company's own domain, `check`
   got no SPF, DMARC or DKIM, graded the domain 0/100 and cited GDPR art. 32 for records that exist on

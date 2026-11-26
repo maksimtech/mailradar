@@ -1,4 +1,5 @@
 """Tests for MailRadar discover module."""
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -426,3 +427,50 @@ class TestSOAEscapedDot:
         """RFC 1035 §8: john\\.doe.example.com. is john.doe@example.com; the rname was dropped."""
         dns_replay("example_com", "example_com_soa_escaped_dot")
         assert "john.doe@example.com" in _discover_via_dns("example.com")
+
+
+class TestGuessedListIsWhatIsCounted:
+    """mailradar#144: on 2026-11-20 `discover` printed "15 common role address(es)
+    guessed" and then listed 16. The count is `candidates` (the guesses no source
+    confirmed), but the list shown was the whole "common contacts" source, which
+    still held privacy@, already found on the website."""
+
+    def _discover(self):
+        with patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]), \
+             patch("mailradar.discover._discover_via_website", return_value=["privacy@example.com"]), \
+             patch("mailradar.discover._discover_via_dns", return_value=[]), \
+             patch("mailradar.discover._discover_via_whois", return_value=[]), \
+             patch("mailradar.discover._discover_common_contacts",
+                   return_value=["privacy@example.com", "security@example.com", "info@example.com"]):
+            return discover("example.com", check_gpg=False)
+
+    def test_the_guessed_source_is_the_candidates(self):
+        result = self._discover()
+        assert result.sources["common contacts"] == result.candidates == [
+            "info@example.com", "security@example.com",
+        ]
+        assert result.sources["website"] == ["privacy@example.com"]
+
+    def test_nothing_guessed_means_no_guessed_source(self):
+        with patch("mailradar.discover._discover_subdomains_via_crtsh", return_value=[]), \
+             patch("mailradar.discover._discover_via_website", return_value=["info@example.com"]), \
+             patch("mailradar.discover._discover_via_dns", return_value=[]), \
+             patch("mailradar.discover._discover_via_whois", return_value=[]), \
+             patch("mailradar.discover._discover_common_contacts", return_value=["info@example.com"]):
+            result = discover("example.com", check_gpg=False)
+        assert result.candidates == []
+        assert "common contacts" not in result.sources
+
+    def test_the_printed_count_is_the_number_of_addresses_listed_as_guessed(self):
+        from typer.testing import CliRunner
+
+        from mailradar.cli import app
+
+        result = self._discover()
+        with patch("mailradar.discover.discover", return_value=result):
+            out = CliRunner().invoke(app, ["discover", "example.com", "--no-gpg"]).output
+        guessed = out.split("Source: common contacts", 1)[1].split("Source:", 1)[0]
+        listed = re.findall(r"\S+@example\.com", guessed)
+        assert re.search(r"(\d+) common role address\(es\) guessed", out)[1] == str(len(listed)) == "2"
+        assert "privacy@example.com" not in guessed
+        assert out.count("privacy@example.com") == 1

@@ -3,6 +3,7 @@ MailRadar — CLI interface.
 """
 
 import contextlib
+import re
 import sys
 from typing import Any, cast
 from urllib.parse import urlsplit
@@ -493,6 +494,8 @@ def _not_a_domain(value: str) -> str:
         return "a URL is not a domain: pass the host name alone" + (f", {host}" if host else "")
     if "@" in value:
         return f"an email address is not a domain: pass the part after the @, {value.rpartition('@')[2]}"
+    if any(ch.isspace() for ch in value.strip()):
+        return "not a domain name: it has a space inside"
     return ""
 
 
@@ -662,16 +665,32 @@ def _grade_exit_code(report: DomainReport) -> int:
     return 0
 
 
-def _read_list(path: str) -> list[str]:
-    """Non-empty lines of the file, skipping comments (also indented ones).
+def _read_list(path: str) -> list[tuple[int, str]]:
+    """(line number, name) for every non-empty line, comments left out.
 
     utf-8-sig, not utf-8: it consumes a Windows byte order mark if there is one
-    and behaves identically when there is not. The strip happens before the "#"
-    test so an indented comment is a comment.
+    and behaves identically when there is not. A comment is a line that starts
+    with "#" once stripped, or what follows whitespace and "#" on a line
+    (`gpdp.it # Garante`), as in most list formats: before mailradar#143 the
+    whole line was looked up and reported "not found in DNS".
     """
     with open(path, encoding="utf-8-sig") as f:
-        lines = [line.strip() for line in f]
-    return [line for line in lines if line and not line.startswith("#")]
+        lines = [re.split(r"\s#", line, maxsplit=1)[0].strip() for line in f]
+    return [(number, line) for number, line in enumerate(lines, 1) if line and not line.startswith("#")]
+
+
+def _same_names(entries: list[tuple[int, str]]) -> dict[str, list[int]]:
+    """Each name once, in the order it first appears, with every line that named it.
+
+    `example.com.`, `EXAMPLE.COM` and `example.com` are one domain: case does
+    not matter in DNS, and the trailing dot only says the name is absolute. Read
+    as three, they were three analyses, three times the queries, and three
+    summary rows that all said `example.com` (mailradar#143).
+    """
+    names: dict[str, list[int]] = {}
+    for number, name in entries:
+        names.setdefault(name.rstrip(".").lower() or name, []).append(number)
+    return names
 
 
 @app.command()
@@ -682,7 +701,7 @@ def batch(
     Analyze multiple domains from a file.
     """
     try:
-        domains = _read_list(file)
+        names = _same_names(_read_list(file))
     except FileNotFoundError:
         console.print(f"[red]File not found: {_s(file)}[/red]")
         raise typer.Exit(1) from None
@@ -697,7 +716,7 @@ def batch(
 
     results = []
     failed = []
-    for domain in domains:
+    for domain in names:
         console.print(f"[dim]Checking {_s(domain)}...[/dim]")
         # check's questions, without its prompt: a batch runs unattended
         problem = _not_a_domain(domain)
@@ -737,6 +756,12 @@ def batch(
         )
 
     console.print(summary)
+
+    repeated = {name: lines for name, lines in names.items() if len(lines) > 1}
+    if repeated:
+        console.print("[dim]Named on more than one line, analysed once:[/dim]")
+        for name, lines in repeated.items():
+            console.print(f"[dim]  {_s(name)}: lines {', '.join(map(str, lines))}[/dim]")
 
     if failed:
         console.print(f"[red]Failed ({len(failed)}): {_s(', '.join(failed))}[/red]")
