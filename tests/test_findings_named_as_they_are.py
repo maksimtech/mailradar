@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 
+import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -108,8 +109,63 @@ def test_a_permissive_record_with_minus_all_is_not_cited_as_minus_all():
 
 
 def test_a_softfail_is_still_cited_by_its_all():
+    """Where DMARC does not enforce: under p=reject it is not a weakness (#141)."""
     spf = SPFResult(present=True, all_mechanism="~all", permissive=True, score=10)
-    assert findings_of(_report(spf=spf))["spf_dkim_weak"] == ["SPF ~all"]
+    dmarc = DMARCResult(present=True, policy="none", score=10)
+    assert findings_of(_report(spf=spf, dmarc=dmarc))["spf_dkim_weak"] == ["SPF ~all"]
+
+
+# ─── ~all under an enforcing DMARC policy (mailradar#141) ────────────────────
+
+SOFTFAIL = SPFResult(present=True, all_mechanism="~all", permissive=True, score=10,
+                     issues=["SPF uses ~all (softfail) — consider -all (hardfail)"])
+
+
+def test_softfail_under_reject_is_not_a_gdpr_art_32_weakness():
+    """With p=reject on every message, DMARC decides what happens to a failing
+    message, not the SPF qualifier, and RFC 7489 §10.1 warns that -all can make
+    a receiver reject at SPF time, before DMARC sees a DKIM signature that would
+    have passed: ~all there is a choice, not a gap in security of processing."""
+    report = _report(spf=SOFTFAIL, dmarc=DMARCResult(present=True, policy="reject", pct=100, score=50))
+    assert "spf_dkim_weak" not in findings_of(report)
+
+
+def test_softfail_under_reject_keeps_its_score_until_january():
+    """The rule of 2026-11-22: on 7 December the false statement goes, the
+    score stays; scoring ~all like -all is #154."""
+    report = _report(spf=SOFTFAIL, dmarc=DMARCResult(present=True, policy="reject", pct=100, score=50))
+    assert report.spf.score == 10
+    assert "consider -all" in report.spf.issues[0]
+
+
+@pytest.mark.parametrize("dmarc", [
+    DMARCResult(present=True, policy="none", score=10),
+    DMARCResult(present=True, policy="quarantine", score=40),
+    DMARCResult(present=True, policy="reject", pct=50, score=50),
+    DMARCResult(present=False),
+])
+def test_softfail_where_dmarc_does_not_reject_every_message_is_still_cited(dmarc):
+    assert findings_of(_report(spf=SOFTFAIL, dmarc=dmarc))["spf_dkim_weak"] == ["SPF ~all"]
+
+
+@pytest.mark.parametrize("spf, dkim, title", [
+    (SOFTFAIL, None, "SPF weak"),
+    (None, DKIMResult(present=True, selector="s1", key_bits=1024, key_type="rsa",
+                      keys={"s1": "1024-bit RSA"}, score=5), "DKIM weak"),
+    (SOFTFAIL, DKIMResult(present=True, selector="s1", key_bits=1024, key_type="rsa",
+                          keys={"s1": "1024-bit RSA"}, score=5), "SPF/DKIM weak"),
+])
+def test_the_heading_names_only_what_is_weak(spf, dkim, title):
+    """yubico.com, with a 2048-bit DKIM key, was headed "SPF/DKIM weak"."""
+    from mailradar.law_checker import finding_title
+
+    overrides = {"dmarc": DMARCResult(present=True, policy="none", score=10)}
+    if spf:
+        overrides["spf"] = spf
+    if dkim:
+        overrides["dkim"] = dkim
+    found = findings_of(_report(**overrides))
+    assert finding_title("spf_dkim_weak", found["spf_dkim_weak"]) == title
 
 
 def test_a_record_with_no_all_of_its_own_is_cited_in_english():
@@ -157,3 +213,13 @@ def test_the_italian_letter_says_it_in_italian():
 def test_the_letter_says_a_key_only_tests():
     assert "(testing, t=y)" in generate_report(_report(dkim=TESTING_ONLY), lang="en")
     assert "(in modalità test, t=y)" in generate_report(_report(dkim=TESTING_ONLY), lang="it")
+
+
+def test_softfail_with_an_open_range_is_still_a_weakness_under_reject():
+    """`ip4:0.0.0.0/0` passes every address whatever the qualifier of `all`."""
+    spf = SPFResult(present=True, all_mechanism="~all", permissive=True, score=0,
+                    issues=["SPF uses ~all (softfail) — consider -all (hardfail)",
+                            "SPF ip4:0.0.0.0/0 passes every IPv4 address, as +all does — "
+                            "any server can send as this domain!"])
+    report = _report(spf=spf, dmarc=DMARCResult(present=True, policy="reject", pct=100, score=50))
+    assert "spf_dkim_weak" in findings_of(report)

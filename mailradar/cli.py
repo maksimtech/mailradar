@@ -428,7 +428,7 @@ def _law_check(subject, out=None, **context):
 
 def _print_law_check(law, out=None) -> None:
     """Cite the provisions applied to the findings, with their SHA-256."""
-    from mailradar.law_checker import FINDING_TITLES, format_citation
+    from mailradar.law_checker import finding_title, format_citation
 
     out = out or console
     if law is None or not (law.citations or law.notes):
@@ -476,7 +476,7 @@ def _print_law_check(law, out=None) -> None:
     for citation in law.citations:
         if citation.finding != finding:
             finding = citation.finding
-            out.print(f"[bold]{_s(FINDING_TITLES[finding])}[/bold]")
+            out.print(f"[bold]{_s(finding_title(finding, law.evidence.get(finding, [])))}[/bold]")
             if law.evidence.get(finding):
                 out.print(f"[dim]{_s(', '.join(law.evidence[finding]))}[/dim]")
         out.print(visible(format_citation(citation), keep="\n"), markup=False, highlight=False)

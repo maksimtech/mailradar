@@ -197,7 +197,10 @@ The report is plain text, ready to paste into an email. For each check it
 shows the current record and the recommended configuration (for example a
 complete `v=DMARC1; p=reject; ...` record), then your signature. The note on
 GDPR Article 32 is included only when the letter lists a problem with DMARC,
-SPF or DKIM: BIMI, MTA-STS and TLS-RPT are improvements, the informational SPF
+SPF or DKIM. SPF `~all` under a DMARC `p=reject` that covers every message is
+listed but does not count: DMARC decides there, and RFC 7489 §10.1 warns that
+`-all` can reject at SPF time mail that DKIM would have passed. BIMI, MTA-STS
+and TLS-RPT are improvements, the informational SPF
 notes (see [SPF](#spf-up-to-20-points)) are listed without turning the section
 into an action, and a missing GPG key is a suggestion, not an Article 32 gap.
 

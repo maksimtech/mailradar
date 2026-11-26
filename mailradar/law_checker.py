@@ -33,6 +33,7 @@ FINDING_ARTICLES = {
 
 FINDING_TITLES = {
     "dmarc_missing": "DMARC missing",
+    # finding_title() narrows it to "SPF weak" or "DKIM weak" when only one is
     "spf_dkim_weak": "SPF/DKIM weak",
     "cleartext": "Cleartext delivery possible",
     "cleartext_testing": "Cleartext delivery possible",
@@ -56,6 +57,38 @@ NIS2_SCOPE_NOTE = (
 
 # Below this a DKIM key counts as weak (MailRadar's own threshold for full score)
 DKIM_MIN_BITS = 2048
+
+
+def softfail_under_enforcing_dmarc(report) -> bool:
+    """SPF `~all` where DMARC `p=reject` applies to every message (mailradar#141).
+
+    DMARC decides there what happens to a failing message, not the SPF
+    qualifier, and RFC 7489 §10.1 warns that `-all` can make a receiver reject
+    at SPF time, before DMARC evaluates a DKIM signature that would have passed:
+    `~all` is a legitimate choice, not a gap in security of processing.
+
+    Not when the record also passes every address through an open range
+    (`ip4:0.0.0.0/0`): that is +all whatever its qualifier, and stays a finding.
+    """
+    spf, dmarc = report.spf, report.dmarc
+    return (
+        spf.all_mechanism == "~all"
+        and dmarc.present
+        and dmarc.policy == "reject"
+        and dmarc.pct == 100
+        and not any("passes every" in issue for issue in spf.issues)
+    )
+
+
+def finding_title(finding: str, evidence: list[str]) -> str:
+    """The heading of `finding`, naming only what is weak: yubico.com, with a
+    2048-bit DKIM key, was headed "SPF/DKIM weak" for its `~all` (#141)."""
+    if finding == "spf_dkim_weak":
+        spf = any(item.startswith(("SPF", "no SPF")) for item in evidence)
+        dkim = any(item.startswith("DKIM") for item in evidence)
+        if spf != dkim:
+            return "SPF weak" if spf else "DKIM weak"
+    return FINDING_TITLES[finding]
 
 
 def findings_of(report) -> dict[str, list[str]]:
@@ -87,6 +120,10 @@ def findings_of(report) -> dict[str, list[str]]:
             # Permissive under -all only through a pass /0 range before it:
             # "SPF -all" would read as the remedy, not the weakness
             weak.append("SPF authorises every address before -all")
+        elif softfail_under_enforcing_dmarc(report):
+            # Not a gap in security of processing (#141): the score is
+            # untouched until January (#154), the GDPR citation goes now
+            pass
         elif report.spf.all_mechanism:
             weak.append(f"SPF {report.spf.all_mechanism}")
         else:

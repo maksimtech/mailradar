@@ -27,8 +27,9 @@ from mailradar.law_checker import (
 from mailradar.law_fetcher import DLGS_138_2024, GDPR, LawFetchError, Provision
 
 DAY1 = datetime(2026, 9, 19, 14, 0, tzinfo=UTC)
-# A finding that cites GDPR art. 32 and nothing else
-SOFTFAIL = SPFResult(present=True, all_mechanism="~all", permissive=True)
+# A finding that cites GDPR art. 32 and nothing else, whatever the DMARC policy:
+# ~all was this until #141, and under p=reject it is not a finding any more
+NEUTRAL = SPFResult(present=True, all_mechanism="?all", permissive=True)
 DAY2 = datetime(2026, 10, 1, 9, 30, tzinfo=UTC)
 
 
@@ -101,7 +102,7 @@ def test_dmarc_policy_none_is_not_missing():
 
 @pytest.mark.parametrize("spf, dkim, evidence", [
     (SPFResult(present=False), None, ["no SPF record"]),
-    (SPFResult(present=True, all_mechanism="~all", permissive=True), None, ["SPF ~all"]),
+    (SPFResult(present=True, all_mechanism="?all", permissive=True), None, ["SPF ?all"]),
     (None, DKIMResult(present=True, key_bits=1024), ["DKIM 1024 bit"]),
     (SPFResult(present=True, all_mechanism="+all", permissive=True),
      DKIMResult(present=True, key_bits=512), ["SPF +all", "DKIM 512 bit"]),
@@ -204,8 +205,8 @@ def test_all_findings_cite_gdpr_and_nis2(cache, online):
 
 
 def test_second_audit_same_text_keeps_version_date(cache, online):
-    check(_report(spf=SOFTFAIL), cache=cache, now=DAY1)
-    law = check(_report(spf=SOFTFAIL), cache=cache, now=DAY2)
+    check(_report(spf=NEUTRAL), cache=cache, now=DAY1)
+    law = check(_report(spf=NEUTRAL), cache=cache, now=DAY2)
 
     assert law.changed == {}
     assert law.citations[0].version_date == "2026-09-19"
@@ -213,10 +214,10 @@ def test_second_audit_same_text_keeps_version_date(cache, online):
 
 def test_second_audit_changed_text(cache, monkeypatch):
     monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch())
-    first = check(_report(spf=SOFTFAIL), cache=cache, now=DAY1)
+    first = check(_report(spf=NEUTRAL), cache=cache, now=DAY1)
 
     monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch(" (rettificato)"))
-    law = check(_report(spf=SOFTFAIL), cache=cache, now=DAY2)
+    law = check(_report(spf=NEUTRAL), cache=cache, now=DAY2)
 
     assert law.changed == {"GDPR art. 32": first.citations[0].sha256}
     assert law.citations[0].sha256 != first.citations[0].sha256
@@ -246,7 +247,7 @@ def test_offline_without_cache(cache):
 
 
 def test_default_cache_location(tmp_path, online):
-    check(_report(spf=SOFTFAIL), now=DAY1)
+    check(_report(spf=NEUTRAL), now=DAY1)
     assert (tmp_path / "mailradar-home" / "law_cache.json").is_file()
 
 
@@ -302,11 +303,11 @@ def test_a_changed_text_is_reported_when_the_cache_cannot_be_written(cache, read
     """The change used to be computed only by a successful save: with the cache
     read-only, a law whose text changed was cited with no warning."""
     monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch())
-    first = check(_report(spf=SOFTFAIL), cache=cache, now=DAY1)
+    first = check(_report(spf=NEUTRAL), cache=cache, now=DAY1)
     read_only_cache()
 
     monkeypatch.setattr(law_fetcher, "fetch_provisions_from", _fake_fetch(" (rettificato)"))
-    law = check(_report(spf=SOFTFAIL), cache=cache, now=DAY2)
+    law = check(_report(spf=NEUTRAL), cache=cache, now=DAY2)
 
     assert law.changed == {"GDPR art. 32": first.citations[0].sha256}
     assert law.citations[0].sha256 != first.citations[0].sha256
@@ -317,10 +318,10 @@ def test_an_unchanged_text_keeps_its_version_date_when_the_cache_cannot_be_writt
     cache, read_only_cache, online
 ):
     """The date of a wording is its first download, saved or not."""
-    check(_report(spf=SOFTFAIL), cache=cache, now=DAY1)
+    check(_report(spf=NEUTRAL), cache=cache, now=DAY1)
     read_only_cache()
 
-    law = check(_report(spf=SOFTFAIL), cache=cache, now=DAY2)
+    law = check(_report(spf=NEUTRAL), cache=cache, now=DAY2)
 
     assert law.changed == {}
     assert law.citations[0].version_date == "2026-09-19"
