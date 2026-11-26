@@ -65,7 +65,15 @@ def test_a_known_vulnerability_does_not_wait():
 
 
 def test_one_weekly_batch_the_day_before_the_release():
-    assert config()["schedule"] == ["before 6am on thursday"]
+    """Any hour of Thursday, not only before 6am. The Mend-hosted app runs a
+    repository that has not merged a Renovate pull request yet once a day, at
+    an hour it picks, and one that has every four hours. On 2026-11-26 the
+    window before 6am got apkradar its batch at 00:27 and gave releaseradar,
+    exeradar, patchradar and mailradar nothing: their one run of the day fell
+    outside it. A whole day holds a daily run whatever its hour. Written in
+    cron, which Renovate recommends; the words it used to parse are deprecated
+    (docs/usage/key-concepts/scheduling.md)."""
+    assert config()["schedule"] == ["* * * * 4"]
     assert config()["timezone"] == "Europe/Rome"
 
 

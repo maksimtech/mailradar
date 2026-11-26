@@ -14,6 +14,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **Renovate's weekly batch can arrive at any hour of Thursday, not only before 6am.**
+  On 2026-11-26 the window opened no pull request here: the Mend-hosted app runs a repository that
+  has not merged a Renovate pull request yet once a day, at an hour it picks, and that run fell
+  outside it. apkradar, which has, is run every four hours and got its batch at 00:27.
+  A whole day holds a daily run whatever its hour, and the batch still lands the day before the
+  Friday release. Written in cron (`* * * * 4`), which Renovate recommends over the words it used
+  to parse (`tests/test_renovate_config.py`).
 - **Renovate replaces Dependabot's version updates, as in apkradar.** `.github/dependabot.yml`
   and the test that held it, `tests/test_dependabot_config.py`, are removed.
   `.github/renovate.json` is apkradar's:
