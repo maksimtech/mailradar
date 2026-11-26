@@ -75,7 +75,8 @@ def test_send_without_an_answer_from_dns_does_not_go_on(dns_replay):
 
 
 def test_batch_reports_a_domain_that_does_not_exist_as_failed(dns_replay, http_replay, tmp_path):
-    dns_replay("startpage_com", "startpage_com_dkim_selectors", "startpage_com_exists", "dept_example_co_uk_exists")
+    dns_replay("startpage_com", "startpage_com_tlsa", "startpage_com_dkim_selectors", "startpage_com_exists",
+               "dept_example_co_uk_exists")
     http_replay("startpage_com", "startpage_com_keyservers_index")
     domains = tmp_path / "domains.txt"
     domains.write_text(f"{NXDOMAIN}\nstartpage.com\n", encoding="utf-8")

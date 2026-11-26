@@ -143,6 +143,28 @@ class MXResult:
 
 
 @dataclass
+class DANEResult:
+    """DANE for inbound SMTP (RFC 7672): a TLSA record at `_25._tcp.<mx>` for each MX. Not scored.
+
+    A TLSA record protects only when the answer is DNSSEC-secure: RFC 7672 has
+    senders disregard one that is not. `validated` are the MX whose answer came
+    with the AD flag from the resolver asked, `unvalidated` those whose TLSA
+    came without it, `missing` those with none. `error` is a lookup that got no
+    answer, which says nothing either way. Which resolver MailRadar should
+    trust for AD, and whether DANE earns points, are mailradar#155.
+    """
+    validated: list[str] = field(default_factory=list)
+    unvalidated: list[str] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)
+    error: str = ""
+
+    @property
+    def every_mx_validated(self) -> bool:
+        """TLS is mandatory for every DANE sender: each MX has a DNSSEC-secure TLSA record."""
+        return bool(self.validated) and not (self.unvalidated or self.missing or self.error)
+
+
+@dataclass
 class DomainReport:
     domain: str = ""
     dmarc: DMARCResult = field(default_factory=DMARCResult)
@@ -154,6 +176,7 @@ class DomainReport:
     gpg: GPGResult = field(default_factory=GPGResult)
     # Not among the scored checks (MAX_SCORES) nor in `unverified`
     mx: MXResult = field(default_factory=MXResult)
+    dane: DANEResult = field(default_factory=DANEResult)
     # None, with grade "N/A", when a DNS lookup or an HTTP request got no
     # answer: a check that was not verified scored 0, and the total read as a
     # measured bottom of scale.
@@ -1852,6 +1875,46 @@ def check_mx(domain: str) -> MXResult:
     return result
 
 
+def check_dane(mx: MXResult) -> DANEResult:
+    """The TLSA record at `_25._tcp.<host>` of each MX host, and whether it is DNSSEC-secure (#149).
+
+    The query asks for AD: a validating resolver sets it in the answer only when
+    the query does (RFC 6840 §5.7), and the answer's AD is how MailRadar knows
+    the record was validated. Nothing is asked for a null MX, a domain with no
+    MX, or an MX lookup that failed.
+
+    The questions go through `dns.resolver.resolve`, as every other check's do,
+    with AD added to the default resolver's flags for as long as they take: a
+    resolver of its own reached the network past the doubles the tests and the
+    benchmarks put in place of that function, and measured a real lookup.
+    """
+    import dns.flags
+
+    result = DANEResult()
+    if mx.error or mx.null or not mx.hosts:
+        return result
+    default = dns.resolver.get_default_resolver()
+    saved = default.flags
+    default.flags = (dns.flags.RD if saved is None else saved) | dns.flags.AD
+    try:
+        for host in mx.hosts:
+            name = f"_25._tcp.{host.rstrip('.')}."
+            try:
+                answer = dns.resolver.resolve(name, "TLSA")
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                result.missing.append(host)
+                continue
+            except dns.exception.DNSException as e:
+                result.error = f"DNS lookup for {name} TLSA failed: {type(e).__name__}"
+                continue
+            response = getattr(answer, "response", None)
+            secure = response is not None and bool(response.flags & dns.flags.AD)
+            (result.validated if secure else result.unvalidated).append(host)
+    finally:
+        default.flags = saved
+    return result
+
+
 def _spf_authorises_senders(spf: SPFResult) -> bool:
     """True when the SPF record names a sender: any term but `all` and `exp=`.
 
@@ -2065,6 +2128,7 @@ def analyze_domain(domain: str, dkim_selectors: list[str] | None = None) -> Doma
     report.tls_rpt = check_tls_rpt(domain)
     report.mx = check_mx(domain)
     _mx_findings(report)
+    report.dane = check_dane(report.mx)
 
     # GPG lookup
     from mailradar.gpg import lookup_gpg

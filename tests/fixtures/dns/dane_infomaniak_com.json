@@ -1,0 +1,35 @@
+{
+ "_recorded": {
+  "date": "2026-11-26",
+  "how": "UDP query with RD and AD set and EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.9.2; the OPT record is left out of the stored message and so is the id. AD is asked for so that the validating resolver says whether the answer is DNSSEC-secure (RFC 6840 §5.7)",
+  "by": "dns.query of the domain's MX and of _25._tcp.<mx> TLSA for each MX (RFC 7672 §2.2)",
+  "queried": [
+   "infomaniak.com. MX",
+   "_25._tcp.mta-gw.infomaniak.ch. TLSA"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA AD",
+   ";QUESTION",
+   "infomaniak.com. IN MX",
+   ";ANSWER",
+   "infomaniak.com. 3600 IN MX 5 mta-gw.infomaniak.ch.",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA AD",
+   ";QUESTION",
+   "_25._tcp.mta-gw.infomaniak.ch. IN TLSA",
+   ";ANSWER",
+   "_25._tcp.mta-gw.infomaniak.ch. 300 IN TLSA 3 1 1 01bbbc3a65e5f2067aa43dbab107583e1a14567ed2569c63445d21e1de556926",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
