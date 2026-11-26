@@ -172,6 +172,31 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   - The score does not change. Which resolver to trust for AD, and points for DANE, are #155.
   - The answers for the tests were recorded on 2026-11-26 from 1.1.1.1 with AD asked for
     (`tests/fixtures/dns/dane_*.json`, `startpage_com_tlsa.json`).
+- **SPF `~all` under DMARC `p=reject` is no longer cited as a GDPR art. 32 weakness (#141).**
+  - With `p=reject` on every message, DMARC decides what happens to a failing message, not the SPF
+    qualifier, and RFC 7489 §10.1 warns that `-all` can make a receiver reject at SPF time mail
+    that a DKIM signature would have passed. `~all` there is a legitimate choice. The provisions
+    applied, and the art. 32 paragraph of the letter, no longer list it.
+  - An open range such as `ip4:0.0.0.0/0` passes every address whatever the qualifier, so it stays
+    a finding.
+  - The score does not change until January (#154): `~all` still scores 10/20, and its "consider
+    -all" stays in the issues and in the letter.
+  - The heading names only what is weak: "SPF weak", "DKIM weak", or "SPF/DKIM weak" when both
+    are. A domain with a 2048-bit DKIM key was headed "SPF/DKIM weak" for its `~all`.
+- **`batch` reads an inline comment as a comment, and analyses each domain once (#143).**
+  - `gpdp.it # Garante` was looked up whole and reported "not found in DNS", so a real domain was
+    skipped and DNS was blamed. What follows whitespace and `#` on a line is now a comment, as in
+    most list formats.
+  - A name with a space still inside is refused as "not a domain name", without asking DNS; `check`
+    refuses it the same way.
+  - `example.com.`, `EXAMPLE.COM` and `example.com` were analysed separately, with every query
+    repeated, and shown as identical summary rows. Names are compared without case and without the
+    trailing dot, analysed once, and the summary lists the lines that named each one more than once.
+- **`discover` lists as guessed exactly the role addresses it counts (#144).** It printed "15 common
+  role address(es) guessed" and then listed 16: the count left out an address a real source had
+  found (`privacy@`, on the website), but the "common contacts" list still showed it. That list is
+  now the guesses no source confirmed; an address that was found appears once, under the source
+  that found it.
 - **A company's internal DNS view no longer reads as a domain with no email security (#150).** On a
   network whose resolver serves an internal (split-horizon) view of the company's own domain, `check`
   got no SPF, DMARC or DKIM, graded the domain 0/100 and cited GDPR art. 32 for records that exist on

@@ -88,8 +88,9 @@ def generate_report(
         # What the letter calls a problem, and the only thing the GDPR art. 32
         # paragraph is written for (owner's decision): DMARC, SPF and DKIM
         # issues. BIMI, MTA-STS and TLS-RPT are improvements, SPF notes are
-        # information, and no published GPG key is a suggestion.
-        "has_problems": bool(report.dmarc.issues or report.spf.issues or report.dkim.issues),
+        # information, and no published GPG key is a suggestion. ~all under a
+        # DMARC p=reject on every message is listed but is no art. 32 gap (#141).
+        "has_problems": bool(report.dmarc.issues or _spf_problems(report) or report.dkim.issues),
 
         # SPF
         "spf_issues": report.spf.issues,
@@ -134,6 +135,21 @@ def generate_report(
     # The letter quotes the domain's own records: printed, saved or mailed, a
     # control character in them is shown, not obeyed
     return visible(template.render(**context), keep="\n")
+
+
+def _spf_problems(report: DomainReport) -> list[str]:
+    """The SPF issues that are problems in the art. 32 sense.
+
+    `~all` under a DMARC `p=reject` that covers every message is still listed,
+    with its "consider -all", until the scoring changes in January (#154); it is
+    not a gap in security of processing (#141), so on its own it does not bring
+    in the GDPR paragraph.
+    """
+    from mailradar.law_checker import softfail_under_enforcing_dmarc
+
+    if softfail_under_enforcing_dmarc(report):
+        return [issue for issue in report.spf.issues if "~all" not in issue]
+    return list(report.spf.issues)
 
 
 def _dkim_current(report: DomainReport, lang: str) -> str:
