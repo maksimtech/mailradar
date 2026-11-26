@@ -14,6 +14,16 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **The Pythons mailradar promises follow Python's own release cycle, read as data, as in apkradar
+  (maksimtech/apkradar#129).** The stable matrix, the `-dev` row, the classifiers and `requires-python` were typed
+  by hand and checked only against each other.
+  - **The data:** `tools/python_release_cycle.json` is a copy of Python's `release-cycle.json`,
+    read on 2026-11-26. `python tools/python_cycle.py --refresh` renews it.
+  - **The check against the real date** (`tests/test_python_cycle.py`): an event is due 14 days
+    after it happens, moved out of a Patch Tuesday week. After that, the matrix, the classifiers,
+    `requires-python` and the `-dev` row must follow it.
+  - **The next two events:** 3.11's end of life (due 2027-10-18) and 3.16 final (due 2027-10-20).
+  - **The image:** the Python it runs must still be supported.
 - **The CHANGELOG no longer reports a review that has not happened.** The Security entries gave
   the date an accepted finding is looked at again in the past tense, as if the review were done;
   it is the deadline, the same date as `review_by` in `SECURITY-EXCEPTIONS.toml`. 4 phrases
