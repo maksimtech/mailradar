@@ -159,6 +159,17 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **SPF `~all` under DMARC `p=reject` is no longer cited as a GDPR art. 32 weakness (#141).**
+  - With `p=reject` on every message, DMARC decides what happens to a failing message, not the SPF
+    qualifier, and RFC 7489 §10.1 warns that `-all` can make a receiver reject at SPF time mail
+    that a DKIM signature would have passed. `~all` there is a legitimate choice. The provisions
+    applied, and the art. 32 paragraph of the letter, no longer list it.
+  - An open range such as `ip4:0.0.0.0/0` passes every address whatever the qualifier, so it stays
+    a finding.
+  - The score does not change until January (#154): `~all` still scores 10/20, and its "consider
+    -all" stays in the issues and in the letter.
+  - The heading names only what is weak: "SPF weak", "DKIM weak", or "SPF/DKIM weak" when both
+    are. A domain with a 2048-bit DKIM key was headed "SPF/DKIM weak" for its `~all`.
 - **A company's internal DNS view no longer reads as a domain with no email security (#150).** On a
   network whose resolver serves an internal (split-horizon) view of the company's own domain, `check`
   got no SPF, DMARC or DKIM, graded the domain 0/100 and cited GDPR art. 32 for records that exist on

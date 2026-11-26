@@ -188,6 +188,33 @@ class TestLetterClaims:
         for lang, gap in GDPR_GAP.items():
             assert gap in generate_report(report, lang=lang)
 
+    def test_softfail_under_reject_is_no_article_32_gap(self):
+        """mailradar#141: with DMARC p=reject on every message, ~all is a choice
+        (RFC 7489 §10.1), not a gap in security of processing. The issue itself
+        stays in the letter until the January scoring change (#154)."""
+        from mailradar.checker import SPFResult
+
+        report = _clean()
+        report.spf = SPFResult(present=True, all_mechanism="~all", permissive=True, score=10,
+                               raw="v=spf1 include:_spf.example.net ~all",
+                               issues=["SPF uses ~all (softfail) — consider -all (hardfail)"])
+        report.dmarc = DMARCResult(present=True, policy="reject", pct=100, score=50,
+                                   raw="v=DMARC1; p=reject")
+        for lang, gap in GDPR_GAP.items():
+            letter = generate_report(report, lang=lang)
+            assert gap not in letter
+            assert "~all" in letter
+
+    def test_softfail_where_dmarc_does_not_enforce_still_is(self):
+        from mailradar.checker import SPFResult
+
+        report = _clean()
+        report.spf = SPFResult(present=True, all_mechanism="~all", permissive=True, score=10,
+                               issues=["SPF uses ~all (softfail) — consider -all (hardfail)"])
+        report.dmarc = DMARCResult(present=True, policy="none", score=10, raw="v=DMARC1; p=none")
+        for lang, gap in GDPR_GAP.items():
+            assert gap in generate_report(report, lang=lang)
+
     def test_no_published_pgp_key_is_no_article_32_gap(self):
         """make_report has no GPG key: on its own that is a suggestion, not a gap."""
         report = _clean()
