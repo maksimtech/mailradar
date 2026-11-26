@@ -1882,28 +1882,36 @@ def check_dane(mx: MXResult) -> DANEResult:
     the query does (RFC 6840 §5.7), and the answer's AD is how MailRadar knows
     the record was validated. Nothing is asked for a null MX, a domain with no
     MX, or an MX lookup that failed.
-    """
-    import copy
 
+    The questions go through `dns.resolver.resolve`, as every other check's do,
+    with AD added to the default resolver's flags for as long as they take: a
+    resolver of its own reached the network past the doubles the tests and the
+    benchmarks put in place of that function, and measured a real lookup.
+    """
     import dns.flags
 
     result = DANEResult()
-    if mx.error or mx.null:
+    if mx.error or mx.null or not mx.hosts:
         return result
-    resolver = copy.copy(dns.resolver.get_default_resolver())
-    resolver.flags = dns.flags.RD | dns.flags.AD
-    for host in mx.hosts:
-        name = f"_25._tcp.{host.rstrip('.')}."
-        try:
-            answer = resolver.resolve(name, "TLSA")
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            result.missing.append(host)
-            continue
-        except dns.exception.DNSException as e:
-            result.error = f"DNS lookup for {name} TLSA failed: {type(e).__name__}"
-            continue
-        secure = answer.response is not None and bool(answer.response.flags & dns.flags.AD)
-        (result.validated if secure else result.unvalidated).append(host)
+    default = dns.resolver.get_default_resolver()
+    saved = default.flags
+    default.flags = (dns.flags.RD if saved is None else saved) | dns.flags.AD
+    try:
+        for host in mx.hosts:
+            name = f"_25._tcp.{host.rstrip('.')}."
+            try:
+                answer = dns.resolver.resolve(name, "TLSA")
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                result.missing.append(host)
+                continue
+            except dns.exception.DNSException as e:
+                result.error = f"DNS lookup for {name} TLSA failed: {type(e).__name__}"
+                continue
+            response = getattr(answer, "response", None)
+            secure = response is not None and bool(response.flags & dns.flags.AD)
+            (result.validated if secure else result.unvalidated).append(host)
+    finally:
+        default.flags = saved
     return result
 
 

@@ -134,3 +134,28 @@ def test_the_score_does_not_change(dns_replay):
     from mailradar.checker import MAX_SCORES
 
     assert "dane" not in MAX_SCORES
+
+
+def test_the_questions_go_through_the_resolve_every_check_uses(monkeypatch):
+    """The first version asked through a resolver of its own, which the doubles
+    of `dns.resolver.resolve` in the tests and the benchmarks did not reach:
+    test_bench_full_analysis measured a real TLSA lookup on the network
+    (CodSpeed, 5.1 → 9.2 ms, on this pull request). AD is set while the
+    questions are asked, and the default resolver's flags are put back."""
+    import dns.flags
+    import dns.resolver
+
+    default = dns.resolver.get_default_resolver()
+    before = default.flags
+    asked = []
+
+    def resolve(name, rdtype):
+        asked.append((name, rdtype, bool(dns.resolver.get_default_resolver().flags & dns.flags.AD)))
+        raise dns.resolver.NXDOMAIN
+
+    monkeypatch.setattr(dns.resolver, "resolve", resolve)
+    dane = check_dane(INFOMANIAK_MX)
+
+    assert asked == [("_25._tcp.mta-gw.infomaniak.ch.", "TLSA", True)]
+    assert dane.missing == ["mta-gw.infomaniak.ch."]
+    assert default.flags == before
