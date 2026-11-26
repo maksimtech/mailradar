@@ -370,6 +370,14 @@ def discover(domain: str, check_gpg: bool = True) -> DiscoveryResult:
     # Deduplicate and sort
     result.emails = sorted(all_emails)
     result.candidates = sorted(set(common) - all_emails)
+    # The guessed source is what is left of the guesses: an address a real source
+    # found is listed there, once, and is neither counted nor shown as a guess
+    # (mailradar#144). The key keeps its place, before the sources that found
+    # something, so the output reads in the same order as before.
+    if result.candidates:
+        result.sources["common contacts"] = result.candidates
+    else:
+        result.sources.pop("common contacts", None)
 
     # GPG is checked on the candidates too: a public key for security@ is worth
     to_check = result.emails + result.candidates
