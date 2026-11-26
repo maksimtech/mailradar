@@ -14,6 +14,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Changed
 
+- **The CHANGELOG no longer reports a review that has not happened.** The Security entries gave
+  the date an accepted finding is looked at again in the past tense, as if the review were done;
+  it is the deadline, the same date as `review_by` in `SECURITY-EXCEPTIONS.toml`. 4 phrases
+  now read "Review by DATE", or "due for review by DATE". `tests/test_changelog_dates.py` holds it:
+  no review dated after today in `[Unreleased]` or after its release in a released section, and
+  every "review by" in `[Unreleased]` equal to the `review_by` of the CVE it names. Wrapped
+  phrases are found too, and `today` is a parameter (#157, maksimtech/apkradar#130).
 - **Renovate's weekly batch can arrive at any hour of Thursday, not only before 6am.**
   On 2026-11-26 the window opened no pull request here: the Mend-hosted app runs a repository that
   has not merged a Renovate pull request yet once a day, at an hour it picks, and that run fell
@@ -219,15 +226,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   Scout reported it on 2026-11-21: a certificate with very many CRL distribution points, verified with
   CRL checking enabled, costs CPU time quadratic in their number (openssl/openssl#33546; no advisory
   yet, no fixed Debian package). It is not reachable here: the only TLS context mailradar builds is
-  `ssl.create_default_context()`, which enables no CRL checking, and nothing adds it. Reviewed on
+  `ssl.create_default_context()`, which enables no CRL checking, and nothing adds it. Review by
   2026-12-15 with the other OpenSSL entries (maksimtech/apkradar#124).
 
 - **CVE-2026-124709 (OpenSSL, QUIC) is accepted until Debian ships a fix.** Debian moved trixie to
   openssl 3.5.9-1~deb13u1, which a fresh build installs, and on 2026-11-21 Trivy reported the issue
   against it; Docker Scout never had here, so it had no entry and Security Posture failed. 3.5.9 does
   not fix it (fixed upstream in 3.5.10; Debian has no fixed trixie package), and it is not reachable:
-  Python's ssl exposes no QUIC and mailradar runs no server. The entry holds for any scanner. Reviewed
-  on 2026-12-15 with the other OpenSSL entries.
+  Python's ssl exposes no QUIC and mailradar runs no server. The entry holds for any scanner. Review
+  by 2026-12-15 with the other OpenSSL entries.
 
 - **Three OpenSSL issues are accepted until Debian ships a fix.** At the first scan of main since
   2026.48 (2026-11-20), Docker Scout reported CVE-2026-107496 (advisory of 2026-11-10),
@@ -237,7 +244,7 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   they need `CMS_encrypt()`, a stack passed to `PEM_X509_INFO_read_bio_ex()`, or a TLS client with
   DANE enabled, and Python's ssl does none of these; mailradar reads no TLSA record. The other four
   issues of those advisories, accepted in the other Radars, are not reported here and get no entry,
-  since an unused one fails the gate. Reviewed on 2026-12-15.
+  since an unused one fails the gate. Review by 2026-12-15.
 
 - **Two glibc issues Debian has already fixed are accepted for Docker Scout until this release is
   published.** On 2026-11-21 Docker Scout reported CVE-2026-19499 (`strfmon()`) and CVE-2026-5435 (the
@@ -245,7 +252,7 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
   for 2026.48, and Security Posture failed. Debian fixed both for trixie in 2.41-12+deb13u5; the image
   built from this source runs `apt-get upgrade` and has it, and Trivy, which reads that image, does not
   report them. Neither is reached here anyway: Python's `locale.currency()` does not call `strfmon`, and
-  mailradar's DNS is dnspython, which prints no record through libresolv. The entries are reviewed on
+  mailradar's DNS is dnspython, which prints no record through libresolv. The entries are due for review by
   2026-12-08 and fail the build as unused once the new image is out.
 
 ## [2026.48] - 2026-11-17
