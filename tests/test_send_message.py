@@ -119,7 +119,7 @@ def test_with_every_keyserver_answering_no_key_the_report_still_goes(server, dns
     """The other side: startpage.com as recorded, where every keyserver answers
     and none holds a key for its contacts. Plaintext is then the documented
     fallback, and refusing it would make `send` refuse every domain without a key."""
-    dns_replay("startpage_com", "startpage_com_dkim_selectors", "startpage_com_exists")
+    dns_replay("startpage_com", "startpage_com_tlsa", "startpage_com_dkim_selectors", "startpage_com_exists")
     http_replay("startpage_com", "startpage_com_keyservers_index")
 
     result = _send("startpage.com", server, *NAMED)

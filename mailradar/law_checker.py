@@ -54,6 +54,13 @@ NIS2_SCOPE_NOTE = (
     "check that the domain holder falls within scope"
 )
 
+# Every MX has a DNSSEC-secure TLSA record (#149): the transport gap that MTA-STS
+# closes is closed for DANE senders, and only for them
+DANE_NOTE = (
+    "DANE (RFC 7672): every MX publishes a DNSSEC-secure TLSA record, so TLS is mandatory for senders "
+    "that implement DANE; senders that do not (Gmail among them) still need MTA-STS (RFC 8461) to require it"
+)
+
 # Below this a DKIM key counts as weak (MailRadar's own threshold for full score)
 DKIM_MIN_BITS = 2048
 
@@ -105,13 +112,34 @@ def findings_of(report) -> dict[str, list[str]]:
     if weak:
         found["spf_dkim_weak"] = weak
 
+    # With a DNSSEC-secure TLSA record on every MX, TLS is mandatory for DANE
+    # senders: not the art. 32(1)(a) gap. Said in a note instead (notes_of, #149)
+    dane = getattr(report, "dane", None)
+    dane_closes_it = bool(dane and dane.every_mx_validated)
     if not report.mta_sts.present:
-        if not report.mta_sts.error:
-            found["cleartext"] = ["MTA-STS missing: TLS not mandatory on delivery"]
-    elif report.mta_sts.mode != "enforce":
-        found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce"]
+        if not report.mta_sts.error and not dane_closes_it:
+            found["cleartext"] = ["MTA-STS missing: TLS not mandatory on delivery", *_dane_evidence(dane)]
+    elif report.mta_sts.mode != "enforce" and not dane_closes_it:
+        found["cleartext_testing"] = [f"MTA-STS in {report.mta_sts.mode or 'unknown'} mode, not enforce",
+                                      *_dane_evidence(dane)]
 
     return {finding: found[finding] for finding in FINDING_ARTICLES if finding in found}
+
+
+def _dane_evidence(dane) -> list[str]:
+    """What DANE adds to a transport finding it does not close (#149)."""
+    if dane is None:
+        return []
+    evidence = []
+    if dane.unvalidated:
+        # RFC 7672 has senders disregard a TLSA record that is not DNSSEC-secure
+        evidence.append(f"TLSA published but not validated (no DNSSEC AD flag) for "
+                        f"{', '.join(host.rstrip('.') for host in dane.unvalidated)}: senders ignore it")
+    total = len(dane.validated) + len(dane.unvalidated) + len(dane.missing)
+    if dane.validated and total > len(dane.validated):
+        evidence.append(f"DNSSEC-secure TLSA on {len(dane.validated)} of {total} MX: "
+                        "senders may deliver to the others without TLS")
+    return evidence
 
 
 def notes_of(report) -> list[str]:
@@ -126,6 +154,11 @@ def notes_of(report) -> list[str]:
     # A keyserver that did not answer (rate limit, timeout) proved nothing
     if not report.gpg.found and not report.gpg.error:
         notes.append(GPG_SUGGESTION)
+    dane = getattr(report, "dane", None)
+    mta_sts_short = not report.mta_sts.present or report.mta_sts.mode != "enforce"
+    if (dane and dane.every_mx_validated and mta_sts_short and not report.mta_sts.error
+            and not getattr(report, "split_horizon", "")):
+        notes.append(DANE_NOTE)
     return notes
 
 

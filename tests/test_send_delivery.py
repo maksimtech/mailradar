@@ -182,7 +182,7 @@ def test_send_says_the_verifying_keyserver_did_not_answer(server, http_replay):
 
 def _startpage_com(dns_replay, http_replay):
     """startpage.com as recorded: every keyserver answers, none holds a key for its contacts."""
-    dns = dns_replay("startpage_com", "startpage_com_dkim_selectors", "startpage_com_exists")
+    dns = dns_replay("startpage_com", "startpage_com_tlsa", "startpage_com_dkim_selectors", "startpage_com_exists")
     http_replay("startpage_com", "startpage_com_keyservers_index")
     return dns
 

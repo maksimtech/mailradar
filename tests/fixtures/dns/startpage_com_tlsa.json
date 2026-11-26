@@ -1,0 +1,71 @@
+{
+ "_recorded": {
+  "date": "2026-11-26",
+  "how": "UDP query with RD and AD set and EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.9.2; the OPT record is left out of the stored message and so is the id. AD is asked for so that the validating resolver says whether the answer is DNSSEC-secure (RFC 6840 §5.7)",
+  "by": "check_dane on the MX hosts of startpage.com as startpage_com.json records them (Google Workspace): _25._tcp.<mx> TLSA for each (RFC 7672 §2.2)",
+  "queried": [
+   "_25._tcp.aspmx.l.google.com. TLSA",
+   "_25._tcp.alt1.aspmx.l.google.com. TLSA",
+   "_25._tcp.alt2.aspmx.l.google.com. TLSA",
+   "_25._tcp.alt3.aspmx.l.google.com. TLSA",
+   "_25._tcp.alt4.aspmx.l.google.com. TLSA"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.aspmx.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1030569573 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt1.aspmx.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1030569573 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt2.aspmx.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1030569573 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt3.aspmx.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1030569573 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt4.aspmx.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1030569573 900 900 1800 60",
+   ";ADDITIONAL"
+  ]
+ ]
+}

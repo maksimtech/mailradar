@@ -1251,7 +1251,7 @@ class TestAnalyzeDomain:
         # The 33 selectors recorded on 2026-10-09 add s1 (2048-bit) and s2, a
         # 1024-bit SendGrid key a receiver would verify a signature with: the
         # weakest published key is the posture, and it costs the GOOD grade.
-        dns_replay("startpage_com", "startpage_com_dkim_selectors")
+        dns_replay("startpage_com", "startpage_com_tlsa", "startpage_com_dkim_selectors")
         http_replay("startpage_com", "startpage_com_keyservers_index")
         report = analyze_domain("startpage.com")
 

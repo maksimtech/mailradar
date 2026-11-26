@@ -159,6 +159,19 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **A domain protected by DANE is no longer cited under GDPR art. 32 for a missing MTA-STS (#149).**
+  - "MTA-STS missing: TLS not mandatory on delivery" was cited under art. 32(1)(a) for a domain
+    whose MX publishes a DNSSEC-secure TLSA record. For every sender that implements DANE (RFC
+    7672), TLS is mandatory there and the certificate is checked against DNS.
+  - MailRadar now asks for `_25._tcp.<mx> TLSA` for each MX, with the AD bit set, so that a
+    validating resolver says whether the answer is DNSSEC-secure.
+  - With such a record on every MX, a missing or `testing` MTA-STS is not cited. A note says that
+    senders without DANE (Gmail among them) still need MTA-STS.
+  - A TLSA record without the AD flag keeps the finding and says it is published but not
+    validated, since senders disregard it. DANE on some MX only keeps it too, and says how many.
+  - The score does not change. Which resolver to trust for AD, and points for DANE, are #155.
+  - The answers for the tests were recorded on 2026-11-26 from 1.1.1.1 with AD asked for
+    (`tests/fixtures/dns/dane_*.json`, `startpage_com_tlsa.json`).
 - **A company's internal DNS view no longer reads as a domain with no email security (#150).** On a
   network whose resolver serves an internal (split-horizon) view of the company's own domain, `check`
   got no SPF, DMARC or DKIM, graded the domain 0/100 and cited GDPR art. 32 for records that exist on

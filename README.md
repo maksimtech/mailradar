@@ -545,6 +545,26 @@ key sends none, and nothing is said about its MX.
 An MX lookup that gets no answer says nothing either way; it does not make the
 analysis "not verified", since MX is not scored.
 
+### DANE (no points)
+
+For each MX, MailRadar asks for the TLSA record at `_25._tcp.<mx>` (RFC 7672),
+with the AD bit set so that a validating resolver says whether the answer is
+DNSSEC-secure (RFC 6840 §5.7). It changes what the transport finding says, not
+the score:
+
+- **Every MX has a DNSSEC-secure TLSA record:** TLS is mandatory for senders
+  that implement DANE, so a missing or `testing` MTA-STS is not cited as a GDPR
+  Article 32(1)(a) gap. A note says that senders without DANE (Gmail among
+  them) still need MTA-STS.
+- **A TLSA record without the AD flag:** the finding stays, and says the record
+  is published but not validated. RFC 7672 has senders disregard a TLSA record
+  that is not DNSSEC-secure.
+- **DANE on some MX only:** the finding stays, and says how many.
+
+The AD flag is the one set by the resolver the system uses. Which resolver
+MailRadar should trust for it, and whether DANE earns points, are not decided
+yet. A TLSA lookup that gets no answer says nothing either way.
+
 ---
 
 ## Known limitations

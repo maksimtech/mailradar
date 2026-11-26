@@ -1,0 +1,87 @@
+{
+ "_recorded": {
+  "date": "2026-11-26",
+  "how": "UDP query with RD and AD set and EDNS0 (payload 1232) to 1.1.1.1 (Cloudflare), TCP on truncation, dnspython 2.9.2; the OPT record is left out of the stored message and so is the id. AD is asked for so that the validating resolver says whether the answer is DNSSEC-secure (RFC 6840 §5.7)",
+  "by": "dns.query of the domain's MX and of _25._tcp.<mx> TLSA for each MX (RFC 7672 §2.2)",
+  "queried": [
+   "gmail.com. MX",
+   "_25._tcp.alt1.gmail-smtp-in.l.google.com. TLSA",
+   "_25._tcp.alt2.gmail-smtp-in.l.google.com. TLSA",
+   "_25._tcp.alt3.gmail-smtp-in.l.google.com. TLSA",
+   "_25._tcp.alt4.gmail-smtp-in.l.google.com. TLSA",
+   "_25._tcp.gmail-smtp-in.l.google.com. TLSA"
+  ]
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "gmail.com. IN MX",
+   ";ANSWER",
+   "gmail.com. 2032 IN MX 10 alt1.gmail-smtp-in.l.google.com.",
+   "gmail.com. 2032 IN MX 5 gmail-smtp-in.l.google.com.",
+   "gmail.com. 2032 IN MX 40 alt4.gmail-smtp-in.l.google.com.",
+   "gmail.com. 2032 IN MX 30 alt3.gmail-smtp-in.l.google.com.",
+   "gmail.com. 2032 IN MX 20 alt2.gmail-smtp-in.l.google.com.",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt1.gmail-smtp-in.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1029774759 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt2.gmail-smtp-in.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1029774759 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt3.gmail-smtp-in.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1029774759 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.alt4.gmail-smtp-in.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1030569573 900 900 1800 60",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NXDOMAIN",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_25._tcp.gmail-smtp-in.l.google.com. IN TLSA",
+   ";ANSWER",
+   ";AUTHORITY",
+   "l.google.com. 60 IN SOA ns1.google.com. dns-admin.google.com. 1030569573 900 900 1800 60",
+   ";ADDITIONAL"
+  ]
+ ]
+}
