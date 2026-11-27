@@ -250,6 +250,20 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Security
 
+- **A version from a tag or the dispatch form reaches a script as a string, and only if it is a
+  release tag (#192, maksimtech/apkradar#151).**
+  - The dispatch input reached `docker.yml` through `env:`, but went on into Python code
+    (`python3 -c "parts='${STRIPPED}'…"`) after the Docker Hub login: a `'` in a tag or an input
+    became code next to the credentials, and a newline became outputs and image tags of its own.
+    `publish.yml`'s verify pasted the tag into the same Python, and `docker-build-check.yml` wrote
+    the input out unchecked.
+  - Every such step refuses anything that is not a release tag before writing it anywhere, and the
+    normalised version is computed after that, from an argument. `docker.yml` decides the version
+    before the login, reads `github.event_name` through `env:` too, and drops `PIP_VERSION`, which
+    nothing read.
+  - `tests/test_workflow_inputs.py`, the same in all six Radars, holds all of it. The existing
+    `test_no_workflow_pastes_a_dispatch_input_into_a_script` passed on the old file, because it
+    looked only for `${{ }}`.
 - **The job PyPI trusts installs and runs nothing, as in releaseradar, exeradar and patchradar.**
   `publish.yml`'s `build-and-publish` held `id-token: write` while it installed the newest `build`
   and `hatchling` of that minute, built in an isolated environment that fetched an unpinned

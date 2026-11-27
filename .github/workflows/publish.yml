@@ -91,13 +91,18 @@ jobs:
       # apkradar 2026.48 the wait saw the version and the install three seconds later,
       # on the same runner, was refused it. A grace would not have saved it —
       # releaseradar lost on v2026.4 with 45 s.
+      # The tag is a release tag or nothing, and only then normalised, with the value
+      # as an argument: it was pasted into Python's code, where a ' ends the string (#192).
       - name: Extract version
         id: version
         env:
           RAW: ${{ github.ref_name }}
         run: |
-          STRIPPED="${RAW#v}"
-          NORMALIZED=$(python3 -c "parts='${STRIPPED}'.split('.'); print('.'.join(str(int(p)) for p in parts))")
+          if [[ ! "$RAW" =~ ^v[0-9]+(\.[0-9]+)+$ ]]; then
+            printf '::error::not a release tag: %q\n' "$RAW"
+            exit 1
+          fi
+          NORMALIZED=$(python3 -I -c 'import sys; print(".".join(str(int(p)) for p in sys.argv[1].split(".")))' "${RAW#v}")
           echo "VERSION=${NORMALIZED}" >> "$GITHUB_OUTPUT"
 
       - name: Wait for the index to catch up

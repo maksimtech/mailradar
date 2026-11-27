@@ -37,6 +37,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/fetch_scout_binary.sh e7e2a72bf1485d10a58f30696b6c513b261ce4fa v1.29.0
+      # The version is a step output, a git ref and an image tag. It arrives through
+      # env:, where it stays a string, is refused unless it is a release tag, and is
+      # decided before the Docker Hub login, so a refused value never meets the
+      # credentials. It used to go on into Python code, after the login (#192).
+      - name: Extract version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REQUESTED: ${{ github.event.inputs.version }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            RAW="$REQUESTED"
+          elif [ "$EVENT" = "schedule" ]; then
+            RAW=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          else
+            RAW="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$RAW" =~ ^v[0-9]+(\.[0-9]+)+$ ]]; then
+            printf '::error::not a release tag: %q\n' "$RAW"
+            exit 1
+          fi
+          echo "VERSION=${RAW}" >> "$GITHUB_OUTPUT"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
@@ -46,25 +68,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      # The dispatch input arrives through env, where it stays a string: pasted
-      # into the script as ${{ }} it would be shell text, in a job that holds the
-      # Docker Hub token (tests/test_ci_scripts.py).
-      - name: Extract version
-        id: version
-        env:
-          REQUESTED: ${{ github.event.inputs.version }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RAW="$REQUESTED"
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
-            RAW=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
-          else
-            RAW="${GITHUB_REF#refs/tags/}"
-          fi
-          echo "VERSION=${RAW}" >> $GITHUB_OUTPUT
-          STRIPPED="${RAW#v}"
-          NORMALIZED=$(python3 -c "parts='${STRIPPED}'.split('.'); print('.'.join(str(int(p)) for p in parts))")
-          echo "PIP_VERSION=${NORMALIZED}" >> $GITHUB_OUTPUT
       # Stand on the tag that was just resolved. The image is built from this
       # checkout now, and the tag arrives in a different place on each of the three
       # triggers — in the ref on a tag push, in the input on a dispatch, and nowhere at

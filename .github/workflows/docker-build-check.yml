@@ -40,6 +40,11 @@ jobs:
           REQUESTED: ${{ inputs.version }}
         run: |
           if [ -n "$REQUESTED" ]; then
+            # A version to install from PyPI and a build argument: a release, or nothing (#192)
+            if [[ ! "v${REQUESTED#v}" =~ ^v[0-9]+(\.[0-9]+)+$ ]]; then
+              printf '::error::not a release version: %q\n' "$REQUESTED"
+              exit 1
+            fi
             SOURCE=pypi
             VERSION="${REQUESTED#v}"
           else
