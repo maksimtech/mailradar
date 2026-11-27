@@ -169,6 +169,11 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **A DKIM key with `h=sha1` no longer scores as a working key (#190).** `h=` lists the hash
+  algorithms a key may be used with (RFC 6376 §3.6.1), and RFC 8301 §3.1 forbids verifiers to
+  accept rsa-sha1: with `h=sha1` no signature made with the key counts. It scored 15 points, as a
+  working 2048-bit key, and `dkim_unusable()` said no. Now it counts as unsigned, as a key in
+  testing mode does, and the issue says why. `h=sha1:sha256` still allows sha256.
 - **`include=x` is no longer followed as `include:x`: receivers ignore it, and now MailRadar says so (#188).**
   - RFC 7208 §6 reads `name=value` as a modifier, and one with a name it does not know as an
     unknown modifier, which "MUST be ignored"; pyspf does the same. So `v=spf1 include=_spf.example.net

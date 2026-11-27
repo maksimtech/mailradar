@@ -25,6 +25,7 @@ from mailradar.checker import (
     check_mta_sts,
     check_spf,
     check_tls_rpt,
+    dkim_unusable,
     dmarc_lookup_chain,
     domain_exists,
     find_domain_variants,
@@ -742,6 +743,32 @@ class TestDKIMKeysThatCannotBeUsed:
         assert result.selector == "active"
         assert result.score == 15
         assert any("testing" in issue and "under testing" in issue for issue in result.issues)
+
+    def test_a_key_that_allows_only_sha1_counts_as_unsigned(self, dns_replay):
+        """h=sha1 restricts the key to rsa-sha1 (RFC 6376 §3.6.1), and RFC 8301 §3.1 says
+        verifiers MUST NOT consider rsa-sha1 signatures valid: none made with it counts.
+        The 2048-bit key earned the full 15 points."""
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["sha1only"])
+        assert result.present is True
+        assert result.score == 0
+        assert dkim_unusable(result) is True
+        assert any("h=sha1" in issue and "RFC 8301" in issue for issue in result.issues), result.issues
+        assert "h=sha1" in result.keys["sha1only"]
+        assert not any("malformed" in issue for issue in result.issues)
+
+    def test_a_key_that_allows_only_sha1_beside_an_active_one(self, dns_replay):
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["sha1only", "active"])
+        assert result.selector == "active"
+        assert result.score == 15
+        assert dkim_unusable(result) is False
+
+    def test_a_key_that_also_allows_sha256_is_usable(self, dns_replay):
+        dns_replay("dkim_unusable")
+        result = check_dkim("example.com", selectors=["sha1sha256"])
+        assert (result.key_bits, result.score) == (2048, 15)
+        assert result.issues == []
 
 
 # ─── BIMI ───────────────────────────────────────────────────────────────────

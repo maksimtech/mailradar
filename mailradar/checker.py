@@ -1322,6 +1322,11 @@ class _DKIMKey:
     problem: str
     # t=y (RFC 6376 §3.6.1): the domain is testing DKIM
     testing: bool
+    # h= as written when it leaves sha256 out, "" otherwise. h= lists the hash
+    # algorithms the key may be used with, ignoring unknown ones (RFC 6376
+    # §3.6.1), and RFC 8301 §3.1 forbids verifiers to accept rsa-sha1: with
+    # h=sha1 no signature made with the key counts.
+    hashes: str = ""
 
 
 # The tags of a DKIM key record (RFC 6376 §3.6.1), v= aside
@@ -1350,19 +1355,22 @@ def _dkim_key(record: str) -> _DKIMKey | None:
     tags = _parse_tags(record)
     key_type = tags.get("k", "rsa").lower()
     testing = "y" in (flag.strip() for flag in tags.get("t", "").split(":"))
+    allowed = {name.strip().lower() for name in tags.get("h", "").split(":") if name.strip()}
+    hashes = "".join(tags["h"].split()) if allowed and "sha256" not in allowed else ""
     if "p" not in tags:
         # p= is required; only an empty one means revoked
-        return _DKIMKey(key_type, 0, "no p= tag", testing)
+        return _DKIMKey(key_type, 0, "no p= tag", testing, hashes)
     key_part = "".join(tags["p"].split())
     if not key_part:
         return None
     if key_type == "ed25519":
         bits = _ed25519_bits(key_part)
-        return _DKIMKey(key_type, bits, "" if bits else "p= is not a 32-byte Ed25519 key", testing)
+        return _DKIMKey(key_type, bits, "" if bits else "p= is not a 32-byte Ed25519 key", testing, hashes)
     if key_type == "rsa":
         bits = _rsa_bits(key_part)
-        return _DKIMKey(key_type, bits, "" if bits else "p= does not decode as an RSA public key", testing)
-    return _DKIMKey(key_type, 0, f"k={key_type} is a key type neither RFC 6376 nor RFC 8463 defines", testing)
+        return _DKIMKey(key_type, bits, "" if bits else "p= does not decode as an RSA public key", testing, hashes)
+    return _DKIMKey(key_type, 0, f"k={key_type} is a key type neither RFC 6376 nor RFC 8463 defines", testing,
+                    hashes)
 
 
 def _describe_key(key: _DKIMKey) -> str:
@@ -1371,18 +1379,22 @@ def _describe_key(key: _DKIMKey) -> str:
         description = f"malformed {name}"
     else:
         description = "Ed25519" if key.key_type == "ed25519" else f"{key.bits}-bit RSA"
+    if key.hashes:
+        description = f"{description} (no sha256, h={key.hashes})"
     return f"{description} (testing, t=y)" if key.testing else description
 
 
 def dkim_unusable(dkim: DKIMResult) -> bool:
     """The key the DKIM result rests on gives no signature a receiver counts:
-    malformed (no length), of a type no verifier knows, or only in testing mode
-    (RFC 6376 §3.6.1). From what the check found, not from the score, whose 0
-    is also the default of a result nobody scored."""
+    malformed (no length), of a type no verifier knows, only in testing mode
+    (RFC 6376 §3.6.1), or allowed only hashes other than sha256 (h=sha1, which
+    RFC 8301 §3.1 forbids verifiers to accept). From what the check found, not
+    from the score, whose 0 is also the default of a result nobody scored."""
     if not dkim.present:
         return False
+    description = dkim.keys.get(dkim.selector, "")
     return (not dkim.key_bits or dkim.key_type not in ("rsa", "ed25519")
-            or "(testing, t=y)" in dkim.keys.get(dkim.selector, ""))
+            or "(testing, t=y)" in description or "(no sha256, h=" in description)
 
 
 # Why an RSA DKIM key under 2048 bits is an issue, in the words of the rules it breaks.
@@ -1453,9 +1465,10 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
         # The weakest key a signature can be verified with is the posture. A
         # malformed key verifies nothing, and a key in testing mode makes its
         # mail count as unsigned (RFC 6376 §3.6.1): neither lets anyone forge
-        # a signature that counts, so each decides only when no other does.
+        # a signature that counts, so each decides only when no other does. Nor
+        # does a key whose h= leaves sha256 out (RFC 8301 §3.1).
         working = [entry for entry in keys if not entry[1].problem]
-        signing = [entry for entry in working if not entry[1].testing]
+        signing = [entry for entry in working if not entry[1].testing and not entry[1].hashes]
         selector, key, record = min(signing or working or keys, key=lambda entry: _key_strength(entry[1]))
         bits = key.bits
         result.present = True
@@ -1472,10 +1485,17 @@ def check_dkim(domain: str, selectors: list[str] | None = None) -> DKIMResult:
                 result.issues.append(
                     f"DKIM key under {name} is malformed ({published.problem}) — signatures cannot be verified"
                 )
-            elif published.testing:
+                continue
+            if published.testing:
                 result.issues.append(
                     f"DKIM key under {name} is in testing mode (t=y) — receivers treat its signatures "
                     "as unsigned (RFC 6376 §3.6.1)"
+                )
+            if published.hashes:
+                result.issues.append(
+                    f"DKIM key under {name} allows only h={published.hashes}, not sha256 — no signature made "
+                    "with it counts: RFC 8301 §3.1 forbids verifiers to accept rsa-sha1, and sha256 is the "
+                    "only other hash DKIM defines"
                 )
 
         if not signing:
