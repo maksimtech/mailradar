@@ -169,6 +169,15 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Fixed
 
+- **`include=x` is no longer followed as `include:x`: receivers ignore it, and now MailRadar says so (#188).**
+  - RFC 7208 §6 reads `name=value` as a modifier, and one with a name it does not know as an
+    unknown modifier, which "MUST be ignored"; pyspf does the same. So `v=spf1 include=_spf.example.net
+    -all` is `v=spf1 -all` to every receiver, and the senders it meant to authorise fail.
+  - MailRadar followed it as an include, counted its lookup, took its ranges as authorised, and
+    reported no issue with the full score. It now leaves the term out, as receivers do, and names it:
+    "read as an unknown modifier, which receivers ignore … write include:_spf.example.net". The same
+    goes for `ip4=`, `a=` and the other mechanisms. It is not a permerror: the rest of the record
+    still counts.
 - **A domain protected by DANE is no longer cited under GDPR art. 32 for a missing MTA-STS (#149).**
   - "MTA-STS missing: TLS not mandatory on delivery" was cited under art. 32(1)(a) for a domain
     whose MX publishes a DNSSEC-secure TLSA record. For every sender that implements DANE (RFC

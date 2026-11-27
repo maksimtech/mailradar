@@ -1,0 +1,52 @@
+{
+ "_derived": {
+  "from": "dns/example_com.json, example.com. TXT (recorded 2026-10-07): SPF record \"v=spf1 -all\"",
+  "changed": "one name per mechanism written with '=' instead of ':' (include=, ip4=, a=), each in a record that ends in -all; RFC 7208 §6 reads each as an unknown modifier, which receivers ignore. _spf.example.net answers too, so a query for it would be answered, and the tests can show none is made. Documentation addresses (RFC 5737)"
+ },
+ "responses": [
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "include-equals.example.com. IN TXT",
+   ";ANSWER",
+   "include-equals.example.com. 300 IN TXT \"v=spf1 include=_spf.example.net -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "ip4-equals.example.com. IN TXT",
+   ";ANSWER",
+   "ip4-equals.example.com. 300 IN TXT \"v=spf1 ip4=192.0.2.1 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "a-equals.example.com. IN TXT",
+   ";ANSWER",
+   "a-equals.example.com. 300 IN TXT \"v=spf1 a=mail.example.com -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "_spf.example.net. IN TXT",
+   ";ANSWER",
+   "_spf.example.net. 300 IN TXT \"v=spf1 ip4:198.51.100.0/24 -all\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ]
+ ]
+}
