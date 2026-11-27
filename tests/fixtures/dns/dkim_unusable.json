@@ -1,7 +1,7 @@
 {
  "_derived": {
   "from": "dns/startpage_com.json, google._domainkey.startpage.com. TXT (recorded 2026-10-07): \"v=DKIM1; k=rsa; p=MIIBIjANBgkq…\", a 2048-bit RSA key in SubjectPublicKeyInfo form; and dns/example_com.json, _dmarc.example.com. TXT (recorded 2026-10-07): \"v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s\"",
-  "changed": "published under <case>._domainkey.example.com, one selector per case: active is the record as recorded; truncated keeps the first 255 characters of p=; zeros has p= followed by 400 'A' (base64 of zero bytes); nop drops p= altogether; ecdsa declares k=ecdsa, a key type RFC 6376 does not define, over the same key; dmarc is example.com's DMARC record, which holds 'p='; testing adds t=y; pkcs1 has the same key as a bare PKCS#1 RSAPublicKey (RFC 3447 A.1.1), the SubjectPublicKeyInfo wrapper removed"
+  "changed": "published under <case>._domainkey.example.com, one selector per case: active is the record as recorded; truncated keeps the first 255 characters of p=; zeros has p= followed by 400 'A' (base64 of zero bytes); nop drops p= altogether; ecdsa declares k=ecdsa, a key type RFC 6376 does not define, over the same key; dmarc is example.com's DMARC record, which holds 'p='; testing adds t=y; pkcs1 has the same key as a bare PKCS#1 RSAPublicKey (RFC 3447 A.1.1), the SubjectPublicKeyInfo wrapper removed; sha1only adds h=sha1 at the end of the active record, the hash algorithm RFC 8301 §3.1 forbids verifiers to accept; sha1sha256 adds h=sha1:sha256 there, which still allows sha256"
  },
  "responses": [
   [
@@ -89,6 +89,28 @@
    "pkcs1._domainkey.example.com. IN TXT",
    ";ANSWER",
    "pkcs1._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mjYhlVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJD\" \"Qs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "sha1only._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "sha1only._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mjYh\" \"lVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJDQs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB; h=sha1\"",
+   ";AUTHORITY",
+   ";ADDITIONAL"
+  ],
+  [
+   "opcode QUERY",
+   "rcode NOERROR",
+   "flags QR RD RA",
+   ";QUESTION",
+   "sha1sha256._domainkey.example.com. IN TXT",
+   ";ANSWER",
+   "sha1sha256._domainkey.example.com. 3600 IN TXT \"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApEwAQ0NsAd70Rj2GkxpKZoSlDhLWSGlkRXMJTudcZIT5wgAuhsy0WvQdUUrMarEH4m0otoNJTfEj66W7KSsDSQAnZrRIFXBMUzJeYfG7jZNu67SZTG6WjIkV8ULMM9HDhz/niNGdQhS1PiM3gq1j0PyJMBtcLHDbR3BRk5UI/Oop3IBZ+y4o7yxT6VFE8mjYh\" \"lVbbRgyRlhOlRDYrs0Wr0yCtF/9WdVJDQs5H6Cop8Q9KgwwKCEGfCfbYpo4e9YTejMfoAOk1yNU7hrfboDgROdzg0NBTHQVGziIh5+ZJbug2OyV5Lw/+/d3UzD91mU0X7J6RUhnQGjK35xVkbRp+QIDAQAB; h=sha1:sha256\"",
    ";AUTHORITY",
    ";ADDITIONAL"
   ]
