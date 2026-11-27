@@ -153,3 +153,31 @@ class TestIncludeTarget:
         assert result.score == 0
         assert any("include:bad.example.net" in issue and "foo:bar" in issue
                    for issue in result.issues)
+
+
+class TestMechanismWrittenAsModifier:
+    """`include=_spf.example.net` is not `include:_spf.example.net`. RFC 7208 §6
+    reads `name=value` as a modifier, and one whose name is no modifier it knows
+    as an unknown modifier, which "MUST be ignored"; pyspf does the same. So the
+    record is `v=spf1 -all` to every receiver: the senders it meant to authorise
+    fail. MailRadar followed it as an include, counted its lookups and its ranges,
+    and said nothing."""
+
+    @pytest.mark.parametrize("domain, term, meant", [
+        ("include-equals.example.com", "include=_spf.example.net", "include:_spf.example.net"),
+        ("ip4-equals.example.com", "ip4=192.0.2.1", "ip4:192.0.2.1"),
+        ("a-equals.example.com", "a=mail.example.com", "a:mail.example.com"),
+    ])
+    def test_the_owner_is_told_receivers_ignore_it(self, dns_replay, domain, term, meant):
+        dns_replay("spf_mechanism_as_modifier")
+        result = check_spf(domain)
+        assert result.permerror is False
+        assert any(term in issue and meant in issue and "ignore" in issue for issue in result.issues), \
+            result.issues
+
+    def test_it_is_not_followed_as_an_include(self, dns_replay):
+        """No lookup is counted and the target is never asked for: receivers do neither."""
+        server = dns_replay("spf_mechanism_as_modifier")
+        result = check_spf("include-equals.example.com")
+        assert result.lookups == 0
+        assert server.queries == ["include-equals.example.com. TXT"]

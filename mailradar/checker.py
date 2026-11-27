@@ -690,8 +690,34 @@ def _spf_terms(record: str) -> list[tuple[str, str, str]]:
         match = _SPF_TERM.fullmatch(term)
         if match:
             qualifier, name, rest = match.groups()
+            if _mechanism_as_modifier(qualifier, name, rest):
+                # An unknown modifier, which receivers ignore (RFC 7208 §6)
+                continue
             terms.append((qualifier, name.lower(), rest))
     return terms
+
+
+def _mechanism_as_modifier(qualifier: str, name: str, rest: str) -> bool:
+    """`include=x`, `ip4=x`, `a=x`: a mechanism's name written as a modifier.
+
+    RFC 7208 §6 reads `name=value` as a modifier, and one whose name is no
+    modifier it knows as an unknown modifier, which "MUST be ignored"; pyspf
+    does the same. Followed as `include:x`, it authorised for MailRadar senders
+    that every receiver rejects.
+    """
+    return not qualifier and rest.startswith("=") and name.lower() in _SPF_MECHANISMS
+
+
+def _spf_mechanisms_as_modifiers(record: str) -> list[tuple[str, str]]:
+    """The terms of `record` that are a mechanism written as a modifier, as
+    (the term, the mechanism it was meant to be)."""
+    found = []
+    for term in record.split()[1:]:
+        match = _SPF_TERM.fullmatch(term)
+        if match and _mechanism_as_modifier(*match.groups()):
+            name, rest = match[2], match[3]
+            found.append((term, f"{name.lower()}:{rest[1:]}"))
+    return found
 
 
 def _spf_all(terms: list[tuple[str, str, str]]) -> str:
@@ -1073,6 +1099,14 @@ def check_spf(domain: str) -> SPFResult:
             for term, wrong in syntax_errors
         )
         return result
+
+    # Not a permerror: receivers ignore the term and evaluate the rest, without
+    # what the owner meant it to authorise
+    result.issues.extend(
+        f"SPF term {term} is read as an unknown modifier, which receivers ignore "
+        f"(RFC 7208 §6) — the senders it was meant to authorise are not; write {meant}"
+        for term, meant in _spf_mechanisms_as_modifiers(records[0])
+    )
 
     walk = _spf_walk(terms)
     result.lookups = walk.lookups
