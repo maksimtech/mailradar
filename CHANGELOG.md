@@ -250,6 +250,13 @@ and `tests/test_version_contract.py` has been enforcing the real form all along.
 
 ### Security
 
+- **One private reporting channel on GitHub, the same in every Radar (#194, maksimtech/apkradar#153).** GitHub's private vulnerability reporting is open on this repository since 2026-11-28, next to
+  <security@maksimtech.com> with its GPG key, and `SECURITY.md` links it
+  (`https://github.com/maksimtech/mailradar/security/advisories/new`).
+  Reports are acknowledged within 7 days, and a vulnerability is disclosed in coordination with the
+  reporter, who is credited in the advisory and the CHANGELOG if they wish.
+  `tests/test_security_policy.py`, the same in all six, holds the two channels, that line, and a
+  report link that names this repository and no other.
 - **A version from a tag or the dispatch form reaches a script as a string, and only if it is a
   release tag (#192, maksimtech/apkradar#151).**
   - The dispatch input reached `docker.yml` through `env:`, but went on into Python code
